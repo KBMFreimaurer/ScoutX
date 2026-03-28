@@ -387,9 +387,9 @@ const card = {
 };
 
 const LLM_PRESETS = {
-  qwen:     { label:"Qwen",       endpoint:"/ollama", model:"qwen2.5:7b",  key:"", isOllama:true,  recommended:true },
-  llama:    { label:"Llama 3",    endpoint:"/ollama", model:"llama3",       key:"", isOllama:true  },
-  mistral:  { label:"Mistral",    endpoint:"/ollama", model:"mistral",      key:"", isOllama:true  },
+  qwen:     { label:"Qwen",       endpoint:"http://127.0.0.1:11434", model:"qwen2.5:7b",  key:"", isOllama:true,  recommended:true },
+  llama:    { label:"Llama 3",    endpoint:"http://127.0.0.1:11434", model:"llama3",       key:"", isOllama:true  },
+  mistral:  { label:"Mistral",    endpoint:"http://127.0.0.1:11434", model:"mistral",      key:"", isOllama:true  },
   lmstudio: { label:"LM Studio",  endpoint:"http://localhost:1234",  model:"local-model",  key:"", isOllama:false },
   openai:   { label:"OpenAI API", endpoint:"https://api.openai.com", model:"gpt-4o-mini",  key:"", isOllama:false },
 };
