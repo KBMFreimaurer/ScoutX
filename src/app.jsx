@@ -481,12 +481,12 @@ export default function App() {
     } catch(e) { setConnStatus({ ok:false, error:e.message }); }
   };
 
-  const canBuild = Boolean(kreisId && jugendId && activeTeams.length >= 2);
+  const canBuild = Boolean(kreisId && jugendId && activeTeams.length >= 1);
 
   const buildAndGo = () => {
     if (!kreisId)              { setErr("Bitte einen Kreis wählen."); return; }
     if (!jugendId)             { setErr("Bitte eine Jugendklasse wählen."); return; }
-    if (activeTeams.length < 2){ setErr("Mindestens 2 Mannschaften benötigt."); return; }
+    if (activeTeams.length < 1){ setErr("Mindestens 1 Mannschaft benötigt."); return; }
     setErr("");
     setGames(buildSchedule(activeTeams, jugendId, fromDate, kreisId));
     setPlan(""); setStep("games");
@@ -971,7 +971,7 @@ ${focus && focus !== "Allgemein – Talente und Spielstärke"
                     fontSize: 12, color: C.grayDark,
                     fontFamily: "'Barlow', sans-serif",
                   }}>
-                    💡 Kein Team markiert → alle {allTeams.length} Vereine aktiv. Mit Auswahl → nur die markierten.
+                    💡 Wähle Vereine aus, die für das Scouting in Frage kommen. Keine Auswahl → alle {allTeams.length} Vereine werden berücksichtigt.
                   </div>
                 </div>
               )}
