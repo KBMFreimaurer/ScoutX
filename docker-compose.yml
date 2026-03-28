@@ -10,6 +10,8 @@ services:
       - ./src:/app/src
       - ./index.html:/app/index.html
       - ./vite.config.js:/app/vite.config.js
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     profiles:
       - dev
 
@@ -19,6 +21,8 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:80"
+      - "8090:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     profiles:
       - prod
