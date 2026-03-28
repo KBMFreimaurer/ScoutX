@@ -4,14 +4,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    ports:
-      - "5173:5173"
+    network_mode: "host"
     volumes:
       - ./src:/app/src
       - ./index.html:/app/index.html
       - ./vite.config.js:/app/vite.config.js
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    environment:
+      - OLLAMA_HOST=http://localhost:11434/
     profiles:
       - dev
 
@@ -20,9 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8090:80"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    profiles:
-      - prod
+    network_mode: "host"
+    environment:
+      - OLLAMA_HOST=http://localhost:11434/
+    restart: always
