@@ -23,3 +23,36 @@ services:
     environment:
       - OLLAMA_HOST=http://localhost:11434/
     restart: always
+    profiles:
+      - prod
+
+  # Externer Adapter-Service für reale Spieldaten
+  adapter:
+    build:
+      context: .
+      dockerfile: adapter-service/Dockerfile
+    network_mode: "host"
+    environment:
+      - ADAPTER_HOST=0.0.0.0
+      - ADAPTER_PORT=8787
+      - CORS_ORIGIN=*
+      - ADAPTER_DATA_FILE=/app/data/games.sample.json
+      - ADAPTER_STORE_FILE=/app/data/games.store.json
+      - ADAPTER_IMPORT_DIR=/app/imports
+      - ADAPTER_ALIASES_FILE=/app/data/team-aliases.json
+      - ADAPTER_REFRESH_INTERVAL_SEC=300
+      - ADAPTER_AUTO_REFRESH_WEEK=true
+      - ADAPTER_WEEK_REFRESH_TTL_SEC=300
+      - ADAPTER_EXPORT_COMMAND=node /app/scripts/fetch-week.fussballde.mjs
+      # - ADAPTER_WEEK_SOURCE_URL_TEMPLATE=https://example.com/api/games?from={fromDate}&to={toDate}&kreis={kreisId}&jugend={jugendId}
+      # - ADAPTER_WEEK_SOURCE_TOKEN=change-me
+      # - ADAPTER_TOKEN=change-me
+      # - ADAPTER_REMOTE_URL=https://example.com/api/games
+      # - ADAPTER_REMOTE_TOKEN=change-me
+    volumes:
+      - ./adapter-service/data:/app/data
+      - ./adapter-service/imports:/app/imports
+    restart: unless-stopped
+    profiles:
+      - dev
+      - prod

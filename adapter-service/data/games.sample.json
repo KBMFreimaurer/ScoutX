@@ -1,0 +1,206 @@
+{
+  "games": [
+    {
+      "date": "2026-04-11",
+      "time": "10:00",
+      "home": "Fortuna Düsseldorf (U)",
+      "away": "SC Unterbach",
+      "venue": "Paul-Janes-Stadion Flehe",
+      "km": 8,
+      "kreisId": "duesseldorf",
+      "jugendId": "d-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "11:30",
+      "home": "SV Hilden-Nord",
+      "away": "FC Büderich",
+      "venue": "Sportanlage Höherweg",
+      "km": 14,
+      "kreisId": "duesseldorf",
+      "jugendId": "d-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "13:00",
+      "home": "MSV Duisburg (U)",
+      "away": "SV Hamborn 07",
+      "venue": "MSV-Nachwuchspark",
+      "km": 22,
+      "kreisId": "duisburg",
+      "jugendId": "c-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "15:00",
+      "home": "VfB Homberg",
+      "away": "TuS Hochemmerich",
+      "venue": "Sportplatz Homberg",
+      "km": 19,
+      "kreisId": "duisburg",
+      "jugendId": "c-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "09:30",
+      "home": "Rot-Weiss Essen (U)",
+      "away": "ETB SW Essen",
+      "venue": "Sportanlage Werden",
+      "km": 11,
+      "kreisId": "essen",
+      "jugendId": "e-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "11:00",
+      "home": "FC Kray",
+      "away": "SC Frintrop",
+      "venue": "Bezirkssportanlage Kray",
+      "km": 16,
+      "kreisId": "essen",
+      "jugendId": "e-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "10:30",
+      "home": "Uerdingen 05",
+      "away": "FC Krefeld-Fischeln",
+      "venue": "Grotenburg-Stadion (Jugend)",
+      "km": 25,
+      "kreisId": "krefeld",
+      "jugendId": "b-jugend"
+    },
+    {
+      "date": "2026-04-14",
+      "time": "14:00",
+      "home": "TSV Bockum",
+      "away": "VfL Tönisberg",
+      "venue": "Sportanlage Bockum",
+      "km": 20,
+      "kreisId": "krefeld",
+      "jugendId": "b-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "12:00",
+      "home": "Borussia Mönchengladbach (U)",
+      "away": "VfL Rheydt",
+      "venue": "MG-Arena Nachwuchs",
+      "km": 31,
+      "kreisId": "moenchen",
+      "jugendId": "a-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "14:30",
+      "home": "SV Odenkirchen",
+      "away": "TuS Korschenbroich",
+      "venue": "Kunstrasen Odenkirchen",
+      "km": 29,
+      "kreisId": "moenchen",
+      "jugendId": "a-jugend"
+    },
+    {
+      "date": "2026-04-11",
+      "time": "09:00",
+      "home": "Neusser SC",
+      "away": "SV Uedesheim",
+      "venue": "Bezirkssportanlage Neuss-Mitte",
+      "km": 17,
+      "kreisId": "neuss",
+      "jugendId": "f-jugend",
+      "turnier": true
+    },
+    {
+      "date": "2026-04-11",
+      "time": "09:40",
+      "home": "FC Holzheim",
+      "away": "SV Büttgen",
+      "venue": "Bezirkssportanlage Neuss-Mitte",
+      "km": 18,
+      "kreisId": "neuss",
+      "jugendId": "f-jugend",
+      "turnier": true
+    },
+    {
+      "date": "2026-04-12",
+      "time": "10:00",
+      "home": "RW Oberhausen (U)",
+      "away": "FC Sterkrade-Nord",
+      "venue": "Sportanlage Sterkrade",
+      "km": 23,
+      "kreisId": "oberhausen",
+      "jugendId": "b-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "13:30",
+      "home": "VfB Bottrop",
+      "away": "TuS Osterfeld",
+      "venue": "Bezirkssportanlage Osterfeld",
+      "km": 24,
+      "kreisId": "oberhausen",
+      "jugendId": "b-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "11:15",
+      "home": "FC Viersen",
+      "away": "FC Nettetal",
+      "venue": "Bezirkssportanlage Viersen",
+      "km": 35,
+      "kreisId": "viersen",
+      "jugendId": "c-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "14:15",
+      "home": "SV Amern",
+      "away": "FC Tönisvorst",
+      "venue": "Sportpark Nettetal",
+      "km": 33,
+      "kreisId": "viersen",
+      "jugendId": "c-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "09:45",
+      "home": "SV Sonsbeck",
+      "away": "SG Schermbeck",
+      "venue": "Waldstadion Sonsbeck",
+      "km": 41,
+      "kreisId": "wesel",
+      "jugendId": "d-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "12:45",
+      "home": "TuS Xanten",
+      "away": "FC Hamminkeln",
+      "venue": "Sportanlage Xanten",
+      "km": 37,
+      "kreisId": "wesel",
+      "jugendId": "d-jugend"
+    },
+    {
+      "date": "2026-04-12",
+      "time": "11:00",
+      "home": "1. FC Kleve",
+      "away": "SV Straelen",
+      "venue": "Sportpark Kleve",
+      "km": 48,
+      "kreisId": "kleve",
+      "jugendId": "a-jugend"
+    },
+    {
+      "date": "2026-04-13",
+      "time": "15:30",
+      "home": "TuS Weeze",
+      "away": "SC Kalkar",
+      "venue": "Kunstrasen Kevelaer",
+      "km": 44,
+      "kreisId": "kleve",
+      "jugendId": "a-jugend"
+    }
+  ]
+}

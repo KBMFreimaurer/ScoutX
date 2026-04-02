@@ -2,3 +2,6 @@ node_modules
 dist
 .DS_Store
 *.log
+adapter-service/data/games.store.json
+adapter-service/imports/*
+!adapter-service/imports/.gitkeep
