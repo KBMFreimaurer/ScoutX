@@ -18,6 +18,9 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
     if (error?.name === "AbortError") {
       throw new Error(`${errorPrefix} Timeout nach ${timeoutMs}ms`);
     }
+    if (error instanceof TypeError) {
+      throw new Error(`${errorPrefix} nicht erreichbar (${url}). Prüfe Endpoint/Proxy/CORS.`);
+    }
     throw error;
   } finally {
     clear();

@@ -15,6 +15,7 @@ import { GamesPage } from "./pages/GamesPage";
 import { PlanPage } from "./pages/PlanPage";
 
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
+const DEFAULT_LLM_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || "/ollama";
 
 function readStorage(key, fallback) {
   if (typeof window === "undefined") {
@@ -67,6 +68,27 @@ function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
   return endpoint;
 }
 
+function normalizeLlmEndpoint(savedEndpoint, fallbackEndpoint) {
+  const endpoint = String(savedEndpoint || "").trim();
+  if (!endpoint) {
+    return fallbackEndpoint;
+  }
+
+  if (typeof window === "undefined") {
+    return endpoint;
+  }
+
+  const appIsLocal = isLocalHost(window.location.hostname);
+  const endpointIsLocal = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(endpoint);
+
+  // Migrates older local-only LLM endpoints when app runs remotely.
+  if (!appIsLocal && endpointIsLocal) {
+    return fallbackEndpoint;
+  }
+
+  return endpoint;
+}
+
 function getWeekRange(isoDate) {
   const [year, month, day] = String(isoDate || "").split("-").map(Number);
   const date = new Date(year, (month || 1) - 1, day || 1);
@@ -106,13 +128,17 @@ export default function App() {
     adapterEndpoint: normalizeAdapterEndpoint(storedSetup.adapterEndpoint, DEFAULT_ADAPTER_ENDPOINT),
   };
 
-  const llmDefaults = readStorage(STORAGE_KEYS.llm, {
+  const storedLlm = readStorage(STORAGE_KEYS.llm, {
     llmType: "qwen",
     llmModel: LLM_PRESETS.qwen.model,
-    llmEndpoint: "/ollama",
+    llmEndpoint: DEFAULT_LLM_ENDPOINT,
     llmIsOllama: true,
     rememberApiKey: false,
   });
+  const llmDefaults = {
+    ...storedLlm,
+    llmEndpoint: normalizeLlmEndpoint(storedLlm.llmEndpoint, DEFAULT_LLM_ENDPOINT),
+  };
 
   const [kreisId, setKreisId] = useState(setupDefaults.kreisId);
   const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
