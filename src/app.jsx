@@ -14,6 +14,8 @@ import { SetupPage } from "./pages/SetupPage";
 import { GamesPage } from "./pages/GamesPage";
 import { PlanPage } from "./pages/PlanPage";
 
+const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
+
 function readStorage(key, fallback) {
   if (typeof window === "undefined") {
     return fallback;
@@ -37,6 +39,32 @@ function readSessionValue(key, fallback = "") {
   } catch {
     return fallback;
   }
+}
+
+function isLocalHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
+  const endpoint = String(savedEndpoint || "").trim();
+  if (!endpoint) {
+    return fallbackEndpoint;
+  }
+
+  if (typeof window === "undefined") {
+    return endpoint;
+  }
+
+  const appIsLocal = isLocalHost(window.location.hostname);
+  const endpointIsLocal = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(endpoint);
+
+  // Migrates older local-only defaults when app runs on a remote host.
+  if (!appIsLocal && endpointIsLocal) {
+    return fallbackEndpoint;
+  }
+
+  return endpoint;
 }
 
 function getWeekRange(isoDate) {
@@ -63,7 +91,7 @@ export default function App() {
   const isMobile = width < 600;
   const todayIso = new Date().toISOString().split("T")[0];
 
-  const setupDefaults = readStorage(STORAGE_KEYS.setup, {
+  const storedSetup = readStorage(STORAGE_KEYS.setup, {
     kreisId: "",
     jugendId: "",
     selTeams: [],
@@ -71,8 +99,12 @@ export default function App() {
     fromDate: todayIso,
     focus: "",
     dataMode: "auto",
-    adapterEndpoint: "http://127.0.0.1:8787/api/games",
+    adapterEndpoint: DEFAULT_ADAPTER_ENDPOINT,
   });
+  const setupDefaults = {
+    ...storedSetup,
+    adapterEndpoint: normalizeAdapterEndpoint(storedSetup.adapterEndpoint, DEFAULT_ADAPTER_ENDPOINT),
+  };
 
   const llmDefaults = readStorage(STORAGE_KEYS.llm, {
     llmType: "qwen",
@@ -477,7 +509,7 @@ ${
     setUploadError("");
     setUploadSummary(null);
     setDataMode("auto");
-    setAdapterEndpoint("http://127.0.0.1:8787/api/games");
+    setAdapterEndpoint(DEFAULT_ADAPTER_ENDPOINT);
     setAdapterToken("");
   };
 

@@ -45,7 +45,7 @@ export function DataSourceConfig({
             <input
               value={adapterEndpoint}
               onChange={(event) => onAdapterEndpointChange(event.target.value)}
-              placeholder="http://localhost:8787/api/games"
+              placeholder="/api/games"
               style={inp}
             />
           </div>
