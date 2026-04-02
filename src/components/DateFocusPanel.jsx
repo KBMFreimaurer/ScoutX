@@ -1,16 +1,16 @@
-import { C, card, inp, lbl } from "../styles/theme";
+import { card, inp, lbl } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
 export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, jugendId }) {
   return (
     <div style={card}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: C.green }} />
-      <SectionHeader num="04">Zeitraum & Scout-Fokus</SectionHeader>
+      <SectionHeader num="04">Zeitraum & Fokus</SectionHeader>
 
       <div className="date-focus-row">
         <div>
           <label style={lbl}>Scouting ab</label>
           <input
+            className="scout-input"
             type="date"
             value={fromDate}
             min={new Date().toISOString().split("T")[0]}
@@ -20,8 +20,9 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
         </div>
 
         <div>
-          <label style={lbl}>Scout-Fokus (optional)</label>
+          <label style={lbl}>Scout-Fokus</label>
           <input
+            className="scout-input"
             placeholder={jugendId ? `z.B. Torhüter ${jugend?.label}, Außenspieler...` : "z.B. Stürmer, Innenverteidiger..."}
             value={focus}
             onChange={(event) => onFocus(event.target.value)}

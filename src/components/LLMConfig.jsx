@@ -20,10 +20,8 @@ export function LLMConfig({
 }) {
   return (
     <div style={card}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: C.green }} />
-
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <SectionHeader num="05">LLM verbinden</SectionHeader>
+        <SectionHeader num="05">KI Engine Einstellungen</SectionHeader>
 
         {connStatus && connStatus !== "testing" ? (
           <div
@@ -58,11 +56,11 @@ export function LLMConfig({
               onClick={() => onApplyPreset(presetType)}
               style={{
                 padding: "7px 14px",
-                borderRadius: 5,
+                borderRadius: 999,
                 minHeight: 44,
-                border: `1px solid ${selected ? C.green : C.border}`,
-                background: selected ? C.greenDark : "#111",
-                color: selected ? C.white : C.gray,
+                border: `1px solid ${selected ? C.green : "rgba(255,255,255,0.08)"}`,
+                background: selected ? "linear-gradient(135deg, #70DD88 0%, #00873E 100%)" : "#2A2A2A",
+                color: selected ? "#08110b" : C.gray,
                 fontFamily: "'Barlow Condensed', sans-serif",
                 fontSize: 12,
                 fontWeight: selected ? 700 : 600,
@@ -88,6 +86,7 @@ export function LLMConfig({
         <div>
           <label style={lbl}>Endpoint</label>
           <input
+            className="scout-input"
             value={llmEndpoint}
             onChange={(event) => onSetLlmEndpoint(event.target.value)}
             style={inp}
@@ -97,7 +96,12 @@ export function LLMConfig({
         <div>
           <label style={lbl}>Modell</label>
           {connStatus?.ok && connStatus.models.length > 0 ? (
-            <select value={llmModel} onChange={(event) => onSetLlmModel(event.target.value)} style={{ ...inp, cursor: "pointer" }}>
+            <select
+              className="scout-select"
+              value={llmModel}
+              onChange={(event) => onSetLlmModel(event.target.value)}
+              style={{ ...inp, cursor: "pointer" }}
+            >
               {connStatus.models.map((model) => (
                 <option key={model} value={model}>
                   {model}
@@ -105,7 +109,13 @@ export function LLMConfig({
               ))}
             </select>
           ) : (
-            <input value={llmModel} onChange={(event) => onSetLlmModel(event.target.value)} placeholder="qwen2.5:7b" style={inp} />
+            <input
+              className="scout-input"
+              value={llmModel}
+              onChange={(event) => onSetLlmModel(event.target.value)}
+              placeholder="qwen2.5:7b"
+              style={inp}
+            />
           )}
         </div>
       </div>
@@ -114,6 +124,7 @@ export function LLMConfig({
         <div style={{ marginBottom: 10 }}>
           <label style={lbl}>API Key</label>
           <input
+            className="scout-input"
             type="password"
             placeholder="sk-..."
             value={llmKey}
@@ -163,11 +174,11 @@ export function LLMConfig({
         style={{
           width: "100%",
           padding: "11px",
-          borderRadius: 5,
+          borderRadius: 6,
           minHeight: 44,
-          border: `1px solid ${connStatus?.ok ? C.green : C.border}`,
-          background: connStatus?.ok ? C.greenDim : "#111",
-          color: connStatus?.ok ? C.green : C.offWhite,
+          border: `1px solid ${connStatus?.ok ? C.green : C.greenBorder}`,
+          background: connStatus?.ok ? "rgba(0,31,16,0.85)" : "#2A2A2A",
+          color: connStatus?.ok ? "#70dd88" : C.offWhite,
           fontFamily: "'Barlow Condensed', sans-serif",
           fontSize: 14,
           fontWeight: 700,
@@ -185,7 +196,7 @@ export function LLMConfig({
       </button>
 
       {connStatus?.ok === false ? (
-        <div style={{ marginTop: 10, padding: "12px 14px", background: C.errorDim, border: `1px solid ${C.error}`, borderRadius: 5, fontSize: 12 }}>
+        <div style={{ marginTop: 10, padding: "12px 14px", background: C.errorDim, border: `1px solid ${C.error}`, borderRadius: 7, fontSize: 12 }}>
           <div
             style={{
               fontWeight: 700,
@@ -218,7 +229,7 @@ export function LLMConfig({
       ) : null}
 
       {connStatus?.ok && connStatus.models.length > 0 ? (
-        <div style={{ marginTop: 10, padding: "12px 14px", background: C.greenDim, border: `1px solid ${C.greenDark}`, borderRadius: 5 }}>
+        <div style={{ marginTop: 10, padding: "12px 14px", background: "rgba(0,31,16,0.85)", border: `1px solid ${C.greenBorder}`, borderRadius: 7 }}>
           <div
             style={{
               color: C.green,

@@ -19,12 +19,16 @@ export function DataSourceConfig({
 
   return (
     <div style={card}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: C.green }} />
-      <SectionHeader num="06">Spieldatenquelle</SectionHeader>
+      <SectionHeader num="06">Datenquelle</SectionHeader>
 
       <div style={{ marginBottom: 12 }}>
         <label style={lbl}>Datenquelle</label>
-        <select value={dataMode} onChange={(event) => onDataModeChange(event.target.value)} style={{ ...inp, cursor: "pointer" }}>
+        <select
+          className="scout-select"
+          value={dataMode}
+          onChange={(event) => onDataModeChange(event.target.value)}
+          style={{ ...inp, cursor: "pointer" }}
+        >
           {DATA_SOURCE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -40,12 +44,13 @@ export function DataSourceConfig({
 
       {usesAdapter ? (
         <>
-          <div style={{ marginBottom: 10 }}>
-            <label style={lbl}>Live-Adapter Endpoint</label>
-            <input
-              value={adapterEndpoint}
-              onChange={(event) => onAdapterEndpointChange(event.target.value)}
-              placeholder="/api/games"
+        <div style={{ marginBottom: 10 }}>
+          <label style={lbl}>Live-Adapter Endpoint</label>
+          <input
+            className="scout-input"
+            value={adapterEndpoint}
+            onChange={(event) => onAdapterEndpointChange(event.target.value)}
+            placeholder="/api/games"
               style={inp}
             />
           </div>
@@ -53,6 +58,7 @@ export function DataSourceConfig({
           <div style={{ marginBottom: 12 }}>
             <label style={lbl}>Adapter Token (optional)</label>
             <input
+              className="scout-input"
               type="password"
               value={adapterToken}
               onChange={(event) => onAdapterTokenChange(event.target.value)}
@@ -68,9 +74,9 @@ export function DataSourceConfig({
           style={{
             marginBottom: 10,
             padding: "10px 12px",
-            borderRadius: 5,
-            background: C.greenDim,
-            border: `1px solid ${C.greenDark}`,
+            borderRadius: 7,
+            background: "rgba(0,31,16,0.85)",
+            border: `1px solid ${C.greenBorder}`,
             color: C.green,
             fontSize: 12,
           }}
@@ -89,9 +95,9 @@ export function DataSourceConfig({
           style={{
             marginBottom: 10,
             padding: "10px 12px",
-            borderRadius: 5,
+            borderRadius: 7,
             background: C.warnDim,
-            border: `1px solid ${C.warn}`,
+            border: `1px solid rgba(232,160,0,0.4)`,
             color: C.warn,
             fontSize: 12,
           }}
@@ -112,7 +118,7 @@ export function DataSourceConfig({
           style={{
             marginBottom: 10,
             padding: "10px 12px",
-            borderRadius: 5,
+            borderRadius: 7,
             background: C.errorDim,
             border: `1px solid ${C.error}`,
             color: "#ff8080",
@@ -126,9 +132,9 @@ export function DataSourceConfig({
       <div
         style={{
           padding: "9px 12px",
-          background: "#111",
-          borderRadius: 5,
-          border: `1px solid ${C.border}`,
+          background: "#202020",
+          borderRadius: 7,
+          border: "1px solid rgba(255,255,255,0.07)",
           fontSize: 12,
           color: C.grayDark,
           fontFamily: "'Barlow', sans-serif",

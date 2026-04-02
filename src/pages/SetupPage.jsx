@@ -64,58 +64,84 @@ export function SetupPage() {
 
   return (
     <div className="fu">
-      <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
+      <div className="setup-headline">
+        <h1>Setup Scouting-Plan</h1>
+        <p>Technische Initialisierung für den ScoutPlan Workflow.</p>
+      </div>
 
-      <AgeGroupSelector jugendKlassen={JUGEND_KLASSEN} jugendId={jugendId} onSelect={onSelectJugend} jugend={jugend} />
+      <div className="setup-layout">
+        <div className="right-stack">
+          <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
 
-      <TeamPicker
-        allTeams={allTeams}
-        filteredTeams={filteredTeams}
-        selectedTeams={selectedTeams}
-        teamFilter={teamFilter}
-        onTeamFilter={onSetTeamFilter}
-        onToggleTeam={onToggleTeam}
-        onRemoveTeam={onRemoveTeam}
-        onSelectAll={onSelectAll}
-        onClearAll={onClearAll}
-        onSelectFiltered={onSelectFiltered}
-      />
+          <div className="setup-left-grid">
+            <AgeGroupSelector jugendKlassen={JUGEND_KLASSEN} jugendId={jugendId} onSelect={onSelectJugend} jugend={jugend} />
 
-      <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} focus={focus} onFocus={onSetFocus} jugend={jugend} jugendId={jugendId} />
+            <DateFocusPanel
+              fromDate={fromDate}
+              onFromDate={onSetFromDate}
+              focus={focus}
+              onFocus={onSetFocus}
+              jugend={jugend}
+              jugendId={jugendId}
+            />
 
-      <DataSourceConfig
-        dataMode={dataMode}
-        onDataModeChange={onDataModeChange}
-        onFileImport={onFileImport}
-        uploadName={uploadName}
-        importedCount={uploadedGames.length}
-        uploadError={uploadError}
-        uploadSummary={uploadSummary}
-        adapterEndpoint={adapterEndpoint}
-        adapterToken={adapterToken}
-        onAdapterEndpointChange={onAdapterEndpointChange}
-        onAdapterTokenChange={onAdapterTokenChange}
-      />
+            <div className="setup-span-two">
+              <TeamPicker
+                allTeams={allTeams}
+                filteredTeams={filteredTeams}
+                selectedTeams={selectedTeams}
+                teamFilter={teamFilter}
+                onTeamFilter={onSetTeamFilter}
+                onToggleTeam={onToggleTeam}
+                onRemoveTeam={onRemoveTeam}
+                onSelectAll={onSelectAll}
+                onClearAll={onClearAll}
+                onSelectFiltered={onSelectFiltered}
+              />
+            </div>
+          </div>
+        </div>
 
-      <LLMConfig
-        llmType={llmType}
-        llmModel={llmModel}
-        llmEndpoint={llmEndpoint}
-        llmKey={llmKey}
-        rememberApiKey={rememberApiKey}
-        llmIsOllama={llmIsOllama}
-        connStatus={connStatus}
-        presets={LLM_PRESETS}
-        onApplyPreset={onApplyPreset}
-        onSetLlmModel={onSetLlmModel}
-        onSetLlmEndpoint={onSetLlmEndpoint}
-        onSetLlmKey={onSetLlmKey}
-        onSetRememberApiKey={onSetRememberApiKey}
-        onToggleProtocol={onToggleLlmProtocol}
-        onTestConnection={onTestConnection}
-      />
+        <div className="right-stack">
+          <LLMConfig
+            llmType={llmType}
+            llmModel={llmModel}
+            llmEndpoint={llmEndpoint}
+            llmKey={llmKey}
+            rememberApiKey={rememberApiKey}
+            llmIsOllama={llmIsOllama}
+            connStatus={connStatus}
+            presets={LLM_PRESETS}
+            onApplyPreset={onApplyPreset}
+            onSetLlmModel={onSetLlmModel}
+            onSetLlmEndpoint={onSetLlmEndpoint}
+            onSetLlmKey={onSetLlmKey}
+            onSetRememberApiKey={onSetRememberApiKey}
+            onToggleProtocol={onToggleLlmProtocol}
+            onTestConnection={onTestConnection}
+          />
 
-      <PrimaryButton onClick={onBuildAndGo} disabled={!canBuild || loadingGames} style={{ width: "100%", fontSize: isMobile ? 14 : 16 }}>
+          <DataSourceConfig
+            dataMode={dataMode}
+            onDataModeChange={onDataModeChange}
+            onFileImport={onFileImport}
+            uploadName={uploadName}
+            importedCount={uploadedGames.length}
+            uploadError={uploadError}
+            uploadSummary={uploadSummary}
+            adapterEndpoint={adapterEndpoint}
+            adapterToken={adapterToken}
+            onAdapterEndpointChange={onAdapterEndpointChange}
+            onAdapterTokenChange={onAdapterTokenChange}
+          />
+        </div>
+      </div>
+
+      <PrimaryButton
+        onClick={onBuildAndGo}
+        disabled={!canBuild || loadingGames}
+        style={{ width: "100%", fontSize: isMobile ? 14 : 16, marginTop: 14 }}
+      >
         {loadingGames
           ? "Spiele werden geladen..."
           : !canBuild

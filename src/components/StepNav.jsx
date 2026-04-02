@@ -15,36 +15,35 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
   };
 
   return (
-    <div style={{ display: "flex", gap: 5 }}>
-      {STEPS.map((step, index) => {
+    <div style={{ display: "flex", gap: isMobile ? 4 : 10, alignItems: "center" }}>
+      {STEPS.map((step) => {
         const active = currentStep === step;
         const clickable = canAccessStep(step) && !active;
-        const done = canAccessStep(step) && !active;
+        const unlocked = canAccessStep(step);
 
         return (
           <div
             key={step}
             onClick={() => clickable && onStepChange(step)}
             style={{
-              padding: isMobile ? "5px 9px" : "6px 14px",
-              borderRadius: 4,
-              fontSize: isMobile ? 9 : 11,
-              letterSpacing: "1.5px",
+              padding: isMobile ? "8px 6px" : "10px 6px",
+              borderRadius: 0,
+              fontSize: isMobile ? 11 : 15,
+              letterSpacing: "0.6px",
               textTransform: "uppercase",
               fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: active ? 700 : 600,
-              background: active ? C.green : done ? C.greenDim : "transparent",
-              color: active ? C.white : done ? C.green : C.grayDark,
-              border: `1px solid ${active ? C.green : done ? C.greenDark : C.border}`,
+              fontWeight: active ? 800 : 700,
+              background: "transparent",
+              color: active ? "#70dd88" : unlocked ? C.offWhite : C.grayDark,
+              borderBottom: `2px solid ${active ? "#70dd88" : "transparent"}`,
               cursor: clickable ? "pointer" : "default",
               transition: "all 0.15s",
               whiteSpace: "nowrap",
               minHeight: 0,
             }}
           >
-            {done ? "✓ " : ""}
-            <span className="step-label-short">{index + 1}</span>
             <span className="step-label-full">{STEP_LABELS[step]}</span>
+            <span className="step-label-short">{STEP_LABELS[step].slice(0, 1)}</span>
           </div>
         );
       })}

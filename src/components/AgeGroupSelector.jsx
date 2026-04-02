@@ -4,8 +4,7 @@ import { SectionHeader } from "./SectionHeader";
 export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) {
   return (
     <div style={card}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: C.green }} />
-      <SectionHeader num="02">Jugendklasse</SectionHeader>
+      <SectionHeader num="02">Altersklasse</SectionHeader>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {jugendKlassen.map((item) => {
@@ -16,29 +15,20 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
               className="item-btn"
               onClick={() => onSelect(item.id)}
               style={{
-                padding: "8px 14px",
-                borderRadius: 5,
-                border: `1px solid ${selected ? C.green : C.border}`,
-                background: selected ? C.greenDark : "#111",
-                color: selected ? C.white : C.gray,
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: `1px solid ${selected ? C.green : "rgba(255,255,255,0.08)"}`,
+                background: selected ? "linear-gradient(135deg, #70DD88 0%, #00873E 100%)" : "#2A2A2A",
+                color: selected ? "#08110b" : C.gray,
                 fontFamily: "'Barlow Condensed', sans-serif",
                 cursor: "pointer",
                 transition: "all 0.15s",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-                minHeight: 64,
-                minWidth: 54,
-                boxShadow: selected ? `0 0 0 1px ${C.green}` : "none",
+                minHeight: 0,
+                minWidth: 70,
+                boxShadow: selected ? "0 10px 18px rgba(0,135,62,0.2)" : "none",
               }}
             >
               <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{item.kurz}</span>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.5px" }}>{item.label}</span>
-              <span style={{ fontSize: 9, color: selected ? "#80c880" : C.grayDark }}>{item.alter} J.</span>
-              {item.turnier ? (
-                <span style={{ fontSize: 8, color: selected ? C.warn : C.grayDark, letterSpacing: "0.5px" }}>TURNIER</span>
-              ) : null}
             </button>
           );
         })}
@@ -50,8 +40,8 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
             marginTop: 12,
             padding: "10px 14px",
             background: C.warnDim,
-            border: "1px solid #3a2a00",
-            borderRadius: 5,
+            border: "1px solid rgba(232,160,0,0.35)",
+            borderRadius: 7,
             fontSize: 12,
             color: C.warn,
             fontFamily: "'Barlow', sans-serif",

@@ -545,6 +545,14 @@ ${
 
   const onBackSetup = () => navigate("/setup");
   const onBackGames = () => navigate("/games");
+  const isDesktopShell = width >= 1050;
+  const railItems = [
+    { id: "setup", label: "Setup", enabled: true, onClick: () => navigate("/setup") },
+    { id: "games", label: "Games", enabled: games.length > 0, onClick: () => navigate("/games") },
+    { id: "plan", label: "Plan", enabled: Boolean(plan), onClick: () => navigate("/plan") },
+    { id: "reports", label: "Tactical Reports", enabled: false },
+    { id: "presets", label: "Saved Presets", enabled: false },
+  ];
 
   const contextValue = {
     isMobile,
@@ -628,58 +636,42 @@ ${
     <>
       <style>{GCSS}</style>
 
-      <div style={{ minHeight: "100vh", background: C.bg, color: C.offWhite, fontFamily: "'Barlow', sans-serif" }}>
-        <header
-          style={{
-            background: "#111",
-            borderBottom: `3px solid ${C.green}`,
-            padding: isMobile ? "0 16px" : "0 28px",
-            position: "sticky",
-            top: 0,
-            zIndex: 20,
-            boxShadow: "0 2px 20px rgba(0,135,62,0.15)",
-          }}
-        >
-          <div
-            style={{
-              maxWidth: 900,
-              margin: "0 auto",
-              height: isMobile ? 56 : 64,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <div style={{ flexShrink: 0 }}>
-              <BMGBadge size={isMobile ? 38 : 46} />
+      <div className="app-shell" style={{ color: C.offWhite, fontFamily: "'Barlow', sans-serif" }}>
+        {isDesktopShell ? (
+          <aside className="left-rail">
+            <div>
+              <div className="left-rail-brand">ScoutPlan</div>
+              <div className="left-rail-sub">Technical scouting cockpit for FVN/Niederrhein.</div>
             </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 900,
-                  fontSize: isMobile ? 18 : 22,
-                  color: C.white,
-                  letterSpacing: "1px",
-                  textTransform: "uppercase",
-                  lineHeight: 1,
-                }}
-              >
-                Scout<span style={{ color: C.green }}>Plan</span>
-              </div>
-              <div
-                className="header-sub"
-                style={{
-                  fontSize: 10,
-                  color: C.gray,
-                  letterSpacing: "2px",
-                  textTransform: "uppercase",
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 600,
-                }}
-              >
-                Borussia Mönchengladbach · FVN Scouting
+            <div className="left-menu">
+              {railItems.map((item) => {
+                const active = currentStep === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={`left-menu-item${active ? " active" : ""}`}
+                    onClick={() => item.enabled && item.onClick?.()}
+                    style={{ opacity: item.enabled ? 1 : 0.56, cursor: item.enabled ? "pointer" : "not-allowed" }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button className="left-rail-cta" onClick={onResetSoft}>
+              New Report
+            </button>
+          </aside>
+        ) : null}
+
+        <div className="content-shell">
+          <header className="top-strip">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              {!isDesktopShell ? <BMGBadge size={34} /> : null}
+              <div className="top-strip-title">
+                Scout<span style={{ color: "#70dd88" }}>Plan</span>
               </div>
             </div>
 
@@ -690,104 +682,72 @@ ${
               onStepChange={onStepChange}
               isMobile={isMobile}
             />
-          </div>
-        </header>
 
-        {currentStep === "setup" ? (
-          <div
+            <div className="top-strip-actions">
+              <div className="icon-dot" />
+              <div className="icon-dot" />
+            </div>
+          </header>
+
+          <ScoutPlanProvider value={contextValue}>
+            <main className="workspace">
+              {err ? (
+                <div
+                  style={{
+                    background: C.errorDim,
+                    border: `1px solid ${C.error}`,
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    color: "#ff8080",
+                    fontSize: 13,
+                    marginBottom: 14,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 8,
+                    fontFamily: "'Barlow', sans-serif",
+                  }}
+                >
+                  <span style={{ flex: 1 }}>⚠ {err}</span>
+                  <span onClick={() => setErr("")} style={{ cursor: "pointer", fontSize: 20, lineHeight: 1, color: C.gray }}>
+                    ×
+                  </span>
+                </div>
+              ) : null}
+
+              <Routes>
+                <Route path="/setup" element={<SetupPage />} />
+
+                <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
+
+                <Route path="/plan" element={plan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />} />
+
+                <Route path="*" element={<Navigate to="/setup" replace />} />
+              </Routes>
+            </main>
+          </ScoutPlanProvider>
+
+          <footer
             style={{
-              background: `linear-gradient(135deg, ${C.greenDark} 0%, #003020 50%, #111 100%)`,
-              borderBottom: `1px solid ${C.greenDark}`,
-              padding: isMobile ? "20px 16px" : "24px 28px",
+              borderTop: "1px solid rgba(255,255,255,0.06)",
+              padding: "14px 20px",
+              textAlign: "center",
             }}
           >
-            <div style={{ maxWidth: 900, margin: "0 auto" }}>
-              <div
-                style={{
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 900,
-                  fontSize: isMobile ? 26 : 36,
-                  color: C.white,
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  lineHeight: 1.1,
-                  marginBottom: 6,
-                }}
-              >
-                Jugend-Spielplan
-                <br />
-                <span style={{ color: C.green }}>Niederrhein</span>
-              </div>
-
-              <div style={{ fontSize: 13, color: "#aaa", fontFamily: "'Barlow', sans-serif" }}>
-                FVN · KI-gestützter Scouting-Assistent · Kreise am Niederrhein
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <ScoutPlanProvider value={contextValue}>
-          <main style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 12px" : "24px 20px" }}>
-            {err ? (
-              <div
-                style={{
-                  background: C.errorDim,
-                  border: `1px solid ${C.error}`,
-                  borderRadius: 6,
-                  padding: "10px 14px",
-                  color: "#ff8080",
-                  fontSize: 13,
-                  marginBottom: 14,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 8,
-                  fontFamily: "'Barlow', sans-serif",
-                }}
-              >
-                <span style={{ flex: 1 }}>⚠ {err}</span>
-                <span onClick={() => setErr("")} style={{ cursor: "pointer", fontSize: 20, lineHeight: 1, color: C.gray }}>
-                  ×
-                </span>
-              </div>
-            ) : null}
-
-            <Routes>
-              <Route path="/setup" element={<SetupPage />} />
-
-              <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
-
-              <Route path="/plan" element={plan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />} />
-
-              <Route path="*" element={<Navigate to="/setup" replace />} />
-            </Routes>
-          </main>
-        </ScoutPlanProvider>
-
-        <footer
-          style={{
-            borderTop: `1px solid ${C.border}`,
-            padding: "16px 20px",
-            marginTop: 20,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-            <BMGBadge size={22} />
             <span
               style={{
-                fontSize: 11,
+                fontSize: 10,
                 color: C.grayDark,
-                letterSpacing: "1px",
+                letterSpacing: "1.2px",
                 fontFamily: "'Barlow Condensed',sans-serif",
-                fontWeight: 600,
+                fontWeight: 700,
                 textTransform: "uppercase",
               }}
             >
-              ScoutPlan · Borussia Mönchengladbach · FVN Niederrhein
+              ScoutPlan · Tactical Edition
             </span>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </div>
     </>
   );
