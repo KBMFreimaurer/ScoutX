@@ -134,7 +134,8 @@ export function DataSourceConfig({
           fontFamily: "'Barlow', sans-serif",
         }}
       >
-        Keine fussball.de-API: Daten kommen aus CSV/JSON-Import, Live-Adapter oder Demo-Fallback.
+        Keine fussball.de-API: Auto nutzt nur CSV/JSON-Import oder Live-Adapter. Demo-Daten nur im expliziten Modus
+        &quot;Demo (Zufallsdaten)&quot;.
       </div>
     </div>
   );

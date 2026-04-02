@@ -3,6 +3,7 @@ import { fetchGamesWithProviders, parseUploadedGames, parseUploadedGamesReport }
 
 describe("data provider", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -137,7 +138,26 @@ describe("data provider", () => {
     expect(result.games[0].home).toBe("ETB Schwarz-Weiß Essen");
   });
 
-  it("falls back to mock provider in auto mode", async () => {
+  it("returns a timeout error when adapter request aborts", async () => {
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortError));
+
+    await expect(
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        toDate: "2026-04-07",
+        teams: ["Team A", "Team B", "Team C", "Team D"],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+      }),
+    ).rejects.toThrow("Adapter Timeout");
+  });
+
+  it("does not use mock fallback in auto mode", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -147,38 +167,37 @@ describe("data provider", () => {
       }),
     );
 
-    const result = await fetchGamesWithProviders({
-      mode: "auto",
-      kreisId: "duesseldorf",
-      jugendId: "e-jugend",
-      fromDate: "2026-04-01",
-      toDate: "2026-04-07",
-      teams: ["Team A", "Team B", "Team C", "Team D"],
-      uploadedGames: [],
-      adapterEndpoint: "http://localhost:3333/games",
-    });
-
-    expect(result.source).toBe("mock");
-    expect(result.games.length).toBeGreaterThan(0);
+    await expect(
+      fetchGamesWithProviders({
+        mode: "auto",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        toDate: "2026-04-07",
+        teams: ["Team A", "Team B", "Team C", "Team D"],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+      }),
+    ).rejects.toThrow("Adapter HTTP 500");
   });
 
-  it("falls back when csv games are outside toDate range", async () => {
+  it("does not use mock fallback in csv mode", async () => {
     const uploadedGames = parseUploadedGames(
       `date,time,home,away,venue,km,kreisId,jugendId\n2026-05-01,11:00,Team A,Team C,Platz 1,8,duesseldorf,e-jugend`,
       "games.csv",
       { kreisId: "duesseldorf", jugendId: "e-jugend", fromDate: "2026-04-01", turnier: false },
     );
 
-    const result = await fetchGamesWithProviders({
-      mode: "csv",
-      kreisId: "duesseldorf",
-      jugendId: "e-jugend",
-      fromDate: "2026-04-01",
-      toDate: "2026-04-07",
-      teams: ["Team A", "Team C", "Team B", "Team D"],
-      uploadedGames,
-    });
-
-    expect(result.source).toBe("mock");
+    await expect(
+      fetchGamesWithProviders({
+        mode: "csv",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        toDate: "2026-04-07",
+        teams: ["Team A", "Team C", "Team B", "Team D"],
+        uploadedGames,
+      }),
+    ).rejects.toThrow("Import enthält keine passenden Spiele");
   });
 });

@@ -20,6 +20,7 @@ Der Adapter kann dann die angefragte Woche automatisch aktualisieren:
 
 - per `ADAPTER_EXPORT_COMMAND` (standardmäßig: `node /app/scripts/fetch-week.fussballde.mjs`)
 - oder per `ADAPTER_WEEK_SOURCE_URL_TEMPLATE` (Remote-Feed)
+- `Auto`-Datenmodus nutzt nur echte Quellen (`CSV -> Adapter`), kein stiller Demo-Fallback
 
 Dadurch ist kein manueller Import vor jeder Planung nötig.
 

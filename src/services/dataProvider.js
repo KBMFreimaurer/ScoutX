@@ -11,6 +11,7 @@ export const DATA_SOURCE_LABELS = {
 
 const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Oberhausen"];
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 15000);
 const GENERIC_TEAM_TOKENS = new Set([
   "sv",
   "sc",
@@ -97,6 +98,30 @@ function isLikelyTeamMatch(left, right) {
   }
 
   return overlap >= minTokenCount - 1;
+}
+
+function createTimeoutController(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
+  const { signal, clear } = createTimeoutController(timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`${errorPrefix} Timeout nach ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clear();
+  }
 }
 
 function addDays(isoDate, days) {
@@ -485,18 +510,23 @@ async function fetchGamesAdapter(params) {
   }
 
   const weekRange = getWeekRange(params.fromDate);
-  const response = await fetch(params.adapterEndpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      kreisId: params.kreisId,
-      jugendId: params.jugendId,
-      fromDate: weekRange.fromDate,
-      toDate: weekRange.toDate,
-      teams: params.teams,
-      ensureWeekData: true,
-    }),
-  });
+  const response = await fetchWithTimeout(
+    params.adapterEndpoint,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        kreisId: params.kreisId,
+        jugendId: params.jugendId,
+        fromDate: weekRange.fromDate,
+        toDate: weekRange.toDate,
+        teams: params.teams,
+        ensureWeekData: true,
+      }),
+    },
+    ADAPTER_TIMEOUT_MS,
+    "Adapter",
+  );
 
   if (!response.ok) {
     throw new Error(`Adapter HTTP ${response.status}`);
@@ -546,13 +576,7 @@ export async function fetchGamesWithProviders({
   const context = { kreisId, jugendId, fromDate, toDate, teams, uploadedGames, adapterEndpoint, adapterToken, turnier };
 
   const providerOrder =
-    mode === "mock"
-      ? ["mock"]
-      : mode === "csv"
-        ? ["csv", "mock"]
-        : mode === "adapter"
-          ? ["adapter", "mock"]
-          : ["csv", "adapter", "mock"];
+    mode === "mock" ? ["mock"] : mode === "csv" ? ["csv"] : mode === "adapter" ? ["adapter"] : ["csv", "adapter"];
 
   const providerMap = {
     csv: fetchGamesCsv,

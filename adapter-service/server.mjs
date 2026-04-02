@@ -40,6 +40,7 @@ const state = {
   lastRefreshReason: "startup",
   lastError: null,
   weekRefreshCache: {},
+  weekRefreshPromises: {},
 };
 
 let refreshPromise = null;
@@ -160,103 +161,118 @@ async function maybeAutoRefreshWeek(payload) {
     return { ran: false, reason: "cached", cacheKey, weekRange };
   }
 
-  const params = {
-    fromDate: weekRange.fromDate,
-    toDate: weekRange.toDate,
-    kreisId: payload.kreisId || "",
-    jugendId: payload.jugendId || "",
-    teams: Array.isArray(payload.teams) ? payload.teams : [],
-  };
-
-  const warnings = [];
-  const collected = [];
-
-  if (EXPORT_COMMAND) {
-    try {
-      const cmd = await runExportCommand({
-        command: EXPORT_COMMAND,
-        timeoutMs: WEEK_COMMAND_TIMEOUT_MS,
-        params,
-        importDir: IMPORT_DIR,
-      });
-
-      if (cmd.warnings?.length) {
-        warnings.push(...cmd.warnings);
-      }
-
-      const normalized = normalizeGames(cmd.games, {
-        aliasMap: state.aliasMap,
-        source: cmd.source,
-      });
-      collected.push(...filterGamesToWeek(normalized, weekRange));
-    } catch (error) {
-      warnings.push(`Export command failed: ${error.message || error}`);
-    }
+  const pending = state.weekRefreshPromises[cacheKey];
+  if (pending) {
+    return pending;
   }
 
-  if (WEEK_SOURCE_TEMPLATE) {
-    try {
-      const remote = await fetchWeekTemplateGames({
-        template: WEEK_SOURCE_TEMPLATE,
-        token: WEEK_SOURCE_TOKEN,
-        params,
-      });
+  const refreshPromise = (async () => {
+    const params = {
+      fromDate: weekRange.fromDate,
+      toDate: weekRange.toDate,
+      kreisId: payload.kreisId || "",
+      jugendId: payload.jugendId || "",
+      teams: Array.isArray(payload.teams) ? payload.teams : [],
+    };
 
-      if (remote.warnings?.length) {
-        warnings.push(...remote.warnings);
+    const warnings = [];
+    const collected = [];
+
+    if (EXPORT_COMMAND) {
+      try {
+        const cmd = await runExportCommand({
+          command: EXPORT_COMMAND,
+          timeoutMs: WEEK_COMMAND_TIMEOUT_MS,
+          params,
+          importDir: IMPORT_DIR,
+        });
+
+        if (cmd.warnings?.length) {
+          warnings.push(...cmd.warnings);
+        }
+
+        const normalized = normalizeGames(cmd.games, {
+          aliasMap: state.aliasMap,
+          source: cmd.source,
+        });
+        collected.push(...filterGamesToWeek(normalized, weekRange));
+      } catch (error) {
+        warnings.push(`Export command failed: ${error.message || error}`);
       }
-
-      const normalized = normalizeGames(remote.games, {
-        aliasMap: state.aliasMap,
-        source: remote.source,
-      });
-      collected.push(...filterGamesToWeek(normalized, weekRange));
-    } catch (error) {
-      warnings.push(`Week source failed: ${error.message || error}`);
     }
+
+    if (WEEK_SOURCE_TEMPLATE) {
+      try {
+        const remote = await fetchWeekTemplateGames({
+          template: WEEK_SOURCE_TEMPLATE,
+          token: WEEK_SOURCE_TOKEN,
+          params,
+        });
+
+        if (remote.warnings?.length) {
+          warnings.push(...remote.warnings);
+        }
+
+        const normalized = normalizeGames(remote.games, {
+          aliasMap: state.aliasMap,
+          source: remote.source,
+        });
+        collected.push(...filterGamesToWeek(normalized, weekRange));
+      } catch (error) {
+        warnings.push(`Week source failed: ${error.message || error}`);
+      }
+    }
+
+    // Reload import/remote baseline after command execution
+    const refreshed = await refreshData("auto-week-base");
+
+    const merged = dedupeGames([...refreshed.games, ...collected]);
+    const added = merged.length - refreshed.games.length;
+
+    const weekMeta = {
+      week: weekRange,
+      cacheKey,
+      refreshedAt: new Date().toISOString(),
+      added,
+      collected: collected.length,
+      warnings,
+    };
+
+    const nextMeta = {
+      ...(state.meta || {}),
+      updatedAt: new Date().toISOString(),
+      counts: {
+        ...(state.meta?.counts || {}),
+        total: merged.length,
+      },
+      weekRefresh: weekMeta,
+    };
+
+    await writeStore(STORE_FILE, { games: merged, meta: nextMeta });
+
+    state.games = merged;
+    state.meta = nextMeta;
+    state.lastRefreshReason = "auto-week";
+    state.lastError = warnings.length ? warnings.join(" | ") : null;
+    state.weekRefreshCache[cacheKey] = now;
+
+    return {
+      ran: true,
+      reason: "refreshed",
+      weekRange,
+      cacheKey,
+      added,
+      warnings,
+    };
+  })();
+
+  state.weekRefreshPromises[cacheKey] = refreshPromise;
+
+  try {
+    return await refreshPromise;
+  } finally {
+    delete state.weekRefreshPromises[cacheKey];
   }
-
-  // Reload import/remote baseline after command execution
-  const refreshed = await refreshData("auto-week-base");
-
-  const merged = dedupeGames([...refreshed.games, ...collected]);
-  const added = merged.length - refreshed.games.length;
-
-  const weekMeta = {
-    week: weekRange,
-    cacheKey,
-    refreshedAt: new Date().toISOString(),
-    added,
-    collected: collected.length,
-    warnings,
-  };
-
-  const nextMeta = {
-    ...(state.meta || {}),
-    updatedAt: new Date().toISOString(),
-    counts: {
-      ...(state.meta?.counts || {}),
-      total: merged.length,
-    },
-    weekRefresh: weekMeta,
-  };
-
-  await writeStore(STORE_FILE, { games: merged, meta: nextMeta });
-
-  state.games = merged;
-  state.meta = nextMeta;
-  state.lastRefreshReason = "auto-week";
-  state.lastError = warnings.length ? warnings.join(" | ") : null;
-  state.weekRefreshCache[cacheKey] = now;
-
-  return {
-    ran: true,
-    reason: "refreshed",
-    weekRange,
-    cacheKey,
-    added,
-    warnings,
-  };
 }
 
 function getHealthPayload() {

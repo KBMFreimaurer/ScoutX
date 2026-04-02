@@ -3,6 +3,7 @@ import { callLLM, testConnection } from "./llm";
 
 describe("llm service", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -84,5 +85,22 @@ describe("llm service", () => {
     });
 
     expect(result).toEqual({ ok: true, models: ["qwen2.5:7b", "llama3"] });
+  });
+
+  it("throws timeout error when llm call aborts", async () => {
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortError));
+
+    await expect(
+      callLLM({
+        endpoint: "http://localhost:11434",
+        isOllama: true,
+        model: "qwen2.5:7b",
+        apiKey: "",
+        prompt: "Test",
+        timeoutMs: 2000,
+      }),
+    ).rejects.toThrow("LLM Timeout");
   });
 });
