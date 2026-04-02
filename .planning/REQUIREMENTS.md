@@ -56,27 +56,27 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| DATA-04 | — | Pending |
-| DATA-05 | — | Pending |
-| PDF-01 | — | Pending |
-| PDF-02 | — | Pending |
-| PDF-03 | — | Pending |
-| PDF-04 | — | Pending |
-| PDF-05 | — | Pending |
-| DEPL-01 | — | Pending |
-| DEPL-02 | — | Pending |
-| DEPL-03 | — | Pending |
-| DEPL-04 | — | Pending |
-| DEPL-05 | — | Pending |
+| DATA-01 | Phase 1 | Pending |
+| DATA-02 | Phase 1 | Pending |
+| DATA-03 | Phase 1 | Pending |
+| DATA-05 | Phase 1 | Pending |
+| DATA-04 | Phase 2 | Pending |
+| PDF-01 | Phase 3 | Pending |
+| PDF-02 | Phase 3 | Pending |
+| PDF-03 | Phase 3 | Pending |
+| PDF-04 | Phase 3 | Pending |
+| PDF-05 | Phase 3 | Pending |
+| DEPL-02 | Phase 4 | Pending |
+| DEPL-01 | Phase 5 | Pending |
+| DEPL-03 | Phase 5 | Pending |
+| DEPL-04 | Phase 5 | Pending |
+| DEPL-05 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after initial definition*
+*Last updated: 2026-04-02 after roadmap creation — traceability complete*
