@@ -1,4 +1,4 @@
-name: 🚀 Auto Deploy
+name: 🚀 Auto Deploy # Updatet automatisch alles auf dem Server
 
 on:
   push:
