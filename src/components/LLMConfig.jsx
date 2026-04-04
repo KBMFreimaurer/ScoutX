@@ -21,30 +21,33 @@ export function LLMConfig({
   return (
     <div style={card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <SectionHeader num="05">KI Engine Einstellungen</SectionHeader>
+        <SectionHeader num="05">KI Engine</SectionHeader>
 
         {connStatus && connStatus !== "testing" ? (
           <div
             style={{
-              padding: "4px 12px",
-              borderRadius: 4,
+              padding: "4px 10px",
+              borderRadius: 6,
               fontSize: 11,
               minHeight: 0,
               background: connStatus.ok ? C.greenDim : C.errorDim,
-              border: `1px solid ${connStatus.ok ? C.green : C.error}`,
-              color: connStatus.ok ? C.green : "#ff8080",
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700,
-              letterSpacing: "0.5px",
+              border: `1px solid ${connStatus.ok ? C.greenBorder : "rgba(239,68,68,0.2)"}`,
+              color: connStatus.ok ? C.green : "#fca5a5",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: connStatus.ok ? C.green : C.error }} />
             {connStatus.ok
-              ? `✓ VERBUNDEN · ${connStatus.models.length} Modell${connStatus.models.length !== 1 ? "e" : ""}`
-              : "✗ KEINE VERBINDUNG"}
+              ? `${connStatus.models.length} Modell${connStatus.models.length !== 1 ? "e" : ""}`
+              : "Offline"}
           </div>
         ) : null}
 
-        {connStatus === "testing" ? <div className="skeleton" style={{ width: 160, height: 28 }} /> : null}
+        {connStatus === "testing" ? <div className="skeleton" style={{ width: 120, height: 24, borderRadius: 6 }} /> : null}
       </div>
 
       <div className="preset-btns">
@@ -55,27 +58,26 @@ export function LLMConfig({
               key={presetType}
               onClick={() => onApplyPreset(presetType)}
               style={{
-                padding: "7px 14px",
-                borderRadius: 999,
-                minHeight: 44,
-                border: `1px solid ${selected ? C.green : "rgba(255,255,255,0.08)"}`,
-                background: selected ? "linear-gradient(135deg, #70DD88 0%, #00873E 100%)" : "#2A2A2A",
-                color: selected ? "#08110b" : C.gray,
-                fontFamily: "'Barlow Condensed', sans-serif",
+                padding: "8px 14px",
+                borderRadius: 10,
+                minHeight: 36,
+                border: `1px solid ${selected ? C.greenBorder : C.border}`,
+                background: selected ? C.green : "rgba(255,255,255,0.03)",
+                color: selected ? C.bg : C.grayLight,
+                fontFamily: "'Inter', sans-serif",
                 fontSize: 12,
-                fontWeight: selected ? 700 : 600,
+                fontWeight: selected ? 600 : 500,
                 cursor: "pointer",
-                transition: "all 0.15s",
+                transition: "all 0.2s ease",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 2,
-                letterSpacing: "0.5px",
               }}
             >
               <span>{preset.label}</span>
               {preset.recommended ? (
-                <span style={{ fontSize: 9, color: selected ? C.green : C.grayDark, letterSpacing: "1px" }}>EMPFOHLEN</span>
+                <span style={{ fontSize: 9, color: selected ? "rgba(6,6,9,0.6)" : C.grayDark, fontWeight: 500 }}>EMPFOHLEN</span>
               ) : null}
             </button>
           );
@@ -137,34 +139,33 @@ export function LLMConfig({
               type="checkbox"
               checked={rememberApiKey}
               onChange={(event) => onSetRememberApiKey(event.target.checked)}
-              style={{ minHeight: 16, minWidth: 16 }}
+              style={{ minHeight: 16, minWidth: 16, accentColor: C.green }}
             />
-            <label htmlFor="remember-api-key" style={{ color: C.gray, fontSize: 12, fontFamily: "'Barlow', sans-serif" }}>
-              API-Key lokal speichern (nur wenn nötig)
+            <label htmlFor="remember-api-key" style={{ color: C.gray, fontSize: 12, fontFamily: "'Inter', sans-serif" }}>
+              API-Key lokal speichern
             </label>
           </div>
         </div>
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <label style={{ ...lbl, marginBottom: 0 }}>Protokoll</label>
         <button
           onClick={onToggleProtocol}
           style={{
             padding: "4px 12px",
-            borderRadius: 20,
+            borderRadius: 6,
             minHeight: 0,
-            border: `1px solid ${llmIsOllama ? C.green : C.border}`,
-            background: llmIsOllama ? C.greenDim : "transparent",
+            border: `1px solid ${llmIsOllama ? C.greenBorder : C.border}`,
+            background: llmIsOllama ? C.greenDim : "rgba(255,255,255,0.03)",
             color: llmIsOllama ? C.green : C.gray,
-            fontFamily: "'Barlow Condensed', sans-serif",
+            fontFamily: "'JetBrains Mono', monospace",
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 600,
             cursor: "pointer",
-            letterSpacing: "0.5px",
           }}
         >
-          {llmIsOllama ? "✓ OLLAMA API" : "OPENAI-KOMPATIBEL"}
+          {llmIsOllama ? "OLLAMA" : "OPENAI"}
         </button>
       </div>
 
@@ -173,74 +174,89 @@ export function LLMConfig({
         disabled={connStatus === "testing"}
         style={{
           width: "100%",
-          padding: "11px",
-          borderRadius: 6,
+          padding: "12px",
+          borderRadius: 10,
           minHeight: 44,
-          border: `1px solid ${connStatus?.ok ? C.green : C.greenBorder}`,
-          background: connStatus?.ok ? "rgba(0,31,16,0.85)" : "#2A2A2A",
-          color: connStatus?.ok ? "#70dd88" : C.offWhite,
-          fontFamily: "'Barlow Condensed', sans-serif",
-          fontSize: 14,
-          fontWeight: 700,
-          letterSpacing: "1px",
+          border: `1px solid ${connStatus?.ok ? C.greenBorder : C.border}`,
+          background: connStatus?.ok ? C.greenDim : "rgba(255,255,255,0.04)",
+          color: connStatus?.ok ? C.green : C.offWhite,
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 13,
+          fontWeight: 600,
           cursor: connStatus === "testing" ? "not-allowed" : "pointer",
-          transition: "all 0.2s",
-          textTransform: "uppercase",
+          transition: "all 0.2s ease",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
         }}
       >
-        {connStatus === "testing"
-          ? "Verbindung wird geprüft..."
-          : connStatus?.ok
-            ? "✓ Verbunden - neu testen"
-            : "⚡ Verbindung testen"}
+        {connStatus === "testing" ? (
+          <>
+            <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+            Verbindung wird geprüft...
+          </>
+        ) : connStatus?.ok ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Verbunden
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Verbindung testen
+          </>
+        )}
       </button>
 
       {connStatus?.ok === false ? (
-        <div style={{ marginTop: 10, padding: "12px 14px", background: C.errorDim, border: `1px solid ${C.error}`, borderRadius: 7, fontSize: 12 }}>
+        <div style={{ marginTop: 10, padding: "14px", background: C.errorDim, border: `1px solid rgba(239,68,68,0.15)`, borderRadius: 10, fontSize: 12 }}>
           <div
             style={{
-              fontWeight: 700,
-              color: "#ff8080",
-              marginBottom: 4,
-              fontFamily: "'Barlow Condensed',sans-serif",
-              letterSpacing: "0.5px",
+              fontWeight: 600,
+              color: "#fca5a5",
+              marginBottom: 6,
+              fontFamily: "'Inter',sans-serif",
+              fontSize: 12,
             }}
           >
-            VERBINDUNG FEHLGESCHLAGEN
+            Verbindung fehlgeschlagen
           </div>
-          <div style={{ color: "#cc5050", marginBottom: 8 }}>{connStatus.error}</div>
+          <div style={{ color: "#f87171", marginBottom: 10, fontSize: 12 }}>{connStatus.error}</div>
           <code
             style={{
               display: "block",
-              background: "#0a0a0a",
-              padding: "6px 10px",
-              borderRadius: 4,
-              color: "#80c880",
+              background: "rgba(0,0,0,0.3)",
+              padding: "8px 12px",
+              borderRadius: 8,
+              color: C.greenLight,
               fontSize: 11,
               marginBottom: 4,
+              fontFamily: "'JetBrains Mono',monospace",
             }}
           >
             OLLAMA_ORIGINS=&quot;*&quot; ollama serve
           </code>
-          <code style={{ display: "block", background: "#0a0a0a", padding: "6px 10px", borderRadius: 4, color: "#80c880", fontSize: 11 }}>
+          <code style={{ display: "block", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 8, color: C.greenLight, fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}>
             ollama pull {presets.qwen.model}
           </code>
         </div>
       ) : null}
 
       {connStatus?.ok && connStatus.models.length > 0 ? (
-        <div style={{ marginTop: 10, padding: "12px 14px", background: "rgba(0,31,16,0.85)", border: `1px solid ${C.greenBorder}`, borderRadius: 7 }}>
+        <div style={{ marginTop: 10, padding: "14px", background: C.greenDim, border: `1px solid ${C.greenBorder}`, borderRadius: 10 }}>
           <div
             style={{
               color: C.green,
               marginBottom: 8,
-              fontWeight: 700,
+              fontWeight: 600,
               fontSize: 11,
-              fontFamily: "'Barlow Condensed',sans-serif",
-              letterSpacing: "1px",
+              fontFamily: "'Inter',sans-serif",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
             }}
           >
-            VERFÜGBARE MODELLE
+            Verfügbare Modelle
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -249,18 +265,21 @@ export function LLMConfig({
                 key={model}
                 onClick={() => onSetLlmModel(model)}
                 style={{
-                  padding: "4px 12px",
-                  borderRadius: 4,
-                  fontSize: 12,
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  fontSize: 11,
                   minHeight: 0,
-                  border: `1px solid ${llmModel === model ? C.green : C.greenDark}`,
-                  background: llmModel === model ? C.greenDark : "transparent",
+                  border: `1px solid ${llmModel === model ? C.green : C.greenBorder}`,
+                  background: llmModel === model ? "rgba(0,200,83,0.15)" : "transparent",
                   color: llmModel === model ? C.white : C.green,
                   cursor: "pointer",
-                  fontFamily: "'Barlow', sans-serif",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  transition: "all 0.15s ease",
                 }}
               >
-                {llmModel === model ? "✓ " : ""}
+                {llmModel === model ? (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginRight: 4 }}><polyline points="20 6 9 17 4 12"/></svg>
+                ) : null}
                 {model}
               </button>
             ))}

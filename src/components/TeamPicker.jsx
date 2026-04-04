@@ -19,24 +19,24 @@ export function TeamPicker({
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-        <SectionHeader num="03">Mannschaften-Auswahl</SectionHeader>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <SectionHeader num="03">Mannschaften</SectionHeader>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button
             onClick={onSelectAll}
             style={{
               fontSize: 12,
-              color: "#70dd88",
+              color: C.green,
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              fontFamily: "'Barlow', sans-serif",
-              fontWeight: 600,
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 500,
               padding: "2px 0",
               minHeight: 0,
             }}
           >
-            Alle wählen
+            Alle
           </button>
 
           {selectedTeams.length > 0 ? (
@@ -48,29 +48,28 @@ export function TeamPicker({
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
-                fontFamily: "'Barlow', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 padding: "2px 0",
                 minHeight: 0,
               }}
             >
-              Abwählen
+              Reset
             </button>
           ) : null}
 
           <span
             style={{
-              fontSize: 12,
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700,
-              letterSpacing: "0.5px",
-              color: selectedTeams.length > 0 ? "#70dd88" : C.grayDark,
-              background: selectedTeams.length > 0 ? "rgba(0,31,16,0.85)" : "transparent",
-              border: `1px solid ${selectedTeams.length > 0 ? C.greenBorder : "rgba(255,255,255,0.08)"}`,
+              fontSize: 11,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontWeight: 600,
+              color: selectedTeams.length > 0 ? C.green : C.grayDark,
+              background: selectedTeams.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
+              border: `1px solid ${selectedTeams.length > 0 ? C.greenBorder : C.border}`,
               padding: "3px 10px",
-              borderRadius: 20,
+              borderRadius: 6,
             }}
           >
-            {selectedTeams.length > 0 ? `${selectedTeams.length} / ${allTeams.length} aktiv` : `Alle ${allTeams.length}`}
+            {selectedTeams.length > 0 ? `${selectedTeams.length}/${allTeams.length}` : `${allTeams.length}`}
           </span>
         </div>
       </div>
@@ -85,17 +84,17 @@ export function TeamPicker({
                 alignItems: "center",
                 gap: 6,
                 padding: "4px 10px",
-                borderRadius: 999,
-                background: "rgba(0,31,16,0.8)",
+                borderRadius: 8,
+                background: C.greenDim,
                 border: `1px solid ${C.greenBorder}`,
                 fontSize: 12,
                 color: C.white,
-                fontFamily: "'Barlow', sans-serif",
+                fontFamily: "'Inter', sans-serif",
               }}
             >
               <span>{team}</span>
-              <span onClick={() => onRemoveTeam(team)} style={{ cursor: "pointer", fontSize: 15, lineHeight: 1, color: C.green }}>
-                ×
+              <span onClick={() => onRemoveTeam(team)} style={{ cursor: "pointer", fontSize: 14, lineHeight: 1, color: C.green, opacity: 0.7 }}>
+                x
               </span>
             </div>
           ))}
@@ -116,17 +115,16 @@ export function TeamPicker({
             onClick={onSelectFiltered}
             style={{
               padding: "0 14px",
-              borderRadius: 6,
+              borderRadius: 10,
               minHeight: 44,
               border: `1px solid ${C.greenBorder}`,
-              background: "rgba(0,31,16,0.8)",
-              color: "#70dd88",
-              fontFamily: "'Barlow Condensed', sans-serif",
+              background: C.greenDim,
+              color: C.green,
+              fontFamily: "'Inter', sans-serif",
               fontSize: 12,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: "pointer",
               whiteSpace: "nowrap",
-              letterSpacing: "0.5px",
             }}
           >
             + Alle
@@ -146,15 +144,15 @@ export function TeamPicker({
               onClick={() => onToggleTeam(team)}
               style={{
                 padding: "9px 12px",
-                borderRadius: 6,
+                borderRadius: 10,
                 textAlign: "left",
-                border: `1px solid ${isSelected ? C.green : "rgba(255,255,255,0.08)"}`,
-                background: isSelected ? "linear-gradient(135deg, rgba(112,221,136,0.2), rgba(0,135,62,0.12))" : "#242424",
+                border: `1px solid ${isSelected ? C.greenBorder : C.border}`,
+                background: isSelected ? C.greenDim : "rgba(255,255,255,0.03)",
                 color: dimmed ? C.grayDark : isSelected ? C.white : C.offWhite,
-                fontFamily: "'Barlow', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: 13,
                 cursor: "pointer",
-                transition: "all 0.12s",
+                transition: "all 0.15s ease",
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
@@ -165,19 +163,21 @@ export function TeamPicker({
                 style={{
                   width: 18,
                   height: 18,
-                  borderRadius: 4,
-                  border: `1.5px solid ${isSelected ? C.green : "rgba(255,255,255,0.2)"}`,
+                  borderRadius: 5,
+                  border: `1.5px solid ${isSelected ? C.green : "rgba(255,255,255,0.15)"}`,
                   background: isSelected ? C.green : "transparent",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 11,
-                  color: C.white,
+                  fontSize: 10,
+                  color: C.bg,
                   flexShrink: 0,
-                  transition: "all 0.12s",
+                  transition: "all 0.15s ease",
                 }}
               >
-                {isSelected ? "✓" : ""}
+                {isSelected ? (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : ""}
               </span>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team}</span>
             </button>
@@ -186,22 +186,23 @@ export function TeamPicker({
       </div>
 
       {teamFilter && filteredTeams.length === 0 ? (
-        <div style={{ color: C.gray, fontSize: 13, textAlign: "center", padding: 16 }}>Kein Verein gefunden</div>
+        <div style={{ color: C.gray, fontSize: 13, textAlign: "center", padding: 20 }}>Kein Verein gefunden</div>
       ) : null}
 
       <div
         style={{
           marginTop: 12,
-          padding: "9px 12px",
-          background: "#202020",
-          borderRadius: 7,
-          border: "1px solid rgba(255,255,255,0.07)",
+          padding: "10px 14px",
+          background: "rgba(255,255,255,0.02)",
+          borderRadius: 10,
+          border: `1px solid ${C.border}`,
           fontSize: 12,
           color: C.grayDark,
-          fontFamily: "'Barlow', sans-serif",
+          fontFamily: "'Inter', sans-serif",
+          lineHeight: 1.5,
         }}
       >
-        Wähle Vereine aus, die für das Scouting in Frage kommen. Keine Auswahl bedeutet: alle {allTeams.length} Vereine werden berücksichtigt.
+        Keine Auswahl = alle {allTeams.length} Vereine werden berücksichtigt.
       </div>
     </div>
   );

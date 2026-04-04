@@ -27,29 +27,44 @@ export function GamesPage() {
 
   return (
     <div className="fu">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <GhostButton onClick={onBackSetup}>← Setup</GhostButton>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <GhostButton onClick={onBackSetup}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Setup
+        </GhostButton>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "'Barlow Condensed',sans-serif",
-              fontWeight: 900,
-              fontSize: 24,
+              fontFamily: "'Inter',sans-serif",
+              fontWeight: 800,
+              fontSize: 22,
               color: C.white,
-              textTransform: "uppercase",
-              letterSpacing: "1px",
+              letterSpacing: "-0.3px",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
           >
             {jugend?.label} · {kreis?.label}
-            {jugend?.turnier ? <span style={{ fontSize: 12, color: C.warn, marginLeft: 10, fontWeight: 600 }}>TURNIER</span> : null}
+            {jugend?.turnier ? (
+              <span style={{
+                fontSize: 11,
+                color: C.warn,
+                marginLeft: 10,
+                fontWeight: 600,
+                padding: "2px 8px",
+                background: C.warnDim,
+                borderRadius: 4,
+                border: `1px solid rgba(251,191,36,0.15)`,
+              }}>
+                TURNIER
+              </span>
+            ) : null}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray }}>
-            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Teams · Quelle: {dataSourceLabel}
+          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
+            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Teams · {dataSourceLabel}
           </div>
         </div>
 
@@ -62,7 +77,17 @@ export function GamesPage() {
       <GameCards games={games} />
 
       <PrimaryButton onClick={onGenerateAI} disabled={loadingAI} style={{ width: "100%" }}>
-        {loadingAI ? `Analyse läuft mit ${llmModel}...` : `KI Scout-Plan für ${jugend?.label} erstellen →`}
+        {loadingAI ? (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+            Analyse läuft mit {llmModel}...
+          </span>
+        ) : (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            KI Scout-Plan erstellen
+          </span>
+        )}
       </PrimaryButton>
 
       {loadingAI ? <SkeletonLoader rows={6} /> : null}

@@ -3,12 +3,13 @@ import { C } from "../styles/theme";
 export function SkeletonLoader({ rows = 3 }) {
   return (
     <div
+      className="fu"
       style={{
-        marginTop: 12,
-        background: C.surface,
+        marginTop: 14,
+        background: "rgba(255,255,255,0.02)",
         border: `1px solid ${C.border}`,
-        borderRadius: 8,
-        padding: 14,
+        borderRadius: 14,
+        padding: 16,
       }}
     >
       {Array.from({ length: rows }).map((_, index) => (
@@ -16,9 +17,9 @@ export function SkeletonLoader({ rows = 3 }) {
           key={index}
           className="skeleton"
           style={{
-            height: 16,
+            height: 14,
             marginBottom: index < rows - 1 ? 10 : 0,
-            width: index % 2 === 0 ? "100%" : "85%",
+            width: index % 3 === 0 ? "100%" : index % 3 === 1 ? "85%" : "70%",
           }}
         />
       ))}

@@ -22,18 +22,20 @@ export function PlanPage() {
 
   return (
     <div className="fu">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <GhostButton onClick={onBackGames}>← Spiele</GhostButton>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <GhostButton onClick={onBackGames}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Spiele
+        </GhostButton>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "'Barlow Condensed',sans-serif",
-              fontWeight: 900,
+              fontFamily: "'Inter',sans-serif",
+              fontWeight: 800,
               fontSize: isMobile ? 18 : 22,
               color: C.white,
-              textTransform: "uppercase",
-              letterSpacing: "1px",
+              letterSpacing: "-0.3px",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -42,30 +44,30 @@ export function PlanPage() {
             Scout-Plan · {jugend?.label}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray }}>
+          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
             {kreis?.label} · {llmModel}
           </div>
         </div>
 
-        <PDFExport games={games} plan={plan} cfg={cfg} variant="primary" label="↓ PDF" />
+        <PDFExport games={games} plan={plan} cfg={cfg} variant="primary" label="PDF Export" />
       </div>
 
       <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} />
 
-      <div className="fu3" style={{ marginBottom: 14 }}>
+      <div className="fu3" style={{ marginBottom: 16 }}>
         <div
           style={{
             padding: "10px 16px",
-            background: "#161616",
-            borderRadius: "8px 8px 0 0",
+            background: "rgba(255,255,255,0.03)",
+            borderRadius: "14px 14px 0 0",
             border: `1px solid ${C.border}`,
             borderBottom: "none",
-            fontSize: 10,
+            fontSize: 11,
             color: C.gray,
-            letterSpacing: "2px",
+            letterSpacing: "0.5px",
             textTransform: "uppercase",
-            fontFamily: "'Barlow Condensed',sans-serif",
-            fontWeight: 700,
+            fontFamily: "'Inter',sans-serif",
+            fontWeight: 600,
           }}
         >
           Alle {games.length} Spiele · {jugend?.label} · {kreis?.label}
@@ -76,10 +78,10 @@ export function PlanPage() {
         <div
           className="game-cards"
           style={{
-            background: C.surface,
+            background: C.surfaceSolid,
             border: `1px solid ${C.border}`,
             borderTop: "none",
-            borderRadius: "0 0 8px 8px",
+            borderRadius: "0 0 14px 14px",
             padding: "10px",
           }}
         >
@@ -89,10 +91,12 @@ export function PlanPage() {
 
       <div className="reset-row">
         <GhostButton onClick={onResetSoft} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
-          ↺ Gleicher Kreis, neuer Plan
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Neuer Plan
         </GhostButton>
         <GhostButton onClick={onResetHard} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
-          ⊕ Komplett neu starten
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Komplett neu
         </GhostButton>
       </div>
     </div>

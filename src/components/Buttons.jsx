@@ -8,19 +8,20 @@ export function GhostButton({ onClick, children, style, disabled }) {
       disabled={disabled}
       style={{
         padding: "9px 16px",
-        background: "#2A2A2A",
-        border: `1px solid ${C.greenBorder}`,
-        borderRadius: 6,
+        background: "rgba(255,255,255,0.04)",
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
         color: C.offWhite,
-        fontFamily: "'Barlow', sans-serif",
-        fontSize: 12,
+        fontFamily: "'Inter', sans-serif",
+        fontSize: 13,
         cursor: disabled ? "not-allowed" : "pointer",
         minHeight: 44,
-        transition: "all 0.15s",
-        fontWeight: 600,
-        textTransform: "uppercase",
-        letterSpacing: "0.6px",
-        opacity: disabled ? 0.55 : 1,
+        transition: "all 0.2s ease",
+        fontWeight: 500,
+        opacity: disabled ? 0.5 : 1,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
         ...style,
       }}
     >
@@ -36,20 +37,21 @@ export function PrimaryButton({ onClick, disabled, children, style }) {
       onClick={onClick}
       disabled={disabled}
       style={{
-        padding: "13px 20px",
-        borderRadius: 6,
+        padding: "14px 24px",
+        borderRadius: 12,
         border: "none",
-        background: disabled ? "#2b2b2b" : "linear-gradient(135deg,#70DD88 0%, #00873E 100%)",
-        color: disabled ? C.grayDark : "#08110b",
-        fontFamily: "'Barlow Condensed', sans-serif",
-        fontSize: 15,
-        fontWeight: 800,
-        letterSpacing: "0.8px",
+        background: disabled
+          ? "rgba(255,255,255,0.06)"
+          : C.green,
+        color: disabled ? C.grayDark : C.bg,
+        fontFamily: "'Inter', sans-serif",
+        fontSize: 14,
+        fontWeight: 600,
         cursor: disabled ? "not-allowed" : "pointer",
-        minHeight: 44,
-        textTransform: "uppercase",
-        boxShadow: disabled ? "none" : "0 12px 28px rgba(0,135,62,0.24)",
-        transition: "filter 0.2s, box-shadow 0.2s",
+        minHeight: 48,
+        boxShadow: disabled ? "none" : `0 0 30px rgba(0,200,83,0.2), 0 4px 12px rgba(0,200,83,0.15)`,
+        transition: "all 0.25s cubic-bezier(0.16,1,0.3,1)",
+        letterSpacing: "-0.01em",
         ...style,
       }}
     >

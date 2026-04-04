@@ -29,32 +29,44 @@ export class ErrorBoundary extends React.Component {
             justifyContent: "center",
             alignItems: "center",
             padding: 24,
-            fontFamily: "'Barlow', sans-serif",
+            fontFamily: "'Inter', system-ui, sans-serif",
           }}
         >
           <div
             style={{
-              maxWidth: 620,
+              maxWidth: 520,
               width: "100%",
-              background: C.surface,
-              border: `1px solid ${C.error}`,
-              borderRadius: 8,
-              padding: 20,
+              background: "rgba(255,255,255,0.03)",
+              border: `1px solid rgba(239,68,68,0.2)`,
+              borderRadius: 16,
+              padding: 24,
             }}
           >
-            <h2 style={{ margin: "0 0 8px", color: "#ff8080", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase" }}>
+            <h2 style={{
+              margin: "0 0 8px",
+              color: "#fca5a5",
+              fontFamily: "'Inter',sans-serif",
+              fontWeight: 700,
+              fontSize: 18,
+              letterSpacing: "-0.2px",
+            }}>
               Unerwarteter Fehler
             </h2>
-            <p style={{ margin: "0 0 16px", color: C.gray }}>Die Anwendung ist abgestürzt. Bitte Seite neu laden.</p>
+            <p style={{ margin: "0 0 16px", color: C.gray, fontSize: 14, lineHeight: 1.5 }}>
+              Die Anwendung ist abgestürzt. Bitte Seite neu laden.
+            </p>
             <pre
               style={{
                 margin: 0,
-                padding: 12,
-                borderRadius: 6,
-                background: "#111",
-                color: "#ff8080",
+                padding: 14,
+                borderRadius: 10,
+                background: "rgba(0,0,0,0.3)",
+                color: "#fca5a5",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12,
+                lineHeight: 1.5,
               }}
             >
               {this.state.message}

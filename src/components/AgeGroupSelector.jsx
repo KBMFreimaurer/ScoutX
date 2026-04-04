@@ -6,7 +6,7 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
     <div style={card}>
       <SectionHeader num="02">Altersklasse</SectionHeader>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {jugendKlassen.map((item) => {
           const selected = jugendId === item.id;
           return (
@@ -15,20 +15,20 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
               className="item-btn"
               onClick={() => onSelect(item.id)}
               style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: `1px solid ${selected ? C.green : "rgba(255,255,255,0.08)"}`,
-                background: selected ? "linear-gradient(135deg, #70DD88 0%, #00873E 100%)" : "#2A2A2A",
-                color: selected ? "#08110b" : C.gray,
-                fontFamily: "'Barlow Condensed', sans-serif",
+                padding: "8px 14px",
+                borderRadius: 10,
+                border: `1px solid ${selected ? C.greenBorder : C.border}`,
+                background: selected ? C.green : "rgba(255,255,255,0.03)",
+                color: selected ? C.bg : C.grayLight,
+                fontFamily: "'Inter', sans-serif",
                 cursor: "pointer",
-                transition: "all 0.15s",
+                transition: "all 0.2s ease",
                 minHeight: 0,
-                minWidth: 70,
-                boxShadow: selected ? "0 10px 18px rgba(0,135,62,0.2)" : "none",
+                minWidth: 64,
+                boxShadow: selected ? "0 0 20px rgba(0,200,83,0.2)" : "none",
               }}
             >
-              <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{item.kurz}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, lineHeight: 1 }}>{item.kurz}</span>
             </button>
           );
         })}
@@ -40,14 +40,18 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
             marginTop: 12,
             padding: "10px 14px",
             background: C.warnDim,
-            border: "1px solid rgba(232,160,0,0.35)",
-            borderRadius: 7,
+            border: `1px solid rgba(251,191,36,0.15)`,
+            borderRadius: 10,
             fontSize: 12,
             color: C.warn,
-            fontFamily: "'Barlow', sans-serif",
+            fontFamily: "'Inter', sans-serif",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          ⚡ {jugend.label}: Turnierformat - ein Austragungsort, gestaffelte Anstoßzeiten ab 09:00 Uhr.
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          {jugend.label}: Turnierformat - gestaffelte Zeiten ab 09:00
         </div>
       ) : null}
     </div>

@@ -4,7 +4,7 @@ import { SectionHeader } from "./SectionHeader";
 export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
   return (
     <div style={card}>
-      <SectionHeader num="01">Region & Kreis-Auswahl</SectionHeader>
+      <SectionHeader num="01">Region & Kreis</SectionHeader>
       <div className="kreis-grid">
         {kreise.map((kreis) => {
           const selected = kreisId === kreis.id;
@@ -14,38 +14,37 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
               className="item-btn"
               onClick={() => onSelect(kreis.id)}
               style={{
-                padding: "12px 13px",
-                borderRadius: 7,
-                border: `1px solid ${selected ? C.green : "rgba(255,255,255,0.08)"}`,
-                background: selected ? "linear-gradient(135deg, rgba(112,221,136,0.2), rgba(0,135,62,0.12))" : "#2A2A2A",
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: `1px solid ${selected ? C.greenBorder : C.border}`,
+                background: selected ? C.greenDim : "rgba(255,255,255,0.03)",
                 color: selected ? C.offWhite : C.gray,
-                fontFamily: "'Barlow', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: isMobile ? 12 : 13,
-                fontWeight: selected ? 600 : 500,
+                fontWeight: selected ? 600 : 400,
                 cursor: "pointer",
                 textAlign: "left",
-                transition: "all 0.15s",
+                transition: "all 0.2s ease",
                 minHeight: 64,
-                boxShadow: selected ? "0 0 0 1px rgba(112,221,136,0.14)" : "none",
               }}
             >
               <span
                 style={{
                   display: "block",
                   fontSize: 9,
-                  color: selected ? "#70dd88" : C.grayDark,
-                  letterSpacing: "1.3px",
-                  marginBottom: 3,
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  fontWeight: 700,
+                  color: selected ? C.green : C.grayDark,
+                  letterSpacing: "1px",
+                  marginBottom: 4,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
                 }}
               >
-                {selected ? "AKTIVER KREIS" : "KREIS"}
+                {selected ? "AKTIV" : "KREIS"}
               </span>
-              <span style={{ display: "block", fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 19, lineHeight: 1.05 }}>
+              <span style={{ display: "block", fontWeight: 700, fontSize: 17, lineHeight: 1.1, color: selected ? C.white : C.offWhite }}>
                 {kreis.label}
               </span>
-              <span style={{ fontSize: 11, color: C.gray }}>{kreis.kurz}</span>
+              <span style={{ fontSize: 11, color: C.gray, marginTop: 2, display: "block" }}>{kreis.kurz}</span>
             </button>
           );
         })}

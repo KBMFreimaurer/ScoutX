@@ -22,7 +22,7 @@ export function DataSourceConfig({
       <SectionHeader num="06">Datenquelle</SectionHeader>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={lbl}>Datenquelle</label>
+        <label style={lbl}>Modus</label>
         <select
           className="scout-select"
           value={dataMode}
@@ -45,7 +45,7 @@ export function DataSourceConfig({
       {usesAdapter ? (
         <>
         <div style={{ marginBottom: 10 }}>
-          <label style={lbl}>Live-Adapter Endpoint</label>
+          <label style={lbl}>Adapter Endpoint</label>
           <input
             className="scout-input"
             value={adapterEndpoint}
@@ -56,7 +56,7 @@ export function DataSourceConfig({
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={lbl}>Adapter Token (optional)</label>
+            <label style={lbl}>Token (optional)</label>
             <input
               className="scout-input"
               type="password"
@@ -73,20 +73,26 @@ export function DataSourceConfig({
         <div
           style={{
             marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 7,
-            background: "rgba(0,31,16,0.85)",
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: C.greenDim,
             border: `1px solid ${C.greenBorder}`,
             color: C.green,
             fontSize: 12,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
           }}
         >
-          Datei geladen: <strong>{uploadName}</strong> · {importedCount} Spiele erkannt
-          {uploadSummary?.totalRows ? (
-            <div style={{ marginTop: 6, color: C.gray, fontSize: 11 }}>
-              Gesamtzeilen: {uploadSummary.totalRows} · Gültig: {uploadSummary.validRows} · Übersprungen: {uploadSummary.skippedRows}
-            </div>
-          ) : null}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}><polyline points="20 6 9 17 4 12"/></svg>
+          <div>
+            <strong>{uploadName}</strong> — {importedCount} Spiele
+            {uploadSummary?.totalRows ? (
+              <div style={{ marginTop: 4, color: C.gray, fontSize: 11 }}>
+                {uploadSummary.totalRows} Zeilen, {uploadSummary.validRows} gültig, {uploadSummary.skippedRows} übersprungen
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -94,16 +100,15 @@ export function DataSourceConfig({
         <div
           style={{
             marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 7,
+            padding: "12px 14px",
+            borderRadius: 10,
             background: C.warnDim,
-            border: `1px solid rgba(232,160,0,0.4)`,
+            border: `1px solid rgba(251,191,36,0.15)`,
             color: C.warn,
             fontSize: 12,
           }}
         >
-          Import-Hinweise:
-          <ul style={{ margin: "8px 0 0", paddingLeft: 16 }}>
+          <ul style={{ margin: 0, paddingLeft: 16 }}>
             {uploadSummary.warnings.map((warning, idx) => (
               <li key={`${warning}-${idx}`} style={{ marginBottom: 4 }}>
                 {warning}
@@ -117,31 +122,31 @@ export function DataSourceConfig({
         <div
           style={{
             marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 7,
+            padding: "12px 14px",
+            borderRadius: 10,
             background: C.errorDim,
-            border: `1px solid ${C.error}`,
-            color: "#ff8080",
+            border: `1px solid rgba(239,68,68,0.15)`,
+            color: "#fca5a5",
             fontSize: 12,
           }}
         >
-          Importfehler: {uploadError}
+          {uploadError}
         </div>
       ) : null}
 
       <div
         style={{
-          padding: "9px 12px",
-          background: "#202020",
-          borderRadius: 7,
-          border: "1px solid rgba(255,255,255,0.07)",
+          padding: "10px 14px",
+          background: "rgba(255,255,255,0.02)",
+          borderRadius: 10,
+          border: `1px solid ${C.border}`,
           fontSize: 12,
           color: C.grayDark,
-          fontFamily: "'Barlow', sans-serif",
+          fontFamily: "'Inter', sans-serif",
+          lineHeight: 1.5,
         }}
       >
-        Keine fussball.de-API: Auto nutzt nur CSV/JSON-Import oder Live-Adapter. Demo-Daten nur im expliziten Modus
-        &quot;Demo (Zufallsdaten)&quot;.
+        Auto nutzt CSV/JSON-Import oder Live-Adapter. Demo-Daten nur explizit.
       </div>
     </div>
   );

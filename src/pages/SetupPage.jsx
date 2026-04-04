@@ -65,8 +65,8 @@ export function SetupPage() {
   return (
     <div className="fu">
       <div className="setup-headline">
-        <h1>Setup Scouting-Plan</h1>
-        <p>Technische Initialisierung für den ScoutPlan Workflow.</p>
+        <h1>Scouting Setup</h1>
+        <p>Konfiguriere Region, Altersklasse und Teams für deinen Scout-Plan.</p>
       </div>
 
       <div className="setup-layout">
@@ -140,19 +140,25 @@ export function SetupPage() {
       <PrimaryButton
         onClick={onBuildAndGo}
         disabled={!canBuild || loadingGames}
-        style={{ width: "100%", fontSize: isMobile ? 14 : 16, marginTop: 14 }}
+        style={{ width: "100%", fontSize: isMobile ? 13 : 14, marginTop: 16 }}
       >
-        {loadingGames
-          ? "Spiele werden geladen..."
-          : !canBuild
-            ? !kreisId
-              ? "→ Kreis wählen"
-              : !jugendId
-                ? "→ Jugendklasse wählen"
-                : "Mind. 1 Team benötigt"
-            : `Spielplan generieren — ${selectedTeams.length || allTeams.length} Teams · ${jugend?.label} · ${
-                KREISE.find((kreis) => kreis.id === kreisId)?.label || ""
-              }`}
+        {loadingGames ? (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+            Spiele werden geladen...
+          </span>
+        ) : !canBuild ? (
+          !kreisId
+            ? "Kreis wählen"
+            : !jugendId
+              ? "Jugendklasse wählen"
+              : "Mind. 1 Team benötigt"
+        ) : (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            Spielplan generieren — {selectedTeams.length || allTeams.length} Teams
+          </span>
+        )}
       </PrimaryButton>
     </div>
   );
