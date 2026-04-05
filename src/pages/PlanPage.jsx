@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { GhostButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
@@ -19,6 +20,22 @@ export function PlanPage() {
     onResetSoft,
     onResetHard,
   } = useScoutX();
+  const PAGE_SIZE = 20;
+  const shouldPaginate = games.length > 100;
+  const totalPages = shouldPaginate ? Math.ceil(games.length / PAGE_SIZE) : 1;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [games.length]);
+
+  const visibleGames = useMemo(() => {
+    if (!shouldPaginate) {
+      return games;
+    }
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return games.slice(start, start + PAGE_SIZE);
+  }, [games, currentPage, shouldPaginate]);
 
   return (
     <div className="fu">
@@ -49,7 +66,14 @@ export function PlanPage() {
           </div>
         </div>
 
-        <PDFExport games={games} plan={plan} cfg={cfg} variant="primary" label="PDF herunterladen" />
+        <PDFExport
+          games={games}
+          plan={plan}
+          cfg={cfg}
+          variant="primary"
+          label="PDF herunterladen"
+          disabled={!String(plan || "").trim()}
+        />
       </div>
 
       <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} />
@@ -67,13 +91,13 @@ export function PlanPage() {
             letterSpacing: "0.5px",
             textTransform: "uppercase",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-            fontWeight: 600,
+          fontWeight: 600,
           }}
         >
           Alle {games.length} Spiele · {jugend?.label} · {kreis?.label}
         </div>
 
-        <GameTable games={games} mode="plan" />
+        <GameTable games={visibleGames} mode="plan" />
 
         <div
           className="game-cards"
@@ -85,9 +109,33 @@ export function PlanPage() {
             padding: "10px",
           }}
         >
-          <GameCards games={games} />
+          <GameCards games={visibleGames} />
         </div>
       </div>
+
+      {shouldPaginate ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: C.gray }}>
+            Seite {currentPage} von {totalPages} · {visibleGames.length} Spiele sichtbar
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <GhostButton
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage <= 1}
+              aria-label="Vorherige Seite"
+            >
+              Zurück
+            </GhostButton>
+            <GhostButton
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage >= totalPages}
+              aria-label="Nächste Seite"
+            >
+              Weiter
+            </GhostButton>
+          </div>
+        </div>
+      ) : null}
 
       <div className="reset-row">
         <GhostButton onClick={onResetSoft} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>

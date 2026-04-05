@@ -6,7 +6,11 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <ErrorBoundary>
+    <ErrorBoundary
+      onError={(error, info) => {
+        console.error("[ScoutX ErrorBoundary]", error, info);
+      }}
+    >
       <BrowserRouter>
         <App />
       </BrowserRouter>

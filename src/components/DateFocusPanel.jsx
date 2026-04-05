@@ -8,8 +8,9 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
 
       <div className="date-focus-row">
         <div>
-          <label style={lbl}>Scouting ab</label>
+          <label htmlFor="scouting-from-date" style={lbl}>Scouting ab</label>
           <input
+            id="scouting-from-date"
             className="scout-input"
             type="date"
             value={fromDate}
@@ -20,8 +21,9 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
         </div>
 
         <div>
-          <label style={lbl}>Scout-Fokus</label>
+          <label htmlFor="scout-focus-input" style={lbl}>Scout-Fokus</label>
           <input
+            id="scout-focus-input"
             className="scout-input"
             placeholder={jugendId ? `z.B. Torhüter ${jugend?.label}, Außenspieler...` : "z.B. Stürmer, Innenverteidiger..."}
             value={focus}

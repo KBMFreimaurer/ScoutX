@@ -2,8 +2,9 @@ const PAGE_WIDTH = 210;
 const MARGIN_X = 12;
 const CONTENT_TOP = 31;
 const CONTENT_BOTTOM = 280;
-const URL_REVOKE_DELAY_MS = 10 * 60 * 1000;
+const URL_REVOKE_DELAY_MS = 60 * 1000;
 const activeBlobUrls = new Set();
+let jsPdfCtorPromise = null;
 
 const COLORS = {
   text: [20, 24, 39],
@@ -18,6 +19,15 @@ const COLORS = {
 
 function toSafeString(value) {
   return String(value ?? "").trim();
+}
+
+function sanitizePdfText(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function sanitizeFileSegment(value, fallback = "ScoutX") {
@@ -328,7 +338,7 @@ function writeText(doc, state, text, opts = {}) {
   const style = opts.style || "normal";
   const color = opts.color || COLORS.text;
   const width = opts.width || PAGE_WIDTH - MARGIN_X * 2;
-  const lines = doc.splitTextToSize(toSafeString(text), width);
+  const lines = doc.splitTextToSize(sanitizePdfText(toSafeString(text)), width);
 
   doc.setFont("helvetica", style);
   doc.setFontSize(fontSize);
@@ -346,7 +356,7 @@ function drawSectionTitle(doc, state, title, sectionOnNewPage = title) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(title, MARGIN_X, state.y);
+  doc.text(sanitizePdfText(title), MARGIN_X, state.y);
   state.y += 4;
   doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
   doc.line(MARGIN_X, state.y, PAGE_WIDTH - MARGIN_X, state.y);
@@ -378,7 +388,7 @@ function drawBadgeRow(doc, x, y, badges) {
     doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
     doc.roundedRect(cursorX, cursorY - 3.4, width, 4.2, 1.2, 1.2, "FD");
     doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-    doc.text(label, cursorX + 2.2, cursorY - 0.5);
+    doc.text(sanitizePdfText(label), cursorX + 2.2, cursorY - 0.5);
     cursorX += width + 2;
   }
   return cursorY + 2.5;
@@ -417,12 +427,12 @@ function drawSummaryGrid(doc, state, games, topGames, routeStops) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-    doc.text(items[i].title, x + 3, y + 5);
+    doc.text(sanitizePdfText(items[i].title), x + 3, y + 5);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-    doc.text(items[i].value, x + 3, y + 11.3);
+    doc.text(sanitizePdfText(items[i].value), x + 3, y + 11.3);
   }
 
   state.y += totalHeight + 2;
@@ -470,19 +480,19 @@ function drawTopCards(doc, state, topGames, reasonMap) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-    doc.text(`${game.home} vs ${game.away}`, MARGIN_X + 10.5, state.y + 6.2);
+    doc.text(sanitizePdfText(`${game.home} vs ${game.away}`), MARGIN_X + 10.5, state.y + 6.2);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.4);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-    doc.text(metaLine, MARGIN_X + 10.5, state.y + 10.6);
+    doc.text(sanitizePdfText(metaLine), MARGIN_X + 10.5, state.y + 10.6);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.9);
     doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
     let reasonY = state.y + 14.7;
     for (const line of reasonLines.slice(0, 3)) {
-      doc.text(line, MARGIN_X + 10.5, reasonY);
+      doc.text(sanitizePdfText(line), MARGIN_X + 10.5, reasonY);
       reasonY += 4.2;
     }
 
@@ -522,17 +532,17 @@ function drawRouteTimeline(doc, state, stops) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-    doc.text(stop.time, textX, state.y + 4.8);
+    doc.text(sanitizePdfText(stop.time), textX, state.y + 4.8);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-    doc.text(truncateText(stop.label, 92), textX + 17, state.y + 4.8);
+    doc.text(sanitizePdfText(truncateText(stop.label, 92)), textX + 17, state.y + 4.8);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.7);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-    doc.text(`Ort: ${truncateText(stop.venue, 95)}`, textX, state.y + 9.3);
+    doc.text(sanitizePdfText(`Ort: ${truncateText(stop.venue, 95)}`), textX, state.y + 9.3);
     doc.text("Anwesenheit: ca. 45 Minuten", textX, state.y + 13.5);
 
     if (i < stops.length - 1) {
@@ -540,7 +550,7 @@ function drawRouteTimeline(doc, state, stops) {
       const nextMinutes = parseMinutes(stops[i + 1].time);
       if (Number.isFinite(currentMinutes) && Number.isFinite(nextMinutes)) {
         const travelWindow = Math.max(0, nextMinutes - (currentMinutes + 45));
-        doc.text(`Fahrtfenster bis nächster Stopp: ca. ${travelWindow} Minuten`, textX, state.y + 17.7);
+        doc.text(sanitizePdfText(`Fahrtfenster bis nächster Stopp: ca. ${travelWindow} Minuten`), textX, state.y + 17.7);
       }
     }
 
@@ -584,7 +594,7 @@ function drawScheduleTable(doc, state, games, reasonMap) {
     doc.setFontSize(8);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
     for (const column of headers) {
-      doc.text(column.label, cursorX, state.y + 4.8);
+      doc.text(sanitizePdfText(column.label), cursorX, state.y + 4.8);
       cursorX += column.width;
     }
 
@@ -642,7 +652,7 @@ function drawScheduleTable(doc, state, games, reasonMap) {
       let textY = state.y + 4.2;
       for (const line of lines) {
         doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-        doc.text(line, cursorX, textY);
+        doc.text(sanitizePdfText(line), cursorX, textY);
         textY += 3.9;
       }
       cursorX += headers[c].width;
@@ -688,13 +698,13 @@ function drawCover(doc, state, cfg, createdAt, games, topGames, routeStops, reas
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
   doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-  doc.text(title, MARGIN_X, state.y);
+  doc.text(sanitizePdfText(title), MARGIN_X, state.y);
   state.y += 7;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(subtitle, MARGIN_X, state.y);
+  doc.text(sanitizePdfText(subtitle), MARGIN_X, state.y);
   state.y += 5;
 
   doc.setFont("helvetica", "normal");
@@ -703,7 +713,7 @@ function drawCover(doc, state, cfg, createdAt, games, topGames, routeStops, reas
   const meta = `Erstellt: ${createdAt} · ab ${toSafeString(cfg?.fromDate) || "-"}${
     toSafeString(cfg?.focus) ? ` · Fokus: ${toSafeString(cfg.focus)}` : ""
   }`;
-  doc.text(meta, MARGIN_X, state.y);
+  doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
   state.y += 6;
 
   drawSummaryGrid(doc, state, games, topGames, routeStops);
@@ -730,14 +740,14 @@ function drawHeaderFooter(doc, state, cfg, createdAt) {
     doc.setFontSize(8);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
     const sectionTitle = sectionByPage[page - 1] || "Report";
-    doc.text(sectionTitle, PAGE_WIDTH - MARGIN_X, 13.5, { align: "right" });
+    doc.text(sanitizePdfText(sectionTitle), PAGE_WIDTH - MARGIN_X, 13.5, { align: "right" });
 
     doc.line(MARGIN_X, 286.5, PAGE_WIDTH - MARGIN_X, 286.5);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
     const footerLeft = `${toSafeString(cfg?.kreisLabel) || "-"} · ${toSafeString(cfg?.jugendLabel) || "-"} · Export ${createdAt}`;
-    doc.text(footerLeft, MARGIN_X, 291.3);
+    doc.text(sanitizePdfText(footerLeft), MARGIN_X, 291.3);
     doc.text(`Seite ${page}/${pageCount}`, PAGE_WIDTH - MARGIN_X, 291.3, { align: "right" });
   }
 }
@@ -767,6 +777,19 @@ function buildPdf(JsPdfCtor, games, plan, cfg) {
   return doc;
 }
 
+async function loadJsPdfCtor() {
+  if (!jsPdfCtorPromise) {
+    jsPdfCtorPromise = import("jspdf")
+      .then((module) => module.jsPDF)
+      .catch((error) => {
+        jsPdfCtorPromise = null;
+        throw error;
+      });
+  }
+
+  return jsPdfCtorPromise;
+}
+
 function trackBlobUrl(url) {
   activeBlobUrls.add(url);
   window.setTimeout(() => {
@@ -789,8 +812,8 @@ function triggerDownload(url, fileName) {
 
 export async function openScoutPdf(games, plan, cfg, popupWindow = null) {
   try {
-    const { jsPDF } = await import("jspdf");
-    const doc = buildPdf(jsPDF, games, plan, cfg);
+    const JsPdfCtor = await loadJsPdfCtor();
+    const doc = buildPdf(JsPdfCtor, games, plan, cfg);
     const blob = doc.output("blob");
     const blobUrl = URL.createObjectURL(blob);
     const fileName = buildFileName(cfg);

@@ -1,4 +1,4 @@
-import { STEPS } from "../data/constants";
+import { STEPS } from "../config/navigation";
 import { C } from "../styles/theme";
 
 const STEP_LABELS = {
@@ -33,7 +33,7 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
   };
 
   return (
-    <div style={{
+    <nav aria-label="Schritt-Navigation" style={{
       display: "flex",
       gap: 2,
       alignItems: "center",
@@ -48,8 +48,12 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
 
         return (
           <button
+            type="button"
             key={step}
             onClick={() => clickable && onStepChange(step)}
+            aria-current={active ? "page" : undefined}
+            aria-disabled={!unlocked}
+            aria-label={`Schritt ${STEP_LABELS[step]}`}
             style={{
               padding: isMobile ? "6px 10px" : "7px 14px",
               borderRadius: 8,
@@ -74,6 +78,6 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

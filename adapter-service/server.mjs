@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
@@ -9,7 +10,13 @@ const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
 const PORT = Number(process.env.ADAPTER_PORT || 8787);
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "*";
 const AUTH_TOKEN = process.env.ADAPTER_TOKEN || "";
-const MAX_BODY_BYTES = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
+const MAX_BODY_BYTES = (() => {
+  const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return 1024 * 1024;
+  }
+  return Math.min(configured, 1024 * 1024);
+})();
 
 const SAMPLE_FILE =
   process.env.ADAPTER_DATA_FILE || fileURLToPath(new URL("./data/games.sample.json", import.meta.url));
@@ -32,6 +39,7 @@ const DEFAULT_EXPORT_SCRIPT = fileURLToPath(new URL("./scripts/fetch-week.fussba
 const EXPORT_COMMAND =
   process.env.ADAPTER_EXPORT_COMMAND !== undefined ? process.env.ADAPTER_EXPORT_COMMAND : `node "${DEFAULT_EXPORT_SCRIPT}"`;
 const WEEK_COMMAND_TIMEOUT_MS = Number(process.env.ADAPTER_WEEK_COMMAND_TIMEOUT_MS || 30000);
+const WEEK_EXTERNAL_TIMEOUT_MS = 30000;
 
 const state = {
   games: [],
@@ -94,6 +102,25 @@ function setCorsHeaders(res, origin) {
   res.setHeader("Vary", "Origin");
 }
 
+function extractBearerToken(authorizationHeader) {
+  const header = String(authorizationHeader || "");
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1] : "";
+}
+
+function timingSafeTokenEquals(left, right) {
+  const leftBuf = Buffer.from(String(left || ""), "utf8");
+  const rightBuf = Buffer.from(String(right || ""), "utf8");
+
+  if (leftBuf.length !== rightBuf.length) {
+    const paddedRight = Buffer.alloc(leftBuf.length);
+    timingSafeEqual(leftBuf, paddedRight);
+    return false;
+  }
+
+  return timingSafeEqual(leftBuf, rightBuf);
+}
+
 function sendJson(res, statusCode, payload, origin) {
   setCorsHeaders(res, origin);
   const text = JSON.stringify(payload);
@@ -134,8 +161,19 @@ function isAuthorized(req) {
     return true;
   }
 
-  const authHeader = req.headers.authorization || "";
-  return authHeader === `Bearer ${AUTH_TOKEN}`;
+  const providedToken = extractBearerToken(req.headers.authorization || "");
+  return timingSafeTokenEquals(providedToken, AUTH_TOKEN);
+}
+
+async function writeStoreSafely(reason, payload) {
+  try {
+    await writeStore(STORE_FILE, payload);
+    return true;
+  } catch (error) {
+    console.error(`[adapter] ${reason} writeStore failed: ${error.message || error}`);
+    state.lastError = `Store-Write fehlgeschlagen (${reason}). Vorheriger Stand bleibt aktiv.`;
+    return false;
+  }
 }
 
 async function refreshData(reason = "manual") {
@@ -224,6 +262,7 @@ async function maybeAutoRefreshWeek(payload) {
   }
 
   const refreshPromise = (async () => {
+    const externalTimeoutMs = Math.min(WEEK_EXTERNAL_TIMEOUT_MS, Math.max(1000, WEEK_COMMAND_TIMEOUT_MS));
     const params = {
       fromDate: weekRange.fromDate,
       toDate: weekRange.toDate,
@@ -239,7 +278,7 @@ async function maybeAutoRefreshWeek(payload) {
       try {
         const cmd = await runExportCommand({
           command: EXPORT_COMMAND,
-          timeoutMs: WEEK_COMMAND_TIMEOUT_MS,
+          timeoutMs: externalTimeoutMs,
           params,
           importDir: IMPORT_DIR,
         });
@@ -264,6 +303,7 @@ async function maybeAutoRefreshWeek(payload) {
           template: WEEK_SOURCE_TEMPLATE,
           token: WEEK_SOURCE_TOKEN,
           params,
+          timeoutMs: externalTimeoutMs,
         });
 
         if (remote.warnings?.length) {
@@ -312,7 +352,19 @@ async function maybeAutoRefreshWeek(payload) {
       weekRefresh: weekMeta,
     };
 
-    await writeStore(STORE_FILE, { games: merged, meta: nextMeta });
+    const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta });
+    if (!persisted) {
+      return {
+        ran: false,
+        reason: "store_write_failed",
+        weekRange,
+        cacheKey,
+        added: 0,
+        replaced: 0,
+        collected: collected.length,
+        warnings: [...warnings, "Store konnte nicht geschrieben werden."],
+      };
+    }
 
     state.games = merged;
     state.meta = nextMeta;
@@ -484,7 +536,11 @@ const server = createServer(async (req, res) => {
         warnings: state.meta?.warnings || [],
       };
 
-      await writeStore(STORE_FILE, { games: merged, meta });
+      const persisted = await writeStoreSafely("admin-import", { games: merged, meta });
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Store konnte nicht geschrieben werden." }, origin);
+        return;
+      }
       state.games = merged;
       state.meta = meta;
       state.lastRefreshReason = replace ? "admin-import-replace" : "admin-import-merge";

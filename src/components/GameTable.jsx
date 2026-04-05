@@ -1,8 +1,27 @@
 import { C } from "../styles/theme";
 
-export function GameTable({ games, mode = "games" }) {
-  const formatKickoff = (time) => (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen");
+function formatKickoff(time) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen";
+}
 
+function sortByPriority(left, right) {
+  const priorityDelta = Number(right?.priority || 0) - Number(left?.priority || 0);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const leftDate = left?.dateObj instanceof Date ? left.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+  const rightDate = right?.dateObj instanceof Date ? right.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+  if (leftDate !== rightDate) {
+    return leftDate - rightDate;
+  }
+
+  const leftTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(left?.time || "")) ? String(left.time) : "99:99";
+  const rightTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(right?.time || "")) ? String(right.time) : "99:99";
+  return leftTime.localeCompare(rightTime);
+}
+
+export function GameTable({ games, mode = "games" }) {
   if (mode === "plan") {
     return (
       <div
@@ -45,6 +64,8 @@ export function GameTable({ games, mode = "games" }) {
     );
   }
 
+  const sortedGames = [...games].sort(sortByPriority);
+
   return (
     <div
       className="game-table"
@@ -56,57 +77,44 @@ export function GameTable({ games, mode = "games" }) {
         marginBottom: 16,
       }}
     >
-      <div
+      <table
         style={{
-          display: "grid",
-          gridTemplateColumns: "2.3fr 1.2fr 0.7fr 1.5fr",
-          padding: "10px 16px",
-          borderBottom: `1px solid ${C.border}`,
-          background: "rgba(255,255,255,0.02)",
+          width: "100%",
+          borderCollapse: "collapse",
+          tableLayout: "fixed",
         }}
       >
-        {["Begegnung", "Datum", "Anstoß", "Spielort"].map((header) => (
-          <span
-            key={header}
-            style={{
-              fontSize: 10,
-              color: C.grayDark,
-              letterSpacing: "0.8px",
-              textTransform: "uppercase",
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 600,
-            }}
-          >
-            {header}
-          </span>
-        ))}
-      </div>
+        <thead>
+          <tr style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
+            <th scope="col" style={{ width: "38%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
+            <th scope="col" style={{ width: "20%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
+            <th scope="col" style={{ width: "14%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
+            <th scope="col" style={{ width: "28%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
+          </tr>
+        </thead>
 
-      {games.map((game, index) => (
-        <div
-          key={game.id}
-          className="row-item"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2.3fr 1.2fr 0.7fr 1.5fr",
-          padding: "11px 16px",
-          fontSize: 13,
-          borderBottom: index < games.length - 1 ? `1px solid ${C.border}` : "none",
-            transition: "background 0.15s ease",
-            background: "transparent",
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-          }}
-        >
-          <span>
-            <strong style={{ color: C.white }}>{game.home}</strong>
-            <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
-            <span style={{ color: C.offWhite }}>{game.away}</span>
-          </span>
-          <span style={{ color: C.gray }}>{game.dateLabel}</span>
-          <span style={{ color: C.gray }}>{formatKickoff(game.time)}</span>
-          <span style={{ color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</span>
-        </div>
-      ))}
+        <tbody>
+          {sortedGames.map((game, index) => (
+            <tr
+              key={game.id}
+              className="row-item"
+              style={{
+                borderBottom: index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
+            >
+              <td style={{ padding: "11px 16px", fontSize: 13 }}>
+                <strong style={{ color: C.white }}>{game.home}</strong>
+                <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
+                <span style={{ color: C.offWhite }}>{game.away}</span>
+              </td>
+              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{game.dateLabel}</td>
+              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatKickoff(game.time)}</td>
+              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

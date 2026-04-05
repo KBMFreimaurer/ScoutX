@@ -13,6 +13,8 @@ const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Ob
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
 const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 15000);
+const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
+const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 const GENERIC_TEAM_TOKENS = new Set([
   "sv",
   "sc",
@@ -173,7 +175,17 @@ export function formatDate(dateValue) {
 }
 
 export function calcPriority(teamName) {
-  return PROFI_KEYWORDS.some((keyword) => teamName.includes(keyword)) ? 5 : 3 + Math.floor(Math.random() * 2);
+  const name = String(teamName || "");
+  if (PROFI_KEYWORDS.some((keyword) => name.includes(keyword))) {
+    return 5;
+  }
+
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+
+  return 3 + (hash % 2);
 }
 
 function normalizeDate(rawDate, fallbackIso) {
@@ -238,11 +250,40 @@ function compareGamesByDateTime(left, right) {
 
 function parseKm(value) {
   if (value === undefined || value === null || value === "") {
-    return 3 + Math.floor(Math.random() * 28);
+    return null;
   }
 
   const parsed = Number(String(value).replace(/,/g, ".").replace(/[^\d.]/g, ""));
-  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 3 + Math.floor(Math.random() * 28);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableProviderError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return /timeout|network|failed|nicht erreichbar|http 5\d\d|econn|etimedout|fetch/.test(message);
+}
+
+async function runProviderWithRetry(providerName, providerFn, context) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= PROVIDER_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await providerFn(context);
+    } catch (error) {
+      lastError = error;
+      const canRetry = attempt < PROVIDER_RETRY_DELAYS_MS.length && isRetryableProviderError(error);
+      if (!canRetry) {
+        break;
+      }
+
+      await sleep(SKIP_RETRY_WAIT ? 0 : PROVIDER_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  throw lastError ?? new Error(`Provider fehlgeschlagen: ${providerName}`);
 }
 
 function toBoolean(value) {
@@ -710,7 +751,7 @@ export async function fetchGamesWithProviders({
 
   for (const providerName of providerOrder) {
     try {
-      const providerResult = await providerMap[providerName](context);
+      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context);
       const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
       const meta = Array.isArray(providerResult) ? {} : providerResult?.meta || {};
       if (games?.length) {

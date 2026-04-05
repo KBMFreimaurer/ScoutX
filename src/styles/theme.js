@@ -1,4 +1,4 @@
-import { C } from "../data/constants";
+import { C } from "../config/colors";
 
 export { C };
 
@@ -13,6 +13,11 @@ body{
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
   -webkit-tap-highlight-color:transparent;
+}
+
+:focus-visible{
+  outline:2px solid rgba(0,200,83,0.85);
+  outline-offset:2px;
 }
 
 /* Scrollbar */

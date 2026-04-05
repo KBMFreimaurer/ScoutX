@@ -3,6 +3,15 @@ import { promisify } from "node:util";
 
 const exec = promisify(execCallback);
 
+function createAbortController(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs || 30000)));
+  return {
+    controller,
+    clear: () => clearTimeout(timer),
+  };
+}
+
 function parseGamesPayload(payload) {
   if (Array.isArray(payload)) {
     return payload;
@@ -25,7 +34,7 @@ function buildWeekTemplateUrl(template, params) {
   );
 }
 
-async function fetchWeekTemplateGames({ template, token, params }) {
+async function fetchWeekTemplateGames({ template, token, params, timeoutMs = 30000 }) {
   if (!template) {
     return { games: [], source: "week-template", warnings: [] };
   }
@@ -36,17 +45,28 @@ async function fetchWeekTemplateGames({ template, token, params }) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    throw new Error(`Week source HTTP ${response.status}`);
-  }
+  const { controller, clear } = createAbortController(timeoutMs);
 
-  const parsed = await response.json();
-  return {
-    games: parseGamesPayload(parsed),
-    source: url,
-    warnings: [],
-  };
+  try {
+    const response = await fetch(url, { headers, signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Week source HTTP ${response.status}`);
+    }
+
+    const parsed = await response.json();
+    return {
+      games: parseGamesPayload(parsed),
+      source: url,
+      warnings: [],
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Week source Timeout nach ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clear();
+  }
 }
 
 async function runExportCommand({ command, timeoutMs, params, importDir }) {

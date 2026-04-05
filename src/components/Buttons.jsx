@@ -1,11 +1,13 @@
 import { C } from "../styles/theme";
 
-export function GhostButton({ onClick, children, style, disabled }) {
+export function GhostButton({ onClick, children, style, disabled, ...props }) {
   return (
     <button
+      type="button"
       className="ghost-btn"
       onClick={onClick}
       disabled={disabled}
+      {...props}
       style={{
         padding: "9px 16px",
         background: "rgba(255,255,255,0.04)",
@@ -30,12 +32,14 @@ export function GhostButton({ onClick, children, style, disabled }) {
   );
 }
 
-export function PrimaryButton({ onClick, disabled, children, style }) {
+export function PrimaryButton({ onClick, disabled, children, style, ...props }) {
   return (
     <button
+      type="button"
       className="pri-btn"
       onClick={onClick}
       disabled={disabled}
+      {...props}
       style={{
         padding: "14px 24px",
         borderRadius: 12,

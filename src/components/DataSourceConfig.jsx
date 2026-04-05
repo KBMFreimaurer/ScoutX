@@ -1,5 +1,5 @@
 import { C, card, inp, lbl } from "../styles/theme";
-import { DATA_SOURCE_OPTIONS } from "../data/constants";
+import { DATA_SOURCE_OPTIONS } from "../config/dataSource";
 import { SectionHeader } from "./SectionHeader";
 
 export function DataSourceConfig({
@@ -22,8 +22,9 @@ export function DataSourceConfig({
       <SectionHeader num="06">Datenquelle</SectionHeader>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={lbl}>Modus</label>
+        <label htmlFor="data-mode-select" style={lbl}>Modus</label>
         <select
+          id="data-mode-select"
           className="scout-select"
           value={dataMode}
           onChange={(event) => onDataModeChange(event.target.value)}
@@ -38,15 +39,22 @@ export function DataSourceConfig({
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label style={lbl}>CSV/JSON Import</label>
-        <input type="file" accept=".csv,.json,application/json,text/csv" onChange={onFileImport} style={inp} />
+        <label htmlFor="games-file-upload" style={lbl}>CSV/JSON Import</label>
+        <input
+          id="games-file-upload"
+          type="file"
+          accept=".csv,.json,application/json,text/csv"
+          onChange={onFileImport}
+          style={inp}
+        />
       </div>
 
       {usesAdapter ? (
         <>
         <div style={{ marginBottom: 10 }}>
-          <label style={lbl}>Adapter Endpoint</label>
+          <label htmlFor="adapter-endpoint-input" style={lbl}>Adapter Endpoint</label>
           <input
+            id="adapter-endpoint-input"
             className="scout-input"
             value={adapterEndpoint}
             onChange={(event) => onAdapterEndpointChange(event.target.value)}
@@ -56,8 +64,9 @@ export function DataSourceConfig({
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={lbl}>Token (optional)</label>
+            <label htmlFor="adapter-token-input" style={lbl}>Token (optional)</label>
             <input
+              id="adapter-token-input"
               className="scout-input"
               type="password"
               value={adapterToken}

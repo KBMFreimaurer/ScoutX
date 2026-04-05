@@ -45,7 +45,9 @@ export function TeamPicker({
 
           {selectedTeams.length > 0 ? (
             <button
+              type="button"
               onClick={onClearAll}
+              aria-label="Alle Vereins-Parameter löschen"
               style={{
                 fontSize: 12,
                 color: C.gray,
@@ -63,9 +65,10 @@ export function TeamPicker({
         </div>
       </div>
 
-      <label style={lbl}>Verein hinzufügen</label>
+      <label htmlFor="team-draft-input" style={lbl}>Verein hinzufügen</label>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <input
+          id="team-draft-input"
           className="scout-input"
           placeholder="z. B. TSV Heimaterde"
           value={teamDraft}
@@ -80,7 +83,9 @@ export function TeamPicker({
         />
 
         <button
+          type="button"
           onClick={() => onAddTeam(teamDraft)}
+          aria-label="Vereinsfeld hinzufügen"
           style={{
             padding: "0 14px",
             borderRadius: 10,
@@ -120,11 +125,13 @@ export function TeamPicker({
                 }}
               >
                 <input
+                  id={`team-param-${index}`}
                   className="scout-input"
                   value={team}
                   onChange={(event) => onUpdateTeam(index, event.target.value)}
                   onBlur={onNormalizeTeams}
                   placeholder={`Verein ${index + 1}`}
+                  aria-label={`Verein ${index + 1}`}
                   style={{ ...inp, marginBottom: 0, minHeight: 38 }}
                 />
 
@@ -150,7 +157,9 @@ export function TeamPicker({
                 ) : null}
 
                 <button
+                  type="button"
                   onClick={() => onRemoveTeam(index)}
+                  aria-label={`Verein ${index + 1} entfernen`}
                   style={{
                     minHeight: 38,
                     minWidth: 38,

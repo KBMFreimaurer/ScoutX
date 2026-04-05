@@ -10,9 +10,12 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
           const selected = kreisId === kreis.id;
           return (
             <button
+              type="button"
               key={kreis.id}
               className="item-btn"
               onClick={() => onSelect(kreis.id)}
+              aria-pressed={selected}
+              aria-label={`Kreis ${kreis.label} auswählen`}
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,

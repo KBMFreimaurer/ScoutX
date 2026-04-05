@@ -11,9 +11,12 @@ export function AgeGroupSelector({ jugendKlassen, jugendId, onSelect, jugend }) 
           const selected = jugendId === item.id;
           return (
             <button
+              type="button"
               key={item.id}
               className="item-btn"
               onClick={() => onSelect(item.id)}
+              aria-pressed={selected}
+              aria-label={`${item.label} auswählen`}
               style={{
                 padding: "8px 14px",
                 borderRadius: 10,

@@ -336,4 +336,61 @@ describe("data provider", () => {
       }),
     ).rejects.toThrow("Import enthält keine passenden Spiele");
   });
+
+  it("handles empty csv input gracefully", () => {
+    const report = parseUploadedGamesReport("date,time,home,away", "games.csv", {
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-04-01",
+      turnier: false,
+    });
+
+    expect(report.games).toHaveLength(0);
+    expect(report.stats.totalRows).toBe(0);
+    expect(report.stats.validRows).toBe(0);
+  });
+
+  it("parses null-like values without random fallbacks", () => {
+    const games = parseUploadedGames(
+      JSON.stringify([
+        {
+          date: null,
+          time: null,
+          home: "Team Null A",
+          away: "Team Null B",
+          venue: "Sportanlage",
+          km: null,
+        },
+      ]),
+      "games.json",
+      {
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        turnier: false,
+      },
+    );
+
+    expect(games).toHaveLength(1);
+    expect(games[0].km).toBeNull();
+    expect(games[0].time).toBe("10:00");
+  });
+
+  it("flags duplicate csv rows for repeated imports", () => {
+    const report = parseUploadedGamesReport(
+      `date,time,home,away,venue,km,kreisId,jugendId\n2026-05-01,11:00,Team A,Team B,Platz 1,8,duesseldorf,e-jugend\n2026-05-01,11:00,Team A,Team B,Platz 1,8,duesseldorf,e-jugend`,
+      "games.csv",
+      {
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        turnier: false,
+      },
+    );
+
+    expect(report.games).toHaveLength(2);
+    expect(report.stats.warnings.some((warning) => warning.toLowerCase().includes("doppeltes spiel erkannt"))).toBe(
+      true,
+    );
+  });
 });

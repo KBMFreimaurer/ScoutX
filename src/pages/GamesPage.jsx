@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
@@ -21,6 +22,7 @@ export function GamesPage() {
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
+  const PAGE_SIZE = 20;
 
   const dataSourceLabel = DATA_SOURCE_LABELS[dataSourceUsed] || DATA_SOURCE_LABELS.mock;
   const requestedTeamCount = Number(teamValidation?.requestedCount || 0);
@@ -30,6 +32,22 @@ export function GamesPage() {
       ? teamValidation.matchedCount
       : games.filter((game) => game.selectedTeamMatch).length;
   const showTeamHint = requestedTeamCount > 0;
+  const shouldPaginate = games.length > 100;
+  const totalPages = shouldPaginate ? Math.ceil(games.length / PAGE_SIZE) : 1;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [games.length]);
+
+  const visibleGames = useMemo(() => {
+    if (!shouldPaginate) {
+      return games;
+    }
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return games.slice(start, start + PAGE_SIZE);
+  }, [games, currentPage, shouldPaginate]);
 
   return (
     <div className="fu">
@@ -83,8 +101,32 @@ export function GamesPage() {
 
       <TopFive games={prioritized} />
 
-      <GameTable games={games} />
-      <GameCards games={games} />
+      <GameTable games={visibleGames} />
+      <GameCards games={visibleGames} />
+
+      {shouldPaginate ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: C.gray }}>
+            Seite {currentPage} von {totalPages} · {visibleGames.length} Spiele sichtbar
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <GhostButton
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage <= 1}
+              aria-label="Vorherige Seite"
+            >
+              Zurück
+            </GhostButton>
+            <GhostButton
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage >= totalPages}
+              aria-label="Nächste Seite"
+            >
+              Weiter
+            </GhostButton>
+          </div>
+        </div>
+      ) : null}
 
       <PrimaryButton onClick={onGeneratePlanPdf} disabled={loadingAI} style={{ width: "100%" }}>
         {loadingAI ? (

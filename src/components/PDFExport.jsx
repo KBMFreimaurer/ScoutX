@@ -1,12 +1,27 @@
 import { C } from "../styles/theme";
 import { openScoutPdf } from "../services/pdf";
 
-export function PDFExport({ games, plan = "", cfg, label = "PDF herunterladen", variant = "ghost", style = {} }) {
+export function PDFExport({
+  games,
+  plan = "",
+  cfg,
+  label = "PDF herunterladen",
+  variant = "ghost",
+  style = {},
+  disabled = false,
+}) {
   const isPrimary = variant === "primary";
 
   return (
     <button
-      onClick={() => openScoutPdf(games, plan, cfg)}
+      type="button"
+      aria-label={label}
+      onClick={() => {
+        if (!disabled) {
+          openScoutPdf(games, plan, cfg);
+        }
+      }}
+      disabled={disabled}
       style={
         isPrimary
           ? {
@@ -14,16 +29,17 @@ export function PDFExport({ games, plan = "", cfg, label = "PDF herunterladen", 
               padding: "9px 16px",
               borderRadius: 10,
               border: "none",
-              background: C.green,
-              color: C.bg,
+              background: disabled ? "rgba(255,255,255,0.06)" : C.green,
+              color: disabled ? C.grayDark : C.bg,
               fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: disabled ? "not-allowed" : "pointer",
               minHeight: 44,
               display: "flex",
               alignItems: "center",
               gap: 6,
               transition: "all 0.2s ease",
+              opacity: disabled ? 0.6 : 1,
               ...style,
             }
           : {
@@ -34,13 +50,14 @@ export function PDFExport({ games, plan = "", cfg, label = "PDF herunterladen", 
               color: C.gray,
               fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontSize: 12,
-              cursor: "pointer",
+              cursor: disabled ? "not-allowed" : "pointer",
               minHeight: 44,
               fontWeight: 500,
               display: "flex",
               alignItems: "center",
               gap: 6,
               transition: "all 0.2s ease",
+              opacity: disabled ? 0.6 : 1,
               ...style,
             }
       }
