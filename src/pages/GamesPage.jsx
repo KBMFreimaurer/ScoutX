@@ -42,7 +42,7 @@ export function GamesPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 800,
               fontSize: 22,
               color: C.white,
@@ -69,12 +69,12 @@ export function GamesPage() {
             ) : null}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
+          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
             {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter · {dataSourceLabel}
           </div>
 
           {showTeamHint ? (
-            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "'Inter',sans-serif" }}>
+            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
               Team-Hinweise: {matchedGameCount} passende Spiele · {matchedTeamCount}/{requestedTeamCount} Vereine erkannt
             </div>
           ) : null}

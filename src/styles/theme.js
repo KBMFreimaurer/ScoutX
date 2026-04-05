@@ -3,15 +3,13 @@ import { C } from "../data/constants";
 export { C };
 
 export const GCSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
 *,*::before,*::after{box-sizing:border-box}
 
 body{
   margin:0;
   background: ${C.bg};
   color:${C.offWhite};
-  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
   -webkit-tap-highlight-color:transparent;
@@ -75,7 +73,7 @@ select option{background:#18181B;color:#e4e4e7}
   overflow-y:auto;
 }
 .left-rail-brand{
-  font-family:'Inter',sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   font-weight:900;
   font-size:22px;
   letter-spacing:-0.5px;
@@ -102,7 +100,7 @@ select option{background:#18181B;color:#e4e4e7}
   color:${C.gray};
   padding:10px 12px;
   text-align:left;
-  font-family:'Inter',sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   font-size:13px;
   font-weight:500;
   cursor:pointer;
@@ -127,7 +125,7 @@ select option{background:#18181B;color:#e4e4e7}
   border-radius:10px;
   min-height:44px;
   cursor:pointer;
-  font-family:'Inter',sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   font-weight:600;
   font-size:13px;
   letter-spacing:0;
@@ -160,7 +158,7 @@ select option{background:#18181B;color:#e4e4e7}
   z-index:25;
 }
 .top-strip-title{
-  font-family:'Inter',sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   font-size:18px;
   line-height:1;
   font-weight:800;
@@ -193,7 +191,7 @@ select option{background:#18181B;color:#e4e4e7}
 .setup-headline{margin-bottom:24px}
 .setup-headline h1{
   margin:0 0 6px;
-  font-family:'Inter',sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   font-size:32px;
   line-height:1.1;
   font-weight:800;
@@ -210,7 +208,7 @@ select option{background:#18181B;color:#e4e4e7}
 /* Setup layout */
 .setup-layout{
   display:grid;
-  grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);
+  grid-template-columns:minmax(0,1fr);
   gap:16px;
 }
 .setup-left-grid{
@@ -299,7 +297,7 @@ button,input,select{min-height:44px}
   letter-spacing:0.5px;
   margin-right:10px;
   flex-shrink:0;
-  font-family:'JetBrains Mono',monospace;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
 }
 
 /* Skeleton */
@@ -360,7 +358,7 @@ export const inp = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 10,
   color: C.offWhite,
-  fontFamily: "'Inter',sans-serif",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontSize: 13,
   outline: "none",
   minHeight: 44,
@@ -374,7 +372,7 @@ export const lbl = {
   letterSpacing: "0.3px",
   textTransform: "uppercase",
   marginBottom: 6,
-  fontFamily: "'Inter',sans-serif",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 600,
 };
 
@@ -384,7 +382,7 @@ export const secH = {
   letterSpacing: "0.2px",
   textTransform: "uppercase",
   marginBottom: 16,
-  fontFamily: "'Inter',sans-serif",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 700,
   display: "flex",
   alignItems: "center",

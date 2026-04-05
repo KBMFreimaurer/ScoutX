@@ -12,7 +12,7 @@ export function GhostButton({ onClick, children, style, disabled }) {
         border: `1px solid ${C.border}`,
         borderRadius: 10,
         color: C.offWhite,
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         fontSize: 13,
         cursor: disabled ? "not-allowed" : "pointer",
         minHeight: 44,
@@ -44,7 +44,7 @@ export function PrimaryButton({ onClick, disabled, children, style }) {
           ? "rgba(255,255,255,0.06)"
           : C.green,
         color: disabled ? C.grayDark : C.bg,
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         fontSize: 14,
         fontWeight: 600,
         cursor: disabled ? "not-allowed" : "pointer",

@@ -45,13 +45,13 @@ export function TopFive({ games }) {
               fontSize: 11,
               fontWeight: 700,
               flexShrink: 0,
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
             {index + 1}
           </span>
 
-          <span style={{ flex: 1, fontSize: 13, color: C.white, minWidth: 0, fontFamily: "'Inter',sans-serif" }}>
+          <span style={{ flex: 1, fontSize: 13, color: C.white, minWidth: 0, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
             <strong>{game.home}</strong>
             <span style={{ color: C.gray, fontWeight: 400 }}> vs </span>
             {game.away}
@@ -59,7 +59,6 @@ export function TopFive({ games }) {
 
           <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
           <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.time}</span>
-          <span style={{ fontSize: 12, color: C.green, fontWeight: 600, whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" }}>{game.km} km</span>
         </div>
       ))}
     </div>

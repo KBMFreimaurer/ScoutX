@@ -26,10 +26,10 @@ export function GameTable({ games, mode = "games" }) {
               fontSize: 13,
               transition: "background 0.15s ease",
               background: "transparent",
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
-            <span style={{ width: 20, textAlign: "center", color: C.grayDark, fontSize: 11, flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{index + 1}</span>
+            <span style={{ width: 20, textAlign: "center", color: C.grayDark, fontSize: 11, flexShrink: 0, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>{index + 1}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <strong style={{ color: C.white }}>{game.home}</strong>
               <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
@@ -37,18 +37,6 @@ export function GameTable({ games, mode = "games" }) {
             </span>
             <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
             <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{game.time}</span>
-            <span
-              style={{
-                fontSize: 11,
-                color: game.km < 15 ? C.green : C.gray,
-                whiteSpace: "nowrap",
-                marginLeft: 8,
-                fontWeight: game.km < 15 ? 600 : 400,
-                fontFamily: "'JetBrains Mono',monospace",
-              }}
-            >
-              {game.km} km
-            </span>
           </div>
         ))}
       </div>
@@ -69,13 +57,13 @@ export function GameTable({ games, mode = "games" }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "2.2fr 1.2fr 0.7fr 1.4fr 0.5fr",
+          gridTemplateColumns: "2.3fr 1.2fr 0.7fr 1.5fr",
           padding: "10px 16px",
           borderBottom: `1px solid ${C.border}`,
           background: "rgba(255,255,255,0.02)",
         }}
       >
-        {["Begegnung", "Datum", "Anstoß", "Spielort", "km"].map((header) => (
+        {["Begegnung", "Datum", "Anstoß", "Spielort"].map((header) => (
           <span
             key={header}
             style={{
@@ -83,7 +71,7 @@ export function GameTable({ games, mode = "games" }) {
               color: C.grayDark,
               letterSpacing: "0.8px",
               textTransform: "uppercase",
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 600,
             }}
           >
@@ -96,15 +84,15 @@ export function GameTable({ games, mode = "games" }) {
         <div
           key={game.id}
           className="row-item"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "2.2fr 1.2fr 0.7fr 1.4fr 0.5fr",
-            padding: "11px 16px",
-            fontSize: 13,
-            borderBottom: index < games.length - 1 ? `1px solid ${C.border}` : "none",
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2.3fr 1.2fr 0.7fr 1.5fr",
+          padding: "11px 16px",
+          fontSize: 13,
+          borderBottom: index < games.length - 1 ? `1px solid ${C.border}` : "none",
             transition: "background 0.15s ease",
             background: "transparent",
-            fontFamily: "'Inter',sans-serif",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
           }}
         >
           <span>
@@ -115,7 +103,6 @@ export function GameTable({ games, mode = "games" }) {
           <span style={{ color: C.gray }}>{game.dateLabel}</span>
           <span style={{ color: C.gray }}>{game.time}</span>
           <span style={{ color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</span>
-          <span style={{ color: game.km < 15 ? C.green : C.gray, fontWeight: game.km < 15 ? 600 : 400, fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}>{game.km}</span>
         </div>
       ))}
     </div>

@@ -1,12 +1,10 @@
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { LLM_PRESETS } from "../data/constants";
 import { useScoutX } from "../context/ScoutXContext";
 import { AgeGroupSelector } from "../components/AgeGroupSelector";
 import { DateFocusPanel } from "../components/DateFocusPanel";
 import { DataSourceConfig } from "../components/DataSourceConfig";
 import { KreisSelector } from "../components/KreisSelector";
-import { LLMConfig } from "../components/LLMConfig";
 import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
 
@@ -21,12 +19,6 @@ export function SetupPage() {
     teamValidation,
     fromDate,
     focus,
-    llmType,
-    llmModel,
-    llmEndpoint,
-    llmKey,
-    llmIsOllama,
-    connStatus,
     canBuild,
     loadingGames,
     dataMode,
@@ -36,7 +28,6 @@ export function SetupPage() {
     uploadedGames,
     uploadError,
     uploadSummary,
-    rememberApiKey,
     onSelectKreis,
     onSelectJugend,
     onAddTeamField,
@@ -47,13 +38,6 @@ export function SetupPage() {
     onClearAllTeams,
     onSetFromDate,
     onSetFocus,
-    onApplyPreset,
-    onSetLlmModel,
-    onSetLlmEndpoint,
-    onSetLlmKey,
-    onSetRememberApiKey,
-    onToggleLlmProtocol,
-    onTestConnection,
     onBuildAndGo,
     onDataModeChange,
     onFileImport,
@@ -69,69 +53,49 @@ export function SetupPage() {
       </div>
 
       <div className="setup-layout">
-        <div className="right-stack">
-          <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
+        <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
 
-          <div className="setup-left-grid">
-            <AgeGroupSelector jugendKlassen={JUGEND_KLASSEN} jugendId={jugendId} onSelect={onSelectJugend} jugend={jugend} />
+        <div className="setup-left-grid">
+          <AgeGroupSelector jugendKlassen={JUGEND_KLASSEN} jugendId={jugendId} onSelect={onSelectJugend} jugend={jugend} />
 
-            <DateFocusPanel
-              fromDate={fromDate}
-              onFromDate={onSetFromDate}
-              focus={focus}
-              onFocus={onSetFocus}
-              jugend={jugend}
-              jugendId={jugendId}
+          <DateFocusPanel
+            fromDate={fromDate}
+            onFromDate={onSetFromDate}
+            focus={focus}
+            onFocus={onSetFocus}
+            jugend={jugend}
+            jugendId={jugendId}
+          />
+
+          <div className="setup-span-two">
+            <TeamPicker
+              selectedTeams={selectedTeams}
+              teamDraft={teamDraft}
+              teamValidation={teamValidation}
+              onTeamDraft={onSetTeamDraft}
+              onAddTeam={onAddTeamField}
+              onUpdateTeam={onUpdateTeamField}
+              onNormalizeTeams={onNormalizeTeamField}
+              onRemoveTeam={onRemoveTeamField}
+              onClearAll={onClearAllTeams}
             />
-
-            <div className="setup-span-two">
-              <TeamPicker
-                selectedTeams={selectedTeams}
-                teamDraft={teamDraft}
-                teamValidation={teamValidation}
-                onTeamDraft={onSetTeamDraft}
-                onAddTeam={onAddTeamField}
-                onUpdateTeam={onUpdateTeamField}
-                onNormalizeTeams={onNormalizeTeamField}
-                onRemoveTeam={onRemoveTeamField}
-                onClearAll={onClearAllTeams}
-              />
-            </div>
           </div>
-        </div>
 
-        <div className="right-stack">
-          <LLMConfig
-            llmType={llmType}
-            llmModel={llmModel}
-            llmEndpoint={llmEndpoint}
-            llmKey={llmKey}
-            rememberApiKey={rememberApiKey}
-            llmIsOllama={llmIsOllama}
-            connStatus={connStatus}
-            presets={LLM_PRESETS}
-            onApplyPreset={onApplyPreset}
-            onSetLlmModel={onSetLlmModel}
-            onSetLlmEndpoint={onSetLlmEndpoint}
-            onSetLlmKey={onSetLlmKey}
-            onSetRememberApiKey={onSetRememberApiKey}
-            onToggleProtocol={onToggleLlmProtocol}
-            onTestConnection={onTestConnection}
-          />
-
-          <DataSourceConfig
-            dataMode={dataMode}
-            onDataModeChange={onDataModeChange}
-            onFileImport={onFileImport}
-            uploadName={uploadName}
-            importedCount={uploadedGames.length}
-            uploadError={uploadError}
-            uploadSummary={uploadSummary}
-            adapterEndpoint={adapterEndpoint}
-            adapterToken={adapterToken}
-            onAdapterEndpointChange={onAdapterEndpointChange}
-            onAdapterTokenChange={onAdapterTokenChange}
-          />
+          <div className="setup-span-two">
+            <DataSourceConfig
+              dataMode={dataMode}
+              onDataModeChange={onDataModeChange}
+              onFileImport={onFileImport}
+              uploadName={uploadName}
+              importedCount={uploadedGames.length}
+              uploadError={uploadError}
+              uploadSummary={uploadSummary}
+              adapterEndpoint={adapterEndpoint}
+              adapterToken={adapterToken}
+              onAdapterEndpointChange={onAdapterEndpointChange}
+              onAdapterTokenChange={onAdapterTokenChange}
+            />
+          </div>
         </div>
       </div>
 

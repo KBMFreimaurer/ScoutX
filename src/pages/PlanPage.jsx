@@ -31,7 +31,7 @@ export function PlanPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 800,
               fontSize: isMobile ? 18 : 22,
               color: C.white,
@@ -44,12 +44,12 @@ export function PlanPage() {
             Scout-Plan · {jugend?.label}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
+          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
             {kreis?.label} · {llmModel}
           </div>
         </div>
 
-        <PDFExport games={games} plan={plan} cfg={cfg} variant="primary" label="PDF Export" />
+        <PDFExport games={games} plan={plan} cfg={cfg} variant="primary" label="PDF herunterladen" />
       </div>
 
       <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} />
@@ -66,7 +66,7 @@ export function PlanPage() {
             color: C.gray,
             letterSpacing: "0.5px",
             textTransform: "uppercase",
-            fontFamily: "'Inter',sans-serif",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             fontWeight: 600,
           }}
         >

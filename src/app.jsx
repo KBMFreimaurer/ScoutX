@@ -31,18 +31,6 @@ function readStorage(key, fallback) {
   }
 }
 
-function readSessionValue(key, fallback = "") {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    return window.sessionStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function isLocalHost(hostname) {
   const host = String(hostname || "").toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
@@ -143,6 +131,14 @@ function normalizeTeamParameters(values) {
   return teams;
 }
 
+function cleanScoutPlanText(rawText) {
+  return String(rawText || "")
+    .replace(/[#*]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const RAIL_ICONS = {
   setup: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -200,18 +196,13 @@ export default function App() {
     ...storedSetup,
     adapterEndpoint: normalizeAdapterEndpoint(storedSetup.adapterEndpoint, DEFAULT_ADAPTER_ENDPOINT),
   };
-
-  const storedLlm = readStorage(STORAGE_KEYS.llm, {
-    llmType: "qwen",
-    llmModel: LLM_PRESETS.qwen.model,
-    llmEndpoint: DEFAULT_LLM_ENDPOINT,
-    llmIsOllama: true,
-    rememberApiKey: false,
-  });
-  const llmDefaults = {
-    ...storedLlm,
-    llmEndpoint: normalizeLlmEndpoint(storedLlm.llmEndpoint, DEFAULT_LLM_ENDPOINT),
-  };
+  const fixedLlmPreset = LLM_PRESETS.qwen;
+  const llmType = "qwen";
+  const llmModel = fixedLlmPreset.model;
+  const llmEndpoint = normalizeLlmEndpoint(fixedLlmPreset.endpoint, DEFAULT_LLM_ENDPOINT);
+  const llmKey = "";
+  const llmIsOllama = true;
+  const rememberApiKey = false;
 
   const [kreisId, setKreisId] = useState(setupDefaults.kreisId);
   const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
@@ -228,17 +219,6 @@ export default function App() {
   const [uploadError, setUploadError] = useState("");
   const [uploadSummary, setUploadSummary] = useState(null);
 
-  const [llmType, setLlmType] = useState(llmDefaults.llmType);
-  const [llmModel, setLlmModel] = useState(llmDefaults.llmModel);
-  const [llmEndpoint, setLlmEndpoint] = useState(llmDefaults.llmEndpoint);
-  const [llmKey, setLlmKey] = useState(() => {
-    if (llmDefaults.rememberApiKey) {
-      return readStorage(STORAGE_KEYS.llm, {}).llmKey ?? "";
-    }
-    return readSessionValue(STORAGE_KEYS.llmSessionKey, "");
-  });
-  const [llmIsOllama, setLlmIsOllama] = useState(llmDefaults.llmIsOllama);
-  const [rememberApiKey, setRememberApiKey] = useState(Boolean(llmDefaults.rememberApiKey));
   const [connStatus, setConnStatus] = useState(null);
 
   const [games, setGames] = useState([]);
@@ -292,26 +272,9 @@ export default function App() {
   }, [kreisId, jugendId, activeTeams, fromDate, focus, dataMode, adapterEndpoint]);
 
   useEffect(() => {
-    const safeLlmPayload = {
-      llmType,
-      llmModel,
-      llmEndpoint,
-      llmIsOllama,
-      rememberApiKey,
-    };
-
-    if (rememberApiKey) {
-      safeLlmPayload.llmKey = llmKey;
-      window.sessionStorage.removeItem(STORAGE_KEYS.llmSessionKey);
-    } else {
-      window.sessionStorage.setItem(STORAGE_KEYS.llmSessionKey, llmKey);
-    }
-
-    window.localStorage.setItem(
-      STORAGE_KEYS.llm,
-      JSON.stringify(safeLlmPayload),
-    );
-  }, [llmType, llmModel, llmEndpoint, llmKey, llmIsOllama, rememberApiKey]);
+    window.localStorage.removeItem(STORAGE_KEYS.llm);
+    window.sessionStorage.removeItem(STORAGE_KEYS.llmSessionKey);
+  }, []);
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -380,16 +343,6 @@ export default function App() {
     setTeamValidation(null);
   };
 
-  const onApplyPreset = (presetType) => {
-    const preset = LLM_PRESETS[presetType];
-    setLlmType(presetType);
-    setLlmEndpoint(preset.endpoint);
-    setLlmModel(preset.model);
-    setLlmKey(preset.key);
-    setLlmIsOllama(preset.isOllama);
-    setConnStatus(null);
-  };
-
   const onFileImport = async (event) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -436,11 +389,6 @@ export default function App() {
       });
 
       setConnStatus(result);
-
-      if (result.models.length > 0 && !result.models.includes(llmModel)) {
-        const qwenModel = result.models.find((modelName) => modelName.toLowerCase().includes("qwen"));
-        setLlmModel(qwenModel || result.models[0]);
-      }
     } catch (error) {
       setConnStatus({ ok: false, error: error.message });
     }
@@ -505,7 +453,7 @@ export default function App() {
 
           return `${index + 1}. ${game.dateLabel} ${game.time} Uhr — ${game.home} vs. ${game.away}\n   Spielort: ${
             game.venue
-          } | Entfernung: ${game.km} km${priorityText ? ` | ${priorityText}` : ""}`;
+          }${priorityText ? ` | ${priorityText}` : ""}`;
         })
         .join("\n\n");
 
@@ -514,77 +462,58 @@ export default function App() {
       const [minAlter] = alterRange.split("–").map(Number);
       const jahrgang = Number.isNaN(minAlter) ? "unbekannt" : `${currentYear - minAlter - 1}/${currentYear - minAlter}`;
 
-      const prompt = `Du bist ein professioneller Fußball-Scout-Analyst mit Fokus auf Jugendfußball im Gebiet Deutschland (insbesondere FVN / Niederrhein), tätig für das NLZ von Borussia Mönchengladbach.
+      const prompt = `Du bist ein professioneller Fußball-Scout-Analyst mit Fokus auf Jugendfußball im Gebiet Deutschland (insbesondere FVN/Niederrhein), tätig für das NLZ von Borussia Mönchengladbach.
 
-## KONTEXT
+KONTEXT
 Kreis: ${kreis?.label} (FVN Niederrhein)
 Altersklasse: ${jugend?.label} — Jahrgang ca. ${jahrgang} (${jugend?.alter} Jahre)${isTurnier ? " — TURNIERFORMAT (kein klassisches Heim/Auswärts)" : ""}
 Scout-Fokus: ${focus || "Allgemein — Talente, Spielstärke, taktisches Niveau"}
 Scouting-Datum: ab ${fromDate}
 
-## SPIELLISTE (${allSorted.length} ${isTurnier ? "Turnierbegegnungen" : "Spiele"})
-
+SPIELLISTE (${allSorted.length} ${isTurnier ? "Turnierbegegnungen" : "Spiele"})
 ${spielListe}
 
----
-
-## AUFGABEN
-
-### 1. VALIDIERUNG
+AUFGABEN
+1. VALIDIERUNG
 Bewerte für jedes Spiel:
 - Altersklasse plausibel für ${jugend?.label}? (Ja / Unsicher / Nicht eindeutig zuordenbar)
 - Wettbewerbsniveau einschätzen (z. B. Kreisklasse, Kreisleistungsklasse, Niederrheinliga)
 - ${isTurnier ? "Turnier-Besonderheiten (Spielzeit, Format)" : "Heim/Auswärts-Vorteil relevant?"}
-- Spiele mit [★ NLZ-relevant] besonders prüfen
+- Spiele mit [NLZ-relevant] besonders prüfen
 
-### 2. SCOUTING-BEWERTUNG
-Ranke die TOP 5 Spiele nach Relevanz für NLZ-Scouting (Borussia Mönchengladbach):
-
+2. SCOUTING-BEWERTUNG
+Ranke die TOP 5 Spiele nach Relevanz für NLZ-Scouting (Borussia Mönchengladbach).
 Kriterien (absteigend gewichtet):
-1. Vereinsniveau & Nachwuchsarbeit (NLZ-Nachwuchs > Kreisverein)
-2. Wettbewerbsklasse (Leistungsklasse > Kreisklasse)
-3. Gegnerqualität
-4. Jahrgangsreinheit (${jugend?.label} exakt vs. gemischt)
-5. Entfernung (kurze Fahrt bevorzugt)
-
+1) Vereinsniveau und Nachwuchsarbeit
+2) Wettbewerbsklasse
+3) Gegnerqualität
+4) Jahrgangsreinheit (${jugend?.label} exakt vs. gemischt)
 Ausgabe je Spiel:
 - Rang + Spiel
 - Begründung (2–3 Sätze)
-- Kennzeichnung: "wahrscheinlich ${jahrgang.split("/")[0]}-lastig" / "gemischt" / "unklar"
+- Kennzeichnung: wahrscheinlich ${jahrgang.split("/")[0]}-lastig / gemischt / unklar
 
-### 3. ROUTENPLAN (MAX. 3 SPIELE)
-Erstelle den optimalen Scouting-Tag:
-- Realistische Fahrtzeiten zwischen Spielorten berücksichtigen
-- Mind. 45 Minuten Anwesenheit pro Spiel einplanen
-- Qualität > Quantität
-
+3. ROUTENPLAN (MAX. 3 SPIELE)
+Erstelle den optimalen Scouting-Tag mit realistischen Fahrtzeiten zwischen Spielorten und mindestens 45 Minuten Anwesenheit pro Spiel.
 Format:
 SCOUTING PLAN
----
 [Uhrzeit] — [Spiel] | [Spielort]
 [Uhrzeit] — [Spiel] | [Spielort]
 [Uhrzeit] — [Spiel] | [Spielort]
-+ Kurze Begründung der Route
+Kurze Begründung der Route
 
-### 4. BEOBACHTUNGSPUNKTE
-Altersgerechte Schwerpunkte für ${jugend?.label} (${jugend?.alter} Jahre):
-${
-  focus && focus !== "Allgemein – Talente und Spielstärke"
-    ? `Fokus auf: ${focus}\nZusätzlich allgemeine Beobachtungspunkte für diese Altersklasse.`
-    : `Allgemeine Talentmerkmale für diese Altersklasse am Niederrhein.`
-}
-
----
-
-## REGELN
+REGELN
 - Keine Spekulationen, keine erfundenen Daten
-- Wenn Wettbewerb unklar → explizit kennzeichnen
+- Wenn Wettbewerb unklar, explizit kennzeichnen
 - ${
         isTurnier
-          ? "Turnierspiele: Spielzeit oft kürzer (z. B. 2×15 Min.) — Beobachtungszeit entsprechend anpassen"
-          : "Kinderfestivals oder Freundschaftsspiele separat kennzeichnen falls erkennbar"
+          ? "Turnierspiele: Spielzeit oft kürzer (z. B. 2x15 Min.) — Beobachtungszeit entsprechend anpassen"
+          : "Kinderfestivals oder Freundschaftsspiele separat kennzeichnen, falls erkennbar"
       }
-- Antwort strukturiert, faktenbasiert, scouting-orientiert, ohne unnötigen Text
+- Den Punkt Beobachtungspunkte vollständig weglassen
+- Keine Markdown-Syntax verwenden
+- Keine Zeichen # und * verwenden
+- Antwort klar, professionell, faktenbasiert und ohne unnötigen Text
 - Sprache: Deutsch`;
 
       const result = await callLLM({
@@ -594,17 +523,18 @@ ${
         apiKey: llmKey,
         prompt,
       });
+      const cleanedResult = cleanScoutPlanText(result);
 
-      setPlan(result);
+      setPlan(cleanedResult);
       if (pdfPopup) {
-        openScoutPdf(games, result, cfg, pdfPopup);
+        openScoutPdf(games, cleanedResult, cfg, pdfPopup);
       }
 
       if (navigateToPlan) {
         navigate("/plan");
       }
 
-      return result;
+      return cleanedResult;
     } catch (error) {
       if (pdfPopup && !pdfPopup.closed) {
         pdfPopup.close();
@@ -612,7 +542,7 @@ ${
       const message = String(error?.message || "Unbekannter Fehler");
       if (/timeout/i.test(message)) {
         setErr(
-          `LLM Fehler: ${message}. Das Modell braucht länger als erwartet. Versuche ein kleineres Modell oder erhöhe VITE_LLM_TIMEOUT_MS / VITE_LLM_TIMEOUT_OLLAMA_MS.`,
+          `LLM Fehler: ${message}. Qwen braucht länger als erwartet. Prüfe die lokale Ollama-Performance oder erhöhe VITE_LLM_TIMEOUT_MS / VITE_LLM_TIMEOUT_OLLAMA_MS.`,
         );
       } else {
         setErr(`LLM Fehler: ${message}`);
@@ -717,24 +647,6 @@ ${
     onDataModeChange: setDataMode,
     onAdapterEndpointChange: setAdapterEndpoint,
     onAdapterTokenChange: setAdapterToken,
-    onApplyPreset,
-    onSetLlmModel: (value) => {
-      setLlmModel(value);
-      setConnStatus(null);
-    },
-    onSetLlmEndpoint: (value) => {
-      setLlmEndpoint(value);
-      setConnStatus(null);
-    },
-    onSetLlmKey: (value) => {
-      setLlmKey(value);
-      setConnStatus(null);
-    },
-    onSetRememberApiKey: setRememberApiKey,
-    onToggleLlmProtocol: () => {
-      setLlmIsOllama((prev) => !prev);
-      setConnStatus(null);
-    },
     onFileImport,
     onTestConnection,
     onBuildAndGo,
@@ -750,7 +662,7 @@ ${
     <>
       <style>{GCSS}</style>
 
-      <div className="app-shell" style={{ color: C.offWhite, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="app-shell" style={{ color: C.offWhite, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
         {isDesktopShell ? (
           <aside className="left-rail">
             <div>
@@ -830,7 +742,7 @@ ${
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 10,
-                    fontFamily: "'Inter', sans-serif",
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
@@ -867,7 +779,7 @@ ${
                 fontSize: 11,
                 color: C.grayDark,
                 letterSpacing: "0.5px",
-                fontFamily: "'Inter',sans-serif",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                 fontWeight: 500,
               }}
             >

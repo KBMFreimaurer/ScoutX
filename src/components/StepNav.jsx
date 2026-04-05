@@ -54,7 +54,7 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
               padding: isMobile ? "6px 10px" : "7px 14px",
               borderRadius: 8,
               fontSize: isMobile ? 11 : 12,
-              fontFamily: "'Inter', sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: active ? 600 : 500,
               background: active ? "rgba(0,200,83,0.1)" : "transparent",
               color: active ? C.green : unlocked ? C.grayLight : C.grayDark,

@@ -29,7 +29,7 @@ export class ErrorBoundary extends React.Component {
             justifyContent: "center",
             alignItems: "center",
             padding: 24,
-            fontFamily: "'Inter', system-ui, sans-serif",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
           }}
         >
           <div
@@ -45,7 +45,7 @@ export class ErrorBoundary extends React.Component {
             <h2 style={{
               margin: "0 0 8px",
               color: "#fca5a5",
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 700,
               fontSize: 18,
               letterSpacing: "-0.2px",
@@ -64,7 +64,7 @@ export class ErrorBoundary extends React.Component {
                 color: "#fca5a5",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                 fontSize: 12,
                 lineHeight: 1.5,
               }}

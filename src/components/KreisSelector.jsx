@@ -19,7 +19,7 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
                 border: `1px solid ${selected ? C.greenBorder : C.border}`,
                 background: selected ? C.greenDim : "rgba(255,255,255,0.03)",
                 color: selected ? C.offWhite : C.gray,
-                fontFamily: "'Inter', sans-serif",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                 fontSize: isMobile ? 12 : 13,
                 fontWeight: selected ? 600 : 400,
                 cursor: "pointer",

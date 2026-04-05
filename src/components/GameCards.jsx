@@ -22,7 +22,7 @@ export function GameCards({ games }) {
               color: C.white,
               fontSize: 14,
               marginBottom: 8,
-              fontFamily: "'Inter', sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
             {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
@@ -35,7 +35,7 @@ export function GameCards({ games }) {
               gap: "6px 14px",
               fontSize: 12,
               color: C.gray,
-              fontFamily: "'Inter', sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -49,9 +49,6 @@ export function GameCards({ games }) {
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               {game.venue}
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 4, color: game.km < 15 ? C.green : C.gray, fontWeight: game.km < 15 ? 600 : 400, fontFamily: "'JetBrains Mono',monospace" }}>
-              {game.km} km
             </span>
           </div>
         </div>

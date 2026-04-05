@@ -142,7 +142,7 @@ export function DataSourceConfig({
           border: `1px solid ${C.border}`,
           fontSize: 12,
           color: C.grayDark,
-          fontFamily: "'Inter', sans-serif",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
           lineHeight: 1.5,
         }}
       >

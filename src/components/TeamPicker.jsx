@@ -31,7 +31,7 @@ export function TeamPicker({
           <span
             style={{
               fontSize: 11,
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 600,
               color: selectedTeams.length > 0 ? C.green : C.grayDark,
               background: selectedTeams.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
@@ -52,7 +52,7 @@ export function TeamPicker({
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
-                fontFamily: "'Inter', sans-serif",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                 padding: "2px 0",
                 minHeight: 0,
               }}
@@ -88,7 +88,7 @@ export function TeamPicker({
             border: `1px solid ${C.greenBorder}`,
             background: C.greenDim,
             color: C.green,
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             fontSize: 12,
             fontWeight: 600,
             cursor: "pointer",
@@ -141,7 +141,7 @@ export function TeamPicker({
                       }`,
                       color: isFound ? C.green : isMissing ? "#fca5a5" : C.gray,
                       background: isFound ? C.greenDim : isMissing ? C.errorDim : "rgba(255,255,255,0.02)",
-                      fontFamily: "'Inter', sans-serif",
+                      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                       fontWeight: 600,
                     }}
                   >
@@ -194,7 +194,7 @@ export function TeamPicker({
           border: `1px solid ${C.border}`,
           fontSize: 12,
           color: C.grayDark,
-          fontFamily: "'Inter', sans-serif",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
           lineHeight: 1.5,
         }}
       >

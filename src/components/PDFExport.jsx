@@ -1,7 +1,7 @@
 import { C } from "../styles/theme";
 import { openScoutPdf } from "../services/pdf";
 
-export function PDFExport({ games, plan = "", cfg, label = "PDF", variant = "ghost", style = {} }) {
+export function PDFExport({ games, plan = "", cfg, label = "PDF herunterladen", variant = "ghost", style = {} }) {
   const isPrimary = variant === "primary";
 
   return (
@@ -16,7 +16,7 @@ export function PDFExport({ games, plan = "", cfg, label = "PDF", variant = "gho
               border: "none",
               background: C.green,
               color: C.bg,
-              fontFamily: "'Inter', sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 600,
               cursor: "pointer",
               minHeight: 44,
@@ -32,7 +32,7 @@ export function PDFExport({ games, plan = "", cfg, label = "PDF", variant = "gho
               border: `1px solid ${C.border}`,
               borderRadius: 10,
               color: C.gray,
-              fontFamily: "'Inter', sans-serif",
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontSize: 12,
               cursor: "pointer",
               minHeight: 44,

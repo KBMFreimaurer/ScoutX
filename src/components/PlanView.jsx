@@ -25,7 +25,7 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile }) {
           lineHeight: 1.75,
           fontSize: isMobile ? 13 : 14,
           color: C.offWhite,
-          fontFamily: "'Inter',sans-serif",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
         }}
       >
         {plan}
