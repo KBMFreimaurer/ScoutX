@@ -173,6 +173,10 @@ REGELN
         setup.setErr(
           `LLM Fehler: ${message}. Qwen braucht länger als erwartet. Prüfe die lokale Ollama-Performance oder erhöhe VITE_LLM_TIMEOUT_MS / VITE_LLM_TIMEOUT_OLLAMA_MS.`,
         );
+      } else if (/http 504|gateway time-out|gateway timeout/i.test(message)) {
+        setup.setErr(
+          "LLM Fehler: HTTP 504 Gateway Timeout. Der LLM-Server war zu langsam erreichbar. Bitte erneut versuchen; ScoutX wiederholt den Aufruf bereits automatisch.",
+        );
       } else {
         setup.setErr(`LLM Fehler: ${message}`);
       }

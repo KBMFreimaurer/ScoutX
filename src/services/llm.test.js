@@ -68,6 +68,55 @@ describe("llm service", () => {
     ).rejects.toThrow("HTTP 500");
   });
 
+  it("retries on 504 gateway timeout and succeeds", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 504,
+        text: async () => "<html><h1>504 Gateway Time-out</h1></html>",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ response: "Antwort nach Retry" }),
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callLLM({
+      endpoint: "http://localhost:11434",
+      isOllama: true,
+      model: "qwen2.5:7b",
+      apiKey: "",
+      prompt: "Test",
+    });
+
+    expect(result).toBe("Antwort nach Retry");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("normalizes gateway html error text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 504,
+        text: async () =>
+          "<html><head><title>504 Gateway Time-out</title></head><body><center><h1>504 Gateway Time-out</h1></center></body></html>",
+      }),
+    );
+
+    await expect(
+      callLLM({
+        endpoint: "http://localhost:11434",
+        isOllama: true,
+        model: "qwen2.5:7b",
+        apiKey: "",
+        prompt: "Test",
+      }),
+    ).rejects.toThrow("HTTP 504: 504 Gateway Time-out");
+  });
+
   it("tests ollama connection", async () => {
     vi.stubGlobal(
       "fetch",

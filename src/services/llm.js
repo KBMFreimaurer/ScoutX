@@ -1,6 +1,8 @@
 const LLM_TIMEOUT_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_MS || 120000);
 const LLM_TIMEOUT_OLLAMA_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OLLAMA_MS || 180000);
 const LLM_TIMEOUT_OPENAI_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OPENAI_MS || LLM_TIMEOUT_MS);
+const LLM_HTTP_RETRY_DELAYS_MS = [1000, 2000];
+const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 
 function normalizeTimeout(value, fallback) {
   const parsed = Number(value);
@@ -8,6 +10,10 @@ function normalizeTimeout(value, fallback) {
     return Math.round(parsed);
   }
   return fallback;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function resolveTimeoutMs({ timeoutMs, isOllama, prompt }) {
@@ -80,6 +86,82 @@ async function fetchWithTimeoutRetry(url, options, timeoutMs, errorPrefix, retri
   throw lastError || new Error(`${errorPrefix} Anfrage fehlgeschlagen.`);
 }
 
+function summarizeHttpErrorText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  const h1 = raw.match(/<h1[^>]*>([^<]+)<\/h1>/i)?.[1];
+  if (h1) {
+    return h1.trim();
+  }
+
+  const title = raw.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+  if (title) {
+    return title.trim();
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.error) {
+      return String(parsed.error);
+    }
+  } catch {
+    // ignore JSON parse errors and fall back to plain-text summary
+  }
+
+  return raw.replace(/\s+/g, " ").slice(0, 140);
+}
+
+function buildHttpError(status, text) {
+  const summary = summarizeHttpErrorText(text);
+  return new Error(`HTTP ${status}${summary ? `: ${summary}` : ""}`);
+}
+
+function isRetryableHttpStatus(status) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function isRetryableLlmError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return /timeout|nicht erreichbar|network|failed to fetch|gateway time-out|gateway timeout/.test(message);
+}
+
+async function requestLlmWithRetry(url, options, timeoutMs, errorPrefix) {
+  let currentTimeout = timeoutMs;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= LLM_HTTP_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = await fetchWithTimeoutRetry(url, options, currentTimeout, errorPrefix, 1);
+      if (response.ok) {
+        return response;
+      }
+
+      const text = await response.text().catch(() => "");
+      const responseError = buildHttpError(response.status, text);
+      lastError = responseError;
+
+      const canRetryStatus = attempt < LLM_HTTP_RETRY_DELAYS_MS.length && isRetryableHttpStatus(response.status);
+      if (!canRetryStatus) {
+        throw responseError;
+      }
+    } catch (error) {
+      lastError = error;
+      const canRetryError = attempt < LLM_HTTP_RETRY_DELAYS_MS.length && isRetryableLlmError(error);
+      if (!canRetryError) {
+        throw error;
+      }
+    }
+
+    await sleep(SKIP_RETRY_WAIT ? 0 : LLM_HTTP_RETRY_DELAYS_MS[attempt]);
+    currentTimeout = Math.round(currentTimeout * 1.2);
+  }
+
+  throw lastError || new Error("LLM Anfrage fehlgeschlagen.");
+}
+
 export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs }) {
   const url = isOllama ? `${endpoint}/api/generate` : `${endpoint}/v1/chat/completions`;
   const resolvedTimeoutMs = resolveTimeoutMs({ timeoutMs, isOllama, prompt });
@@ -92,11 +174,7 @@ export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeo
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await fetchWithTimeoutRetry(url, { method: "POST", headers, body }, resolvedTimeoutMs, "LLM", 1);
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 180)}` : ""}`);
-  }
+  const response = await requestLlmWithRetry(url, { method: "POST", headers, body }, resolvedTimeoutMs, "LLM");
 
   const data = await response.json();
   return isOllama ? data.response ?? "" : data.choices?.[0]?.message?.content ?? "";
