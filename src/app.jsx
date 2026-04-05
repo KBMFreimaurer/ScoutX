@@ -5,9 +5,10 @@ import { StepNav } from "./components/StepNav";
 import { ScoutPlanProvider } from "./context/ScoutPlanContext";
 import { C, GCSS } from "./styles/theme";
 import { useWindowWidth } from "./hooks/useWindowWidth";
-import { KREISE, VEREINE_JE_KREIS } from "./data/kreise";
+import { KREISE } from "./data/kreise";
 import { JUGEND_KLASSEN } from "./data/altersklassen";
 import { fetchGamesWithProviders, parseUploadedGamesReport } from "./services/dataProvider";
+import { openScoutPdf } from "./services/pdf";
 import { callLLM, testConnection } from "./services/llm";
 import { STORAGE_KEYS, LLM_PRESETS } from "./data/constants";
 import { SetupPage } from "./pages/SetupPage";
@@ -120,6 +121,28 @@ function getWeekRange(isoDate) {
   return { fromDate: toIso(weekStart), toDate: toIso(weekEnd) };
 }
 
+function normalizeTeamParameters(values) {
+  const seen = new Set();
+  const teams = [];
+
+  for (const value of Array.isArray(values) ? values : []) {
+    const team = String(value || "").trim();
+    if (!team) {
+      continue;
+    }
+
+    const key = team.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    teams.push(team);
+  }
+
+  return teams;
+}
+
 const RAIL_ICONS = {
   setup: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -168,7 +191,6 @@ export default function App() {
     kreisId: "",
     jugendId: "",
     selTeams: [],
-    teamFilter: "",
     fromDate: todayIso,
     focus: "",
     dataMode: "auto",
@@ -193,8 +215,9 @@ export default function App() {
 
   const [kreisId, setKreisId] = useState(setupDefaults.kreisId);
   const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
-  const [selectedTeams, setSelectedTeams] = useState(setupDefaults.selTeams);
-  const [teamFilter, setTeamFilter] = useState(setupDefaults.teamFilter);
+  const [selectedTeams, setSelectedTeams] = useState(() => normalizeTeamParameters(setupDefaults.selTeams));
+  const [teamDraft, setTeamDraft] = useState("");
+  const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
   const [focus, setFocus] = useState(setupDefaults.focus);
   const [dataMode, setDataMode] = useState(setupDefaults.dataMode);
@@ -239,13 +262,7 @@ export default function App() {
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
-  const allTeams = useMemo(() => VEREINE_JE_KREIS[kreisId] || [], [kreisId]);
-  const activeTeams = selectedTeams.length > 0 ? selectedTeams : allTeams;
-
-  const filteredTeams = useMemo(
-    () => allTeams.filter((team) => team.toLowerCase().includes(teamFilter.toLowerCase())),
-    [allTeams, teamFilter],
-  );
+  const activeTeams = useMemo(() => normalizeTeamParameters(selectedTeams), [selectedTeams]);
 
   const prioritized = useMemo(() => [...games].sort((a, b) => b.priority - a.priority).slice(0, 5), [games]);
 
@@ -257,7 +274,7 @@ export default function App() {
     focus,
   };
 
-  const canBuild = Boolean(kreisId && jugendId && activeTeams.length >= 1);
+  const canBuild = Boolean(kreisId && jugendId);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -265,15 +282,14 @@ export default function App() {
       JSON.stringify({
         kreisId,
         jugendId,
-        selTeams: selectedTeams,
-        teamFilter,
+        selTeams: activeTeams,
         fromDate,
         focus,
         dataMode,
         adapterEndpoint,
       }),
     );
-  }, [kreisId, jugendId, selectedTeams, teamFilter, fromDate, focus, dataMode, adapterEndpoint]);
+  }, [kreisId, jugendId, activeTeams, fromDate, focus, dataMode, adapterEndpoint]);
 
   useEffect(() => {
     const safeLlmPayload = {
@@ -305,8 +321,7 @@ export default function App() {
 
   const onSelectKreis = (id) => {
     setKreisId(id);
-    setSelectedTeams([]);
-    setTeamFilter("");
+    setTeamValidation(null);
     setGames([]);
     setPlan("");
     setErr("");
@@ -317,6 +332,7 @@ export default function App() {
 
   const onSelectJugend = (id) => {
     setJugendId(id);
+    setTeamValidation(null);
     setGames([]);
     setPlan("");
     setErr("");
@@ -325,20 +341,43 @@ export default function App() {
     navigate("/setup");
   };
 
-  const onToggleTeam = (teamName) => {
-    setSelectedTeams((prev) => (prev.includes(teamName) ? prev.filter((name) => name !== teamName) : [...prev, teamName]));
+  const onClearAllTeams = () => {
+    setSelectedTeams([]);
+    setTeamValidation(null);
   };
 
-  const onRemoveTeam = (teamName) => {
-    setSelectedTeams((prev) => prev.filter((name) => name !== teamName));
+  const onAddTeamField = (value = teamDraft) => {
+    const team = String(value || "").trim();
+    if (!team) {
+      return;
+    }
+
+    setSelectedTeams((prev) => normalizeTeamParameters([...prev, team]));
+    setTeamDraft("");
+    setTeamValidation(null);
   };
 
-  const onSelectAll = () => setSelectedTeams([...allTeams]);
-  const onClearAll = () => setSelectedTeams([]);
+  const onUpdateTeamField = (index, value) => {
+    setSelectedTeams((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+    setTeamValidation(null);
+  };
 
-  const onSelectFiltered = () => {
-    const addList = filteredTeams.filter((team) => !selectedTeams.includes(team));
-    setSelectedTeams((prev) => [...prev, ...addList]);
+  const onNormalizeTeamField = () => {
+    setSelectedTeams((prev) => {
+      const next = [...prev];
+      const normalized = normalizeTeamParameters(next);
+      return normalized;
+    });
+    setTeamValidation(null);
+  };
+
+  const onRemoveTeamField = (index) => {
+    setSelectedTeams((prev) => prev.filter((_, idx) => idx !== index));
+    setTeamValidation(null);
   };
 
   const onApplyPreset = (presetType) => {
@@ -418,17 +457,13 @@ export default function App() {
       return;
     }
 
-    if (activeTeams.length < 1) {
-      setErr("Mindestens 1 Mannschaft benötigt.");
-      return;
-    }
-
     setErr("");
     setLoadingGames(true);
+    setTeamValidation(null);
 
     try {
       const weekRange = getWeekRange(fromDate);
-      const { games: fetchedGames, source } = await fetchGamesWithProviders({
+      const { games: fetchedGames, source, meta } = await fetchGamesWithProviders({
         mode: dataMode,
         kreisId,
         jugendId,
@@ -443,6 +478,7 @@ export default function App() {
 
       setGames(fetchedGames);
       setDataSourceUsed(source);
+      setTeamValidation(meta?.teamFilter || null);
       setPlan("");
       navigate("/games");
     } catch (error) {
@@ -452,7 +488,7 @@ export default function App() {
     }
   };
 
-  const onGenerateAI = async () => {
+  const onGenerateAI = async ({ navigateToPlan = true, pdfPopup = null } = {}) => {
     setLoadingAI(true);
     setErr("");
 
@@ -560,12 +596,37 @@ ${
       });
 
       setPlan(result);
-      navigate("/plan");
+      if (pdfPopup) {
+        openScoutPdf(games, result, cfg, pdfPopup);
+      }
+
+      if (navigateToPlan) {
+        navigate("/plan");
+      }
+
+      return result;
     } catch (error) {
+      if (pdfPopup && !pdfPopup.closed) {
+        pdfPopup.close();
+      }
       setErr(`LLM Fehler: ${error.message}`);
+      return "";
     } finally {
       setLoadingAI(false);
     }
+  };
+
+  const onGeneratePlanPdf = async () => {
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setErr("Pop-up blockiert - bitte erlauben.");
+      return;
+    }
+
+    await onGenerateAI({
+      navigateToPlan: false,
+      pdfPopup: popup,
+    });
   };
 
   const onResetSoft = () => {
@@ -580,7 +641,8 @@ ${
     setKreisId("");
     setJugendId("");
     setSelectedTeams([]);
-    setTeamFilter("");
+    setTeamDraft("");
+    setTeamValidation(null);
     setUploadedGames([]);
     setUploadName("");
     setUploadError("");
@@ -612,11 +674,10 @@ ${
     jugendId,
     kreis,
     jugend,
-    allTeams,
     selectedTeams,
     activeTeams,
-    filteredTeams,
-    teamFilter,
+    teamDraft,
+    teamValidation,
     fromDate,
     focus,
     dataMode,
@@ -644,12 +705,12 @@ ${
     canBuild,
     onSelectKreis,
     onSelectJugend,
-    onToggleTeam,
-    onRemoveTeam,
-    onSelectAll,
-    onClearAll,
-    onSelectFiltered,
-    onSetTeamFilter: setTeamFilter,
+    onAddTeamField,
+    onUpdateTeamField,
+    onNormalizeTeamField,
+    onRemoveTeamField,
+    onSetTeamDraft: setTeamDraft,
+    onClearAllTeams,
     onSetFromDate: setFromDate,
     onSetFocus: setFocus,
     onDataModeChange: setDataMode,
@@ -677,6 +738,7 @@ ${
     onTestConnection,
     onBuildAndGo,
     onGenerateAI,
+    onGeneratePlanPdf,
     onBackSetup,
     onBackGames,
     onResetSoft,

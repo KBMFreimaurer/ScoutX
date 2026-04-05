@@ -1,7 +1,6 @@
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
-import { PDFExport } from "../components/PDFExport";
 import { SkeletonLoader } from "../components/SkeletonLoader";
 import { TopFive } from "../components/TopFive";
 import { DATA_SOURCE_LABELS } from "../services/dataProvider";
@@ -15,12 +14,11 @@ export function GamesPage() {
     kreis,
     activeTeams,
     prioritized,
-    cfg,
     llmModel,
     loadingAI,
     dataSourceUsed,
     onBackSetup,
-    onGenerateAI,
+    onGeneratePlanPdf,
   } = useScoutPlan();
 
   const dataSourceLabel = DATA_SOURCE_LABELS[dataSourceUsed] || DATA_SOURCE_LABELS.mock;
@@ -64,11 +62,9 @@ export function GamesPage() {
           </div>
 
           <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
-            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Teams · {dataSourceLabel}
+            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter · {dataSourceLabel}
           </div>
         </div>
-
-        <PDFExport games={games} cfg={cfg} />
       </div>
 
       <TopFive games={prioritized} />
@@ -76,16 +72,16 @@ export function GamesPage() {
       <GameTable games={games} />
       <GameCards games={games} />
 
-      <PrimaryButton onClick={onGenerateAI} disabled={loadingAI} style={{ width: "100%" }}>
+      <PrimaryButton onClick={onGeneratePlanPdf} disabled={loadingAI} style={{ width: "100%" }}>
         {loadingAI ? (
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
-            Analyse läuft mit {llmModel}...
+            Plan wird erstellt mit {llmModel}...
           </span>
         ) : (
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            KI Scout-Plan erstellen
+            Scout-Plan erstellen
           </span>
         )}
       </PrimaryButton>

@@ -13,6 +13,7 @@ import {
   normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
+  toAbsoluteFussballUrl,
   uniqueBy,
 } from "../lib/fussballde.js";
 import { isLikelyTeamMatch } from "../lib/games.js";
@@ -180,6 +181,101 @@ function extractMatchId(matchUrl) {
   return id || undefined;
 }
 
+function extractTeamPageUrlsFromMatchHtml(html) {
+  const urls = [...String(html || "").matchAll(/<div class="team-name">[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>/gi)]
+    .map((entry) => toAbsoluteFussballUrl(entry[1]))
+    .filter((url) => url.includes("/mannschaft/"));
+
+  if (urls.length >= 2) {
+    return {
+      homeTeamUrl: urls[0],
+      awayTeamUrl: urls[1],
+    };
+  }
+
+  const fallback = [...String(html || "").matchAll(/href="((?:https:\/\/www\.fussball\.de)?\/mannschaft\/[^"]+)"/gi)]
+    .map((entry) => toAbsoluteFussballUrl(entry[1]));
+
+  return {
+    homeTeamUrl: fallback[0] || "",
+    awayTeamUrl: fallback[1] || "",
+  };
+}
+
+function extractKickoffFromTeamPageHtml(html, matchId) {
+  if (!matchId) {
+    return "";
+  }
+
+  const text = String(html || "");
+  let cursor = text.indexOf(matchId);
+  const positions = [];
+  while (cursor >= 0) {
+    positions.push(cursor);
+    cursor = text.indexOf(matchId, cursor + 1);
+  }
+
+  for (const idx of positions) {
+    const localWindow = text.slice(Math.max(0, idx - 260), idx + 260);
+    const localTimes = [...localWindow.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)];
+    if (localTimes.length > 0) {
+      const [, hour, minute] = localTimes[0];
+      return `${hour}:${minute}`;
+    }
+  }
+
+  // Fallback: broader scan around first match id occurrence
+  if (positions.length > 0) {
+    const idx = positions[0];
+    const wideWindow = text.slice(Math.max(0, idx - 900), idx + 900);
+    const wideTimes = [...wideWindow.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)];
+    if (wideTimes.length > 0) {
+      const [, hour, minute] = wideTimes[0];
+      return `${hour}:${minute}`;
+    }
+  }
+
+  return "";
+}
+
+async function getTeamPageHtml(url, cache) {
+  if (!url) {
+    return "";
+  }
+
+  if (!cache.has(url)) {
+    cache.set(
+      url,
+      fetchText(url).catch((error) => {
+        warn(`Team page fetch failed (${url}): ${error.message || error}`);
+        return "";
+      }),
+    );
+  }
+
+  return cache.get(url);
+}
+
+async function resolveKickoffFromTeamPages(matchId, homeTeamUrl, awayTeamUrl, cache) {
+  if (!matchId) {
+    return "";
+  }
+
+  for (const url of [homeTeamUrl, awayTeamUrl]) {
+    if (!url) {
+      continue;
+    }
+
+    const html = await getTeamPageHtml(url, cache);
+    const kickoff = extractKickoffFromTeamPageHtml(html, matchId);
+    if (kickoff) {
+      return kickoff;
+    }
+  }
+
+  return "";
+}
+
 function matchesSelectedTeams(home, away) {
   if (selectedTeams.length === 0) {
     return false;
@@ -308,6 +404,8 @@ async function collectMatchCandidates(competitions, from, to) {
 }
 
 async function enrichMatches(matchCandidates, dateRangeSet) {
+  const teamPageCache = new Map();
+
   const details = await mapLimit(matchCandidates, MATCH_CONCURRENCY, async (candidate) => {
     try {
       const html = await fetchText(candidate.matchUrl);
@@ -318,12 +416,17 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
         return null;
       }
 
+      const matchId = extractMatchId(candidate.matchUrl);
+      const { homeTeamUrl, awayTeamUrl } = extractTeamPageUrlsFromMatchHtml(html);
+      const kickoff =
+        parsed.time || (await resolveKickoffFromTeamPages(matchId, homeTeamUrl, awayTeamUrl, teamPageCache));
+
       return {
-        id: extractMatchId(candidate.matchUrl),
+        id: matchId,
         home: parsed.home || candidate.home,
         away: parsed.away || candidate.away,
         date,
-        time: parsed.time || "10:00",
+        time: kickoff || "10:00",
         venue: parsed.venue || "Sportanlage",
         km: 0,
         kreisId,

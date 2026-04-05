@@ -16,10 +16,9 @@ export function SetupPage() {
     kreisId,
     jugendId,
     jugend,
-    allTeams,
-    filteredTeams,
     selectedTeams,
-    teamFilter,
+    teamDraft,
+    teamValidation,
     fromDate,
     focus,
     llmType,
@@ -40,12 +39,12 @@ export function SetupPage() {
     rememberApiKey,
     onSelectKreis,
     onSelectJugend,
-    onToggleTeam,
-    onRemoveTeam,
-    onSelectAll,
-    onClearAll,
-    onSetTeamFilter,
-    onSelectFiltered,
+    onAddTeamField,
+    onUpdateTeamField,
+    onNormalizeTeamField,
+    onRemoveTeamField,
+    onSetTeamDraft,
+    onClearAllTeams,
     onSetFromDate,
     onSetFocus,
     onApplyPreset,
@@ -66,7 +65,7 @@ export function SetupPage() {
     <div className="fu">
       <div className="setup-headline">
         <h1>Scouting Setup</h1>
-        <p>Konfiguriere Region, Altersklasse und Teams für deinen Scout-Plan.</p>
+        <p>Konfiguriere Region, Altersklasse und optionale Vereinsparameter für deinen Scout-Plan.</p>
       </div>
 
       <div className="setup-layout">
@@ -87,16 +86,15 @@ export function SetupPage() {
 
             <div className="setup-span-two">
               <TeamPicker
-                allTeams={allTeams}
-                filteredTeams={filteredTeams}
                 selectedTeams={selectedTeams}
-                teamFilter={teamFilter}
-                onTeamFilter={onSetTeamFilter}
-                onToggleTeam={onToggleTeam}
-                onRemoveTeam={onRemoveTeam}
-                onSelectAll={onSelectAll}
-                onClearAll={onClearAll}
-                onSelectFiltered={onSelectFiltered}
+                teamDraft={teamDraft}
+                teamValidation={teamValidation}
+                onTeamDraft={onSetTeamDraft}
+                onAddTeam={onAddTeamField}
+                onUpdateTeam={onUpdateTeamField}
+                onNormalizeTeams={onNormalizeTeamField}
+                onRemoveTeam={onRemoveTeamField}
+                onClearAll={onClearAllTeams}
               />
             </div>
           </div>
@@ -152,11 +150,11 @@ export function SetupPage() {
             ? "Kreis wählen"
             : !jugendId
               ? "Jugendklasse wählen"
-              : "Mind. 1 Team benötigt"
+              : "Ungültige Auswahl"
         ) : (
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            Spielplan generieren — {selectedTeams.length || allTeams.length} Teams
+            Spielplan generieren — {selectedTeams.length || 0} Team-Parameter
           </span>
         )}
       </PrimaryButton>

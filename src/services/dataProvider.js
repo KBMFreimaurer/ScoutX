@@ -427,6 +427,11 @@ function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate, te
     });
 }
 
+function buildMockTeams(kreisId, count = 10) {
+  const prefix = kreisId ? `Team ${kreisId.toUpperCase()}` : "Team";
+  return Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}`);
+}
+
 function markSelectedTeamGames(games, teams) {
   const selectedTeams = Array.isArray(teams) ? teams.filter(Boolean) : [];
   if (!selectedTeams.length) {
@@ -529,7 +534,7 @@ async function fetchGamesCsv(params) {
     throw new Error("Import enthält keine passenden Spiele für Kreis/Jugend/Team-Auswahl.");
   }
 
-  return filteredGames;
+  return { games: filteredGames };
 }
 
 async function fetchGamesAdapter(params) {
@@ -585,15 +590,35 @@ async function fetchGamesAdapter(params) {
   });
 
   if (broadFilteredGames.length > 0) {
-    return markSelectedTeamGames(broadFilteredGames, params.teams);
+    return {
+      games: markSelectedTeamGames(broadFilteredGames, params.teams),
+      meta: {
+        teamFilter:
+          payload && !Array.isArray(payload) && payload.teamFilter
+            ? payload.teamFilter
+            : {
+                requested: Array.isArray(params.teams) && params.teams.length > 0,
+                requestedCount: Array.isArray(params.teams) ? params.teams.length : 0,
+                matchedCount: 0,
+                matchedTeamCount: 0,
+                matchedTeams: [],
+                missingTeams: Array.isArray(params.teams) ? params.teams : [],
+                binding: false,
+                fallbackToUnfiltered: false,
+              },
+      },
+    };
   }
 
   throw new Error("Adapterdaten passen nicht zur aktuellen Auswahl.");
 }
 
 async function fetchGamesMock(params) {
-  const generated = buildMockSchedule(params.teams, params.jugendId, params.fromDate, params.kreisId, params.toDate);
-  return filterGamesBySelection(generated, params);
+  const inputTeams = Array.isArray(params.teams) ? params.teams.filter(Boolean) : [];
+  const seedTeams =
+    inputTeams.length >= 2 ? inputTeams : [...inputTeams, ...buildMockTeams(params.kreisId, Math.max(2, 8 - inputTeams.length))];
+  const generated = buildMockSchedule(seedTeams, params.jugendId, params.fromDate, params.kreisId, params.toDate);
+  return { games: filterGamesBySelection(generated, params) };
 }
 
 /**
@@ -626,9 +651,11 @@ export async function fetchGamesWithProviders({
 
   for (const providerName of providerOrder) {
     try {
-      const games = await providerMap[providerName](context);
+      const providerResult = await providerMap[providerName](context);
+      const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
+      const meta = Array.isArray(providerResult) ? {} : providerResult?.meta || {};
       if (games?.length) {
-        return { games, source: providerName };
+        return { games, source: providerName, meta };
       }
     } catch (error) {
       lastError = error;

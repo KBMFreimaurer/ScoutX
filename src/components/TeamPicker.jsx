@@ -1,43 +1,47 @@
-import { C, card, inp } from "../styles/theme";
+import { C, card, inp, lbl } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
-export function TeamPicker({
-  allTeams,
-  filteredTeams,
-  selectedTeams,
-  teamFilter,
-  onTeamFilter,
-  onToggleTeam,
-  onRemoveTeam,
-  onSelectAll,
-  onClearAll,
-  onSelectFiltered,
-}) {
-  if (!allTeams.length) {
-    return null;
+function buildLookup(values) {
+  const map = new Map();
+  for (const value of values || []) {
+    map.set(String(value || "").toLowerCase(), true);
   }
+  return map;
+}
+
+export function TeamPicker({
+  selectedTeams,
+  teamDraft,
+  teamValidation,
+  onTeamDraft,
+  onAddTeam,
+  onUpdateTeam,
+  onNormalizeTeams,
+  onRemoveTeam,
+  onClearAll,
+}) {
+  const matchedLookup = buildLookup(teamValidation?.matchedTeams || []);
+  const missingLookup = buildLookup(teamValidation?.missingTeams || []);
 
   return (
     <div style={card}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <SectionHeader num="03">Mannschaften</SectionHeader>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button
-            onClick={onSelectAll}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
+        <SectionHeader num="03">Vereins-Parameter (optional)</SectionHeader>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span
             style={{
-              fontSize: 12,
-              color: C.green,
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 500,
-              padding: "2px 0",
-              minHeight: 0,
+              fontSize: 11,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontWeight: 600,
+              color: selectedTeams.length > 0 ? C.green : C.grayDark,
+              background: selectedTeams.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
+              border: `1px solid ${selectedTeams.length > 0 ? C.greenBorder : C.border}`,
+              padding: "3px 10px",
+              borderRadius: 6,
             }}
           >
-            Alle
-          </button>
+            {selectedTeams.length}
+          </span>
 
           {selectedTeams.length > 0 ? (
             <button
@@ -53,141 +57,133 @@ export function TeamPicker({
                 minHeight: 0,
               }}
             >
-              Reset
+              Alle löschen
             </button>
           ) : null}
-
-          <span
-            style={{
-              fontSize: 11,
-              fontFamily: "'JetBrains Mono', monospace",
-              fontWeight: 600,
-              color: selectedTeams.length > 0 ? C.green : C.grayDark,
-              background: selectedTeams.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
-              border: `1px solid ${selectedTeams.length > 0 ? C.greenBorder : C.border}`,
-              padding: "3px 10px",
-              borderRadius: 6,
-            }}
-          >
-            {selectedTeams.length > 0 ? `${selectedTeams.length}/${allTeams.length}` : `${allTeams.length}`}
-          </span>
         </div>
       </div>
 
-      {selectedTeams.length > 0 ? (
-        <div className="pills-bar">
-          {selectedTeams.map((team) => (
-            <div
-              key={team}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "4px 10px",
-                borderRadius: 8,
-                background: C.greenDim,
-                border: `1px solid ${C.greenBorder}`,
-                fontSize: 12,
-                color: C.white,
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              <span>{team}</span>
-              <span onClick={() => onRemoveTeam(team)} style={{ cursor: "pointer", fontSize: 14, lineHeight: 1, color: C.green, opacity: 0.7 }}>
-                x
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
+      <label style={lbl}>Verein hinzufügen</label>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <input
           className="scout-input"
-          placeholder="Verein suchen..."
-          value={teamFilter}
-          onChange={(event) => onTeamFilter(event.target.value)}
+          placeholder="z. B. TSV Heimaterde"
+          value={teamDraft}
+          onChange={(event) => onTeamDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAddTeam(teamDraft);
+            }
+          }}
           style={{ ...inp, flex: 1, marginBottom: 0 }}
         />
 
-        {teamFilter && filteredTeams.some((team) => !selectedTeams.includes(team)) ? (
-          <button
-            onClick={onSelectFiltered}
-            style={{
-              padding: "0 14px",
-              borderRadius: 10,
-              minHeight: 44,
-              border: `1px solid ${C.greenBorder}`,
-              background: C.greenDim,
-              color: C.green,
-              fontFamily: "'Inter', sans-serif",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            + Alle
-          </button>
-        ) : null}
+        <button
+          onClick={() => onAddTeam(teamDraft)}
+          style={{
+            padding: "0 14px",
+            borderRadius: 10,
+            minHeight: 44,
+            border: `1px solid ${C.greenBorder}`,
+            background: C.greenDim,
+            color: C.green,
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          + Feld
+        </button>
       </div>
 
-      <div className="team-grid">
-        {filteredTeams.map((team) => {
-          const isSelected = selectedTeams.includes(team);
-          const dimmed = selectedTeams.length > 0 && !isSelected;
+      {selectedTeams.length > 0 ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {selectedTeams.map((team, index) => {
+            const key = String(team || "").toLowerCase();
+            const isFound = matchedLookup.has(key);
+            const isMissing = missingLookup.has(key);
 
-          return (
-            <button
-              key={team}
-              className={`team-chip${isSelected ? " sel" : ""}`}
-              onClick={() => onToggleTeam(team)}
-              style={{
-                padding: "9px 12px",
-                borderRadius: 10,
-                textAlign: "left",
-                border: `1px solid ${isSelected ? C.greenBorder : C.border}`,
-                background: isSelected ? C.greenDim : "rgba(255,255,255,0.03)",
-                color: dimmed ? C.grayDark : isSelected ? C.white : C.offWhite,
-                fontFamily: "'Inter', sans-serif",
-                fontSize: 13,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                minHeight: 44,
-              }}
-            >
-              <span
+            return (
+              <div
+                key={`team-${index}`}
                 style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 5,
-                  border: `1.5px solid ${isSelected ? C.green : "rgba(255,255,255,0.15)"}`,
-                  background: isSelected ? C.green : "transparent",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 10,
-                  color: C.bg,
-                  flexShrink: 0,
-                  transition: "all 0.15s ease",
+                  gap: 8,
+                  background: "rgba(255,255,255,0.02)",
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 10,
+                  padding: 8,
                 }}
               >
-                {isSelected ? (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                ) : ""}
-              </span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team}</span>
-            </button>
-          );
-        })}
-      </div>
+                <input
+                  className="scout-input"
+                  value={team}
+                  onChange={(event) => onUpdateTeam(index, event.target.value)}
+                  onBlur={onNormalizeTeams}
+                  placeholder={`Verein ${index + 1}`}
+                  style={{ ...inp, marginBottom: 0, minHeight: 38 }}
+                />
 
-      {teamFilter && filteredTeams.length === 0 ? (
-        <div style={{ color: C.gray, fontSize: 13, textAlign: "center", padding: 20 }}>Kein Verein gefunden</div>
-      ) : null}
+                {teamValidation?.requested ? (
+                  <span
+                    style={{
+                      minWidth: 92,
+                      fontSize: 11,
+                      textAlign: "center",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: `1px solid ${
+                        isFound ? C.greenBorder : isMissing ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"
+                      }`,
+                      color: isFound ? C.green : isMissing ? "#fca5a5" : C.gray,
+                      background: isFound ? C.greenDim : isMissing ? C.errorDim : "rgba(255,255,255,0.02)",
+                      fontFamily: "'Inter', sans-serif",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isFound ? "Gefunden" : isMissing ? "Nicht gefunden" : "Ungeprüft"}
+                  </span>
+                ) : null}
+
+                <button
+                  onClick={() => onRemoveTeam(index)}
+                  style={{
+                    minHeight: 38,
+                    minWidth: 38,
+                    borderRadius: 8,
+                    border: `1px solid ${C.border}`,
+                    background: "rgba(255,255,255,0.02)",
+                    color: C.gray,
+                    cursor: "pointer",
+                    fontSize: 16,
+                    lineHeight: 1,
+                  }}
+                >
+                  x
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div
+          style={{
+            color: C.gray,
+            fontSize: 13,
+            textAlign: "center",
+            padding: 14,
+            border: `1px dashed ${C.border}`,
+            borderRadius: 10,
+            marginBottom: 4,
+          }}
+        >
+          Keine Vereinsparameter gesetzt.
+        </div>
+      )}
 
       <div
         style={{
@@ -202,7 +198,8 @@ export function TeamPicker({
           lineHeight: 1.5,
         }}
       >
-        Keine Auswahl = alle {allTeams.length} Vereine werden berücksichtigt.
+        Vereinsparameter sind nur ein Hinweis für die Recherche. Der Plan bleibt immer offen und kann auch ohne Vereine
+        erstellt werden.
       </div>
     </div>
   );

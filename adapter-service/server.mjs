@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { dedupeGames, filterGames, normalizeGames } from "./lib/games.js";
+import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
 import { fetchWeekTemplateGames, runExportCommand } from "./lib/dynamicSources.js";
 import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } from "./lib/week.js";
@@ -42,6 +42,47 @@ const state = {
   weekRefreshCache: {},
   weekRefreshPromises: {},
 };
+
+function uniqueNormalizedTeams(values) {
+  const seen = new Set();
+  const teams = [];
+
+  for (const value of Array.isArray(values) ? values : []) {
+    const team = String(value || "").trim();
+    if (!team) {
+      continue;
+    }
+
+    const key = team.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    teams.push(team);
+  }
+
+  return teams;
+}
+
+function splitTeamValidation(teams, games) {
+  const matchedTeams = [];
+  const missingTeams = [];
+
+  for (const team of teams) {
+    const found = games.some((game) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away));
+    if (found) {
+      matchedTeams.push(team);
+    } else {
+      missingTeams.push(team);
+    }
+  }
+
+  return {
+    matchedTeams,
+    missingTeams,
+  };
+}
 
 let refreshPromise = null;
 
@@ -353,7 +394,8 @@ const server = createServer(async (req, res) => {
     try {
       const payload = await readBody(req);
       const autoRefresh = await maybeAutoRefreshWeek(payload);
-      const requestedTeamCount = Array.isArray(payload.teams) ? payload.teams.filter(Boolean).length : 0;
+      const requestedTeams = uniqueNormalizedTeams(payload.teams);
+      const requestedTeamCount = requestedTeams.length;
       const gamesWithTeamFilter =
         requestedTeamCount > 0 ? filterGames(state.games, payload, { aliasMap: state.aliasMap }) : [];
       const games = filterGames(
@@ -365,6 +407,7 @@ const server = createServer(async (req, res) => {
         { aliasMap: state.aliasMap },
       );
       const teamFilterFallback = requestedTeamCount > 0 && games.length > gamesWithTeamFilter.length;
+      const { matchedTeams, missingTeams } = splitTeamValidation(requestedTeams, games);
 
       sendJson(
         res,
@@ -378,6 +421,9 @@ const server = createServer(async (req, res) => {
             requested: requestedTeamCount > 0,
             requestedCount: requestedTeamCount,
             matchedCount: gamesWithTeamFilter.length,
+            matchedTeamCount: matchedTeams.length,
+            matchedTeams,
+            missingTeams,
             binding: false,
             fallbackToUnfiltered: teamFilterFallback,
           },
