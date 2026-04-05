@@ -1,10 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { STORAGE_KEYS } from "../config/storage";
 import { parseUploadedGamesReport } from "../services/dataProvider";
-import { normalizeAdapterEndpoint, normalizeTeamParameters, readStorage } from "./shared";
+import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const SetupContext = createContext(null);
@@ -12,19 +11,14 @@ const SetupContext = createContext(null);
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
-    const storedSetup = readStorage(STORAGE_KEYS.setup, {
+    return {
       kreisId: "",
       jugendId: "",
       selTeams: [],
       fromDate: todayIso,
       focus: "",
       dataMode: "auto",
-      adapterEndpoint: defaultAdapterEndpoint,
-    });
-
-    return {
-      ...storedSetup,
-      adapterEndpoint: normalizeAdapterEndpoint(storedSetup.adapterEndpoint, defaultAdapterEndpoint),
+      adapterEndpoint: normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
       todayIso,
     };
   });
@@ -52,21 +46,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
   const activeTeams = useMemo(() => normalizeTeamParameters(selectedTeams), [selectedTeams]);
   const canBuild = Boolean(kreisId && jugendId);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      STORAGE_KEYS.setup,
-      JSON.stringify({
-        kreisId,
-        jugendId,
-        selTeams: activeTeams,
-        fromDate,
-        focus,
-        dataMode,
-        adapterEndpoint,
-      }),
-    );
-  }, [kreisId, jugendId, activeTeams, fromDate, focus, dataMode, adapterEndpoint]);
 
   const clearErr = useCallback(() => setErr(""), []);
 
