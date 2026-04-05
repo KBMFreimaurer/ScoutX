@@ -1,7 +1,7 @@
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { LLM_PRESETS } from "../data/constants";
-import { useScoutPlan } from "../context/ScoutPlanContext";
+import { useScoutX } from "../context/ScoutXContext";
 import { AgeGroupSelector } from "../components/AgeGroupSelector";
 import { DateFocusPanel } from "../components/DateFocusPanel";
 import { DataSourceConfig } from "../components/DataSourceConfig";
@@ -59,7 +59,7 @@ export function SetupPage() {
     onFileImport,
     onAdapterEndpointChange,
     onAdapterTokenChange,
-  } = useScoutPlan();
+  } = useScoutX();
 
   return (
     <div className="fu">

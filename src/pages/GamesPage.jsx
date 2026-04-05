@@ -4,7 +4,7 @@ import { GameTable } from "../components/GameTable";
 import { SkeletonLoader } from "../components/SkeletonLoader";
 import { TopFive } from "../components/TopFive";
 import { DATA_SOURCE_LABELS } from "../services/dataProvider";
-import { useScoutPlan } from "../context/ScoutPlanContext";
+import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
 
 export function GamesPage() {
@@ -13,15 +13,23 @@ export function GamesPage() {
     jugend,
     kreis,
     activeTeams,
+    teamValidation,
     prioritized,
     llmModel,
     loadingAI,
     dataSourceUsed,
     onBackSetup,
     onGeneratePlanPdf,
-  } = useScoutPlan();
+  } = useScoutX();
 
   const dataSourceLabel = DATA_SOURCE_LABELS[dataSourceUsed] || DATA_SOURCE_LABELS.mock;
+  const requestedTeamCount = Number(teamValidation?.requestedCount || 0);
+  const matchedTeamCount = Number(teamValidation?.matchedTeamCount || 0);
+  const matchedGameCount =
+    typeof teamValidation?.matchedCount === "number"
+      ? teamValidation.matchedCount
+      : games.filter((game) => game.selectedTeamMatch).length;
+  const showTeamHint = requestedTeamCount > 0;
 
   return (
     <div className="fu">
@@ -64,6 +72,12 @@ export function GamesPage() {
           <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "'Inter',sans-serif" }}>
             {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter · {dataSourceLabel}
           </div>
+
+          {showTeamHint ? (
+            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "'Inter',sans-serif" }}>
+              Team-Hinweise: {matchedGameCount} passende Spiele · {matchedTeamCount}/{requestedTeamCount} Vereine erkannt
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
-# ScoutPlan
+# ScoutX
 
-ScoutPlan ist eine React-SPA für KI-gestützte Jugend-Scouting-Pläne (FVN/Niederrhein).
+ScoutX ist eine React-SPA für KI-gestützte Jugend-Scouting-Pläne (FVN/Niederrhein).
 
 ## Schnellstart (vollautomatisch)
 
@@ -15,7 +15,7 @@ npm run dev
 
 ## Vollautomatischer Datenfluss
 
-Beim Erstellen eines ScoutPlans ruft das Frontend den Adapter an.
+Beim Erstellen eines ScoutXs ruft das Frontend den Adapter an.
 Der Adapter kann dann die angefragte Woche automatisch aktualisieren:
 
 - per `ADAPTER_EXPORT_COMMAND` (standardmäßig: `node /app/scripts/fetch-week.fussballde.mjs`)

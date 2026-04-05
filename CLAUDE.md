@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ScoutPlan is a React SPA for AI-powered youth football scouting plans, built for Borussia Mönchengladbach's NLZ in the Niederrhein/FVN region. The UI and all user-facing text are in German.
+ScoutX is a React SPA for AI-powered youth football scouting plans, built for Borussia Mönchengladbach's NLZ in the Niederrhein/FVN region. The UI and all user-facing text are in German.
 
 ## Commands
 
@@ -37,7 +37,7 @@ docker compose --profile prod up --build  # Prod with Nginx
 3. **Plan** – AI-generated scout plan with export to PDF
 
 ### State Management
-- **ScoutPlanContext** (React Context) wraps the entire app; access via `useScoutPlan()` hook
+- **ScoutXContext** (React Context) wraps the entire app; access via `useScoutX()` hook
 - **App.jsx** holds all local state and passes 80+ handler functions through context
 - **localStorage**: `scoutplan.setup.v1` (setup state), `scoutplan.llm.v1` (LLM config)
 - **sessionStorage**: `scoutplan.llm.sessionKey.v1` (temporary API key)

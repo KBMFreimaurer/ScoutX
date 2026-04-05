@@ -81,7 +81,7 @@ async function fetchText(url, { retries = 2 } = {}) {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          "user-agent": "ScoutPlanAdapter/1.0 (+https://www.fussball.de)",
+          "user-agent": "ScoutXAdapter/1.0 (+https://www.fussball.de)",
           accept: "text/html,application/json;q=0.9,*/*;q=0.8",
         },
       });

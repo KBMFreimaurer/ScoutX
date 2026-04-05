@@ -1,6 +1,6 @@
-# ScoutPlan Adapter Service
+# ScoutX Adapter Service
 
-Dauerhafte Daten-Schicht für ScoutPlan ohne direkte fussball.de-API.
+Dauerhafte Daten-Schicht für ScoutX ohne direkte fussball.de-API.
 
 ## Architektur
 
@@ -124,7 +124,7 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 ## Dauerhafter Betrieb
 
 1. Adapter starten.
-2. In ScoutPlan Datenquelle `Live-Adapter (HTTP)` nutzen.
+2. In ScoutX Datenquelle `Live-Adapter (HTTP)` nutzen.
 3. Beim Erstellen eines Plans ruft die SPA `POST /api/games` auf.
 4. Adapter refresh-t die relevante Woche automatisch und liefert sofort gefilterte Spiele zurück.
 

@@ -389,8 +389,7 @@ export function parseUploadedGames(fileText, fileTypeHint, context) {
   return parseUploadedGamesReport(fileText, fileTypeHint, context).games;
 }
 
-function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate, teams }) {
-  const selectedTeams = Array.isArray(teams) ? teams.filter(Boolean) : [];
+function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate }) {
   const fromDateObj = new Date(`${fromDate}T00:00:00`);
   const toDateObj = toDate ? new Date(`${toDate}T23:59:59`) : null;
 
@@ -401,13 +400,6 @@ function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate, te
       }
 
       if (game.jugendId && game.jugendId !== jugendId) {
-        return false;
-      }
-
-      if (
-        selectedTeams.length > 0 &&
-        !selectedTeams.some((team) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away))
-      ) {
         return false;
       }
 
@@ -454,6 +446,49 @@ function markSelectedTeamGames(games, teams) {
       priority: Math.max(5, Number(game.priority) || 0),
     };
   });
+}
+
+function createTeamFilterMeta(games, teams) {
+  const requestedTeams = Array.isArray(teams) ? teams.filter(Boolean) : [];
+  if (!requestedTeams.length) {
+    return {
+      requested: false,
+      requestedCount: 0,
+      matchedCount: 0,
+      matchedTeamCount: 0,
+      matchedTeams: [],
+      missingTeams: [],
+      binding: false,
+      fallbackToUnfiltered: false,
+    };
+  }
+
+  const matchedTeams = [];
+  const missingTeams = [];
+
+  for (const team of requestedTeams) {
+    const found = games.some((game) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away));
+    if (found) {
+      matchedTeams.push(team);
+    } else {
+      missingTeams.push(team);
+    }
+  }
+
+  const matchedCount = games.filter((game) =>
+    requestedTeams.some((team) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away)),
+  ).length;
+
+  return {
+    requested: true,
+    requestedCount: requestedTeams.length,
+    matchedCount,
+    matchedTeamCount: matchedTeams.length,
+    matchedTeams,
+    missingTeams,
+    binding: false,
+    fallbackToUnfiltered: false,
+  };
 }
 
 export function buildMockSchedule(teams, jugendId, fromDate, kreisId, toDate) {
@@ -531,10 +566,15 @@ async function fetchGamesCsv(params) {
 
   const filteredGames = filterGamesBySelection(params.uploadedGames, params);
   if (!filteredGames.length) {
-    throw new Error("Import enthält keine passenden Spiele für Kreis/Jugend/Team-Auswahl.");
+    throw new Error("Import enthält keine passenden Spiele für Kreis/Jugend/Datumsbereich.");
   }
 
-  return { games: filteredGames };
+  return {
+    games: markSelectedTeamGames(filteredGames, params.teams),
+    meta: {
+      teamFilter: createTeamFilterMeta(filteredGames, params.teams),
+    },
+  };
 }
 
 async function fetchGamesAdapter(params) {
@@ -590,22 +630,15 @@ async function fetchGamesAdapter(params) {
   });
 
   if (broadFilteredGames.length > 0) {
+    const fallbackTeamFilter = createTeamFilterMeta(broadFilteredGames, params.teams);
+
     return {
       games: markSelectedTeamGames(broadFilteredGames, params.teams),
       meta: {
         teamFilter:
           payload && !Array.isArray(payload) && payload.teamFilter
             ? payload.teamFilter
-            : {
-                requested: Array.isArray(params.teams) && params.teams.length > 0,
-                requestedCount: Array.isArray(params.teams) ? params.teams.length : 0,
-                matchedCount: 0,
-                matchedTeamCount: 0,
-                matchedTeams: [],
-                missingTeams: Array.isArray(params.teams) ? params.teams : [],
-                binding: false,
-                fallbackToUnfiltered: false,
-              },
+            : fallbackTeamFilter,
       },
     };
   }
@@ -618,7 +651,13 @@ async function fetchGamesMock(params) {
   const seedTeams =
     inputTeams.length >= 2 ? inputTeams : [...inputTeams, ...buildMockTeams(params.kreisId, Math.max(2, 8 - inputTeams.length))];
   const generated = buildMockSchedule(seedTeams, params.jugendId, params.fromDate, params.kreisId, params.toDate);
-  return { games: filterGamesBySelection(generated, params) };
+  const filteredGames = filterGamesBySelection(generated, params);
+  return {
+    games: markSelectedTeamGames(filteredGames, params.teams),
+    meta: {
+      teamFilter: createTeamFilterMeta(filteredGames, params.teams),
+    },
+  };
 }
 
 /**

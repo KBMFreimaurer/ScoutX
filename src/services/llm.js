@@ -1,4 +1,30 @@
-const LLM_TIMEOUT_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_MS || 30000);
+const LLM_TIMEOUT_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_MS || 120000);
+const LLM_TIMEOUT_OLLAMA_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OLLAMA_MS || 180000);
+const LLM_TIMEOUT_OPENAI_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OPENAI_MS || LLM_TIMEOUT_MS);
+
+function normalizeTimeout(value, fallback) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.round(parsed);
+  }
+  return fallback;
+}
+
+function resolveTimeoutMs({ timeoutMs, isOllama, prompt }) {
+  const explicitTimeout = normalizeTimeout(timeoutMs, 0);
+  if (explicitTimeout > 0) {
+    return explicitTimeout;
+  }
+
+  const base = isOllama
+    ? normalizeTimeout(LLM_TIMEOUT_OLLAMA_MS, 180000)
+    : normalizeTimeout(LLM_TIMEOUT_OPENAI_MS, 120000);
+  const promptText = String(prompt || "");
+  const bonusBlocks = Math.floor(promptText.length / 2000);
+  const promptBonusMs = Math.min(90000, bonusBlocks * 10000);
+
+  return base + promptBonusMs;
+}
 
 function createTimeoutController(timeoutMs) {
   const controller = new AbortController();
@@ -33,8 +59,30 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
   }
 }
 
-export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs = LLM_TIMEOUT_MS }) {
+async function fetchWithTimeoutRetry(url, options, timeoutMs, errorPrefix, retries = 1) {
+  let lastError = null;
+  let currentTimeout = timeoutMs;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetchWithTimeout(url, options, currentTimeout, errorPrefix);
+    } catch (error) {
+      lastError = error;
+      const isTimeout = /timeout/i.test(String(error?.message || ""));
+      if (!isTimeout || attempt >= retries) {
+        throw error;
+      }
+
+      currentTimeout = Math.round(currentTimeout * 1.5);
+    }
+  }
+
+  throw lastError || new Error(`${errorPrefix} Anfrage fehlgeschlagen.`);
+}
+
+export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs }) {
   const url = isOllama ? `${endpoint}/api/generate` : `${endpoint}/v1/chat/completions`;
+  const resolvedTimeoutMs = resolveTimeoutMs({ timeoutMs, isOllama, prompt });
   const body = isOllama
     ? JSON.stringify({ model, prompt, stream: false })
     : JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.7 });
@@ -44,7 +92,7 @@ export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeo
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await fetchWithTimeout(url, { method: "POST", headers, body }, timeoutMs, "LLM");
+  const response = await fetchWithTimeoutRetry(url, { method: "POST", headers, body }, resolvedTimeoutMs, "LLM", 1);
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 180)}` : ""}`);
@@ -55,7 +103,8 @@ export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeo
 }
 
 async function testOllamaConnection(endpoint, timeoutMs = LLM_TIMEOUT_MS) {
-  const response = await fetchWithTimeout(`${endpoint}/api/tags`, {}, timeoutMs, "LLM-Verbindungstest");
+  const resolvedTimeoutMs = normalizeTimeout(timeoutMs, normalizeTimeout(LLM_TIMEOUT_OLLAMA_MS, 180000));
+  const response = await fetchWithTimeout(`${endpoint}/api/tags`, {}, resolvedTimeoutMs, "LLM-Verbindungstest");
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }

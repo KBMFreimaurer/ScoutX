@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
-import { ScoutPlanProvider } from "./context/ScoutPlanContext";
+import { ScoutXProvider } from "./context/ScoutXContext";
 import { C, GCSS } from "./styles/theme";
 import { useWindowWidth } from "./hooks/useWindowWidth";
 import { KREISE } from "./data/kreise";
@@ -609,7 +609,14 @@ ${
       if (pdfPopup && !pdfPopup.closed) {
         pdfPopup.close();
       }
-      setErr(`LLM Fehler: ${error.message}`);
+      const message = String(error?.message || "Unbekannter Fehler");
+      if (/timeout/i.test(message)) {
+        setErr(
+          `LLM Fehler: ${message}. Das Modell braucht länger als erwartet. Versuche ein kleineres Modell oder erhöhe VITE_LLM_TIMEOUT_MS / VITE_LLM_TIMEOUT_OLLAMA_MS.`,
+        );
+      } else {
+        setErr(`LLM Fehler: ${message}`);
+      }
       return "";
     } finally {
       setLoadingAI(false);
@@ -617,15 +624,9 @@ ${
   };
 
   const onGeneratePlanPdf = async () => {
-    const popup = window.open("", "_blank");
-    if (!popup) {
-      setErr("Pop-up blockiert - bitte erlauben.");
-      return;
-    }
-
     await onGenerateAI({
-      navigateToPlan: false,
-      pdfPopup: popup,
+      navigateToPlan: true,
+      pdfPopup: null,
     });
   };
 
@@ -812,7 +813,7 @@ ${
             </div>
           </header>
 
-          <ScoutPlanProvider value={contextValue}>
+          <ScoutXProvider value={contextValue}>
             <main className="workspace">
               {err ? (
                 <div
@@ -852,7 +853,7 @@ ${
                 <Route path="*" element={<Navigate to="/setup" replace />} />
               </Routes>
             </main>
-          </ScoutPlanProvider>
+          </ScoutXProvider>
 
           <footer
             style={{

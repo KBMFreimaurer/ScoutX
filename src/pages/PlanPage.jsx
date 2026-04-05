@@ -3,7 +3,7 @@ import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { PDFExport } from "../components/PDFExport";
 import { PlanView } from "../components/PlanView";
-import { useScoutPlan } from "../context/ScoutPlanContext";
+import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
 
 export function PlanPage() {
@@ -18,7 +18,7 @@ export function PlanPage() {
     onBackGames,
     onResetSoft,
     onResetHard,
-  } = useScoutPlan();
+  } = useScoutX();
 
   return (
     <div className="fu">
