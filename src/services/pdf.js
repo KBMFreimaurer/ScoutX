@@ -822,14 +822,13 @@ export async function openScoutPdf(games, plan, cfg, popupWindow = null) {
     triggerDownload(blobUrl, fileName);
 
     if (popupWindow && !popupWindow.closed) {
-      popupWindow.location.href = blobUrl;
-      popupWindow.focus();
-      return;
-    }
-
-    const preview = window.open(blobUrl, "_blank");
-    if (preview) {
-      preview.focus();
+      try {
+        popupWindow.location.href = blobUrl;
+        popupWindow.focus();
+        return;
+      } catch {
+        // Fall through to plain download-only behavior.
+      }
     }
   } catch (error) {
     const message = String(error?.message || error || "Unbekannter Fehler");

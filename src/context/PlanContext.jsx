@@ -72,7 +72,11 @@ export function PlanProvider({ children, defaultLlmEndpoint }) {
         return dateDelta !== 0 ? dateDelta : toSortableTime(a.time).localeCompare(toSortableTime(b.time));
       });
 
-      const spielListe = allSorted
+      const PROMPT_GAME_LIMIT = 60;
+      const promptGames = allSorted.slice(0, PROMPT_GAME_LIMIT);
+      const wasTrimmed = allSorted.length > promptGames.length;
+
+      const spielListe = promptGames
         .map((game, index) => {
           const priorityText = game.priority >= 5 ? "[★ NLZ-relevant]" : game.priority >= 4 ? "[gehobenes Niveau]" : "";
           const kickoffText = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game.time || "").trim())
@@ -90,7 +94,7 @@ export function PlanProvider({ children, defaultLlmEndpoint }) {
       const [minAlter] = alterRange.split("–").map(Number);
       const jahrgang = Number.isNaN(minAlter) ? "unbekannt" : `${currentYear - minAlter - 1}/${currentYear - minAlter}`;
 
-      const prompt = `Du bist ein professioneller Fußball-Scout-Analyst mit Fokus auf Jugendfußball im Gebiet Deutschland (insbesondere FVN/Niederrhein), tätig für das NLZ von Borussia Mönchengladbach.
+      const prompt = `Du bist ein professioneller Fußball-Scout-Analyst für Jugendfußball im Gebiet FVN/Niederrhein, tätig für das NLZ von Borussia Mönchengladbach.
 
 KONTEXT
 Kreis: ${setup.kreis?.label} (FVN Niederrhein)
@@ -98,18 +102,11 @@ Altersklasse: ${setup.jugend?.label} — Jahrgang ca. ${jahrgang} (${setup.jugen
 Scout-Fokus: ${setup.focus || "Allgemein — Talente, Spielstärke, taktisches Niveau"}
 Scouting-Datum: ab ${setup.fromDate}
 
-SPIELLISTE (${allSorted.length} ${isTurnier ? "Turnierbegegnungen" : "Spiele"})
+SPIELLISTE (${promptGames.length}${wasTrimmed ? ` von ${allSorted.length}` : ""} ${isTurnier ? "Turnierbegegnungen" : "Spiele"})
 ${spielListe}
 
 AUFGABEN
-1. VALIDIERUNG
-Bewerte für jedes Spiel:
-- Altersklasse plausibel für ${setup.jugend?.label}? (Ja / Unsicher / Nicht eindeutig zuordenbar)
-- Wettbewerbsniveau einschätzen (z. B. Kreisklasse, Kreisleistungsklasse, Niederrheinliga)
-- ${isTurnier ? "Turnier-Besonderheiten (Spielzeit, Format)" : "Heim/Auswärts-Vorteil relevant?"}
-- Spiele mit [NLZ-relevant] besonders prüfen
-
-2. SCOUTING-BEWERTUNG
+1. SCOUTING-BEWERTUNG
 Ranke die TOP 5 Spiele nach Relevanz für NLZ-Scouting (Borussia Mönchengladbach).
 Kriterien (absteigend gewichtet):
 1) Vereinsniveau und Nachwuchsarbeit
@@ -118,8 +115,15 @@ Kriterien (absteigend gewichtet):
 4) Jahrgangsreinheit (${setup.jugend?.label} exakt vs. gemischt)
 Ausgabe je Spiel:
 - Rang + Spiel
-- Begründung (2–3 Sätze)
+- Begründung (maximal 2 Sätze)
 - Kennzeichnung: wahrscheinlich ${jahrgang.split("/")[0]}-lastig / gemischt / unklar
+
+2. VALIDIERUNG (nur für die TOP 5 aus Aufgabe 1)
+Für jedes Top-Spiel:
+- Altersklasse plausibel? (Ja / Unsicher / Nicht eindeutig)
+- Wettbewerbsniveau
+- ${isTurnier ? "Turnier-Besonderheiten" : "Heim/Auswärts-Vorteil relevant?"}
+- Kennzeichnung [NLZ-relevant], falls zutreffend
 
 3. ROUTENPLAN (MAX. 3 SPIELE)
 Erstelle den optimalen Scouting-Tag mit realistischen Fahrtzeiten zwischen Spielorten und mindestens 45 Minuten Anwesenheit pro Spiel.
@@ -133,15 +137,11 @@ Kurze Begründung der Route
 REGELN
 - Keine Spekulationen, keine erfundenen Daten
 - Wenn Wettbewerb unklar, explizit kennzeichnen
-- ${
-        isTurnier
-          ? "Turnierspiele: Spielzeit oft kürzer (z. B. 2x15 Min.) — Beobachtungszeit entsprechend anpassen"
-          : "Kinderfestivals oder Freundschaftsspiele separat kennzeichnen, falls erkennbar"
-      }
 - Den Punkt Beobachtungspunkte vollständig weglassen
 - Keine Markdown-Syntax verwenden
 - Keine Zeichen # und * verwenden
 - Antwort klar, professionell, faktenbasiert und ohne unnötigen Text
+- Kurz und kompakt antworten
 - Sprache: Deutsch`;
 
       const result = await callLLM({
@@ -150,6 +150,7 @@ REGELN
         model: llmModel,
         apiKey: llmKey,
         prompt,
+        maxOutputTokens: 1100,
       });
 
       const cleanedResult = cleanScoutPlanText(result);
@@ -202,15 +203,9 @@ REGELN
       return;
     }
 
-    const pdfPopup = window.open("", "_blank", "noopener,noreferrer");
-    if (pdfPopup && !pdfPopup.closed) {
-      pdfPopup.document.write("<!doctype html><html><head><title>ScoutX PDF</title></head><body style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:16px;color:#222'>PDF wird vorbereitet...</body></html>");
-      pdfPopup.document.close();
-    }
-
     await onGenerateAI({
       navigateToPlan: true,
-      pdfPopup,
+      pdfPopup: null,
     });
   }, [plan, gamesCtx.games, cfg, navigate, onGenerateAI]);
 

@@ -1,6 +1,7 @@
 const LLM_TIMEOUT_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_MS || 120000);
 const LLM_TIMEOUT_OLLAMA_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OLLAMA_MS || 180000);
 const LLM_TIMEOUT_OPENAI_MS = Number(import.meta.env?.VITE_LLM_TIMEOUT_OPENAI_MS || LLM_TIMEOUT_MS);
+const LLM_MAX_OUTPUT_TOKENS = Number(import.meta.env?.VITE_LLM_MAX_OUTPUT_TOKENS || 1100);
 const LLM_HTTP_RETRY_DELAYS_MS = [1000, 2000];
 const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 
@@ -8,6 +9,14 @@ function normalizeTimeout(value, fallback) {
   const parsed = Number(value);
   if (Number.isFinite(parsed) && parsed > 0) {
     return Math.round(parsed);
+  }
+  return fallback;
+}
+
+function normalizeMaxOutputTokens(value, fallback = 1100) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.max(200, Math.min(4000, Math.round(parsed)));
   }
   return fallback;
 }
@@ -162,12 +171,21 @@ async function requestLlmWithRetry(url, options, timeoutMs, errorPrefix) {
   throw lastError || new Error("LLM Anfrage fehlgeschlagen.");
 }
 
-export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs }) {
+export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs, maxOutputTokens }) {
   const url = isOllama ? `${endpoint}/api/generate` : `${endpoint}/v1/chat/completions`;
   const resolvedTimeoutMs = resolveTimeoutMs({ timeoutMs, isOllama, prompt });
+  const resolvedMaxOutputTokens = normalizeMaxOutputTokens(
+    maxOutputTokens,
+    normalizeMaxOutputTokens(LLM_MAX_OUTPUT_TOKENS, 1100),
+  );
   const body = isOllama
-    ? JSON.stringify({ model, prompt, stream: false })
-    : JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.7 });
+    ? JSON.stringify({ model, prompt, stream: false, options: { num_predict: resolvedMaxOutputTokens } })
+    : JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: resolvedMaxOutputTokens,
+    });
 
   const headers = { "Content-Type": "application/json" };
   if (apiKey) {
