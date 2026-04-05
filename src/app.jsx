@@ -442,16 +442,23 @@ export default function App() {
 
     try {
       const isTurnier = jugend?.turnier ?? false;
+      const toSortableTime = (value) => {
+        const text = String(value || "").trim();
+        return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : "99:99";
+      };
       const allSorted = [...games].sort((a, b) => {
         const dateDelta = a.dateObj - b.dateObj;
-        return dateDelta !== 0 ? dateDelta : a.time.localeCompare(b.time);
+        return dateDelta !== 0 ? dateDelta : toSortableTime(a.time).localeCompare(toSortableTime(b.time));
       });
 
       const spielListe = allSorted
         .map((game, index) => {
           const priorityText = game.priority >= 5 ? "[★ NLZ-relevant]" : game.priority >= 4 ? "[gehobenes Niveau]" : "";
+          const kickoffText = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game.time || "").trim())
+            ? `${game.time} Uhr`
+            : "Anstoß offen";
 
-          return `${index + 1}. ${game.dateLabel} ${game.time} Uhr — ${game.home} vs. ${game.away}\n   Spielort: ${
+          return `${index + 1}. ${game.dateLabel} ${kickoffText} — ${game.home} vs. ${game.away}\n   Spielort: ${
             game.venue
           }${priorityText ? ` | ${priorityText}` : ""}`;
         })

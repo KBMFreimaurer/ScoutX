@@ -1,4 +1,5 @@
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
 
 function parseDate(dateText) {
   if (!dateText || typeof dateText !== "string") {
@@ -123,12 +124,25 @@ function normalizeTeam(value, aliasMap = {}) {
 }
 
 function normalizeTime(value) {
-  if (!value) {
-    return "10:00";
+  if (value === undefined || value === null) {
+    return "--:--";
   }
 
   const text = String(value).trim();
-  return TIME_RE.test(text) ? text : "10:00";
+  if (TIME_RE.test(text)) {
+    return text;
+  }
+
+  if (UNKNOWN_TIME_RE.test(text)) {
+    return "--:--";
+  }
+
+  return "--:--";
+}
+
+function timeSortKey(value) {
+  const normalized = normalizeTime(value);
+  return TIME_RE.test(normalized) ? normalized : "99:99";
 }
 
 function toBoolean(value) {
@@ -196,7 +210,7 @@ function sortGames(a, b) {
     return da - db;
   }
 
-  const timeDelta = String(a.time || "").localeCompare(String(b.time || ""));
+  const timeDelta = timeSortKey(a.time).localeCompare(timeSortKey(b.time));
   if (timeDelta !== 0) {
     return timeDelta;
   }

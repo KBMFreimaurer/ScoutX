@@ -1,6 +1,9 @@
 import { C } from "../styles/theme";
 
 export function GameCards({ games }) {
+  const formatKickoff = (time) =>
+    /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? `${time} Uhr` : "Anstoß offen";
+
   return (
     <div className="game-cards" style={{ marginBottom: 16 }}>
       {games.map((game) => (
@@ -44,7 +47,7 @@ export function GameCards({ games }) {
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              {game.time} Uhr
+              {formatKickoff(game.time)}
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>

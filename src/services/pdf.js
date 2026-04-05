@@ -67,6 +67,19 @@ function formatMinutes(totalMinutes) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function timeSortKey(value) {
+  const parsed = parseMinutes(value);
+  if (!Number.isFinite(parsed)) {
+    return "99:99";
+  }
+  return formatMinutes(parsed);
+}
+
+function formatKickoffLabel(value) {
+  const text = toSafeString(value);
+  return Number.isFinite(parseMinutes(text)) ? `${text} Uhr` : "Anstoß offen";
+}
+
 function parseDateValue(game) {
   if (game?.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime())) {
     return game.dateObj.getTime();
@@ -97,7 +110,7 @@ function sortGamesByDateTime(games) {
     if (dateDelta !== 0) {
       return dateDelta;
     }
-    return toSafeString(left.time).localeCompare(toSafeString(right.time));
+    return timeSortKey(left.time).localeCompare(timeSortKey(right.time));
   });
 }
 
@@ -429,7 +442,7 @@ function drawTopCards(doc, state, topGames, reasonMap) {
     const reason = reasonForGame(game, reasonMap);
     const badges = inferBadges(game, reason);
 
-    const metaLine = `${formatGameDate(game)} · ${toSafeString(game.time) || "--:--"} Uhr · ${truncateText(
+    const metaLine = `${formatGameDate(game)} · ${formatKickoffLabel(game.time)} · ${truncateText(
       toSafeString(game.venue || "Sportanlage"),
       72,
     )}`;
@@ -592,7 +605,7 @@ function drawScheduleTable(doc, state, games, reasonMap) {
     const row = {
       nr: String(i + 1),
       date: formatGameDate(game),
-      time: `${toSafeString(game.time) || "--:--"} Uhr`,
+      time: formatKickoffLabel(game.time),
       match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
       venue: toSafeString(game.venue || "Sportanlage"),
       tags: tags || "—",

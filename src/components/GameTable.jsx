@@ -1,6 +1,8 @@
 import { C } from "../styles/theme";
 
 export function GameTable({ games, mode = "games" }) {
+  const formatKickoff = (time) => (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen");
+
   if (mode === "plan") {
     return (
       <div
@@ -36,7 +38,7 @@ export function GameTable({ games, mode = "games" }) {
               <span style={{ color: C.offWhite }}>{game.away}</span>
             </span>
             <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
-            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{game.time}</span>
+            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatKickoff(game.time)}</span>
           </div>
         ))}
       </div>
@@ -101,7 +103,7 @@ export function GameTable({ games, mode = "games" }) {
             <span style={{ color: C.offWhite }}>{game.away}</span>
           </span>
           <span style={{ color: C.gray }}>{game.dateLabel}</span>
-          <span style={{ color: C.gray }}>{game.time}</span>
+          <span style={{ color: C.gray }}>{formatKickoff(game.time)}</span>
           <span style={{ color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</span>
         </div>
       ))}

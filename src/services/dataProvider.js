@@ -11,6 +11,7 @@ export const DATA_SOURCE_LABELS = {
 
 const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Oberhausen"];
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
 const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 15000);
 const GENERIC_TEAM_TOKENS = new Set([
   "sv",
@@ -199,17 +200,40 @@ function normalizeDate(rawDate, fallbackIso) {
   return { value: parsed, fallback: false };
 }
 
-function normalizeTime(rawTime) {
-  if (!rawTime) {
-    return { value: "10:00", fallback: true };
+function normalizeTime(rawTime, options = {}) {
+  const allowUnknown = Boolean(options.allowUnknown);
+  const fallbackTime = TIME_RE.test(String(options.fallbackTime || "")) ? String(options.fallbackTime) : "10:00";
+
+  if (rawTime === undefined || rawTime === null || String(rawTime).trim() === "") {
+    if (allowUnknown) {
+      return { value: "--:--", fallback: false, unknown: true };
+    }
+    return { value: fallbackTime, fallback: true, unknown: false };
   }
 
   const timeText = String(rawTime).trim();
   if (TIME_RE.test(timeText)) {
-    return { value: timeText, fallback: false };
+    return { value: timeText, fallback: false, unknown: false };
   }
 
-  return { value: "10:00", fallback: true };
+  if (allowUnknown && UNKNOWN_TIME_RE.test(timeText)) {
+    return { value: "--:--", fallback: false, unknown: true };
+  }
+
+  return { value: fallbackTime, fallback: true, unknown: false };
+}
+
+function timeSortKey(value) {
+  const timeText = String(value || "").trim();
+  return TIME_RE.test(timeText) ? timeText : "99:99";
+}
+
+function compareGamesByDateTime(left, right) {
+  const dateDelta = left.dateObj - right.dateObj;
+  if (dateDelta !== 0) {
+    return dateDelta;
+  }
+  return timeSortKey(left.time).localeCompare(timeSortKey(right.time));
 }
 
 function parseKm(value) {
@@ -245,14 +269,17 @@ function normalizeUploadedGame(rawGame, index, context) {
 
   const issues = [];
   const date = normalizeDate(rawGame.date ?? rawGame.datum, context.fromDate);
-  const time = normalizeTime(rawGame.time ?? rawGame.uhrzeit ?? rawGame.anstoss ?? rawGame.kickoff);
+  const time = normalizeTime(rawGame.time ?? rawGame.uhrzeit ?? rawGame.anstoss ?? rawGame.kickoff, {
+    allowUnknown: Boolean(context.allowUnknownTime),
+    fallbackTime: context.defaultFallbackTime || "10:00",
+  });
 
   if (date.fallback) {
     issues.push("Datum ungültig/fehlend, Fallback auf Startdatum.");
   }
 
   if (time.fallback) {
-    issues.push("Anstoßzeit ungültig/fehlend, Fallback auf 10:00.");
+    issues.push(`Anstoßzeit ungültig/fehlend, Fallback auf ${time.value}.`);
   }
 
   const venue = rawGame.venue ?? rawGame.spielort ?? rawGame.ort ?? rawGame.location ?? "Sportanlage";
@@ -369,10 +396,7 @@ export function parseUploadedGamesReport(fileText, fileTypeHint, context) {
     games.push(game);
   });
 
-  games.sort((a, b) => {
-    const dateDelta = a.dateObj - b.dateObj;
-    return dateDelta !== 0 ? dateDelta : a.time.localeCompare(b.time);
-  });
+  games.sort(compareGamesByDateTime);
 
   return {
     games,
@@ -413,10 +437,7 @@ function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate }) 
 
       return true;
     })
-    .sort((a, b) => {
-      const dateDelta = a.dateObj - b.dateObj;
-      return dateDelta !== 0 ? dateDelta : a.time.localeCompare(b.time);
-    });
+    .sort(compareGamesByDateTime);
 }
 
 function buildMockTeams(kreisId, count = 10) {
@@ -553,10 +574,7 @@ export function buildMockSchedule(teams, jugendId, fromDate, kreisId, toDate) {
     });
   }
 
-  return result.sort((a, b) => {
-    const dateDelta = a.dateObj - b.dateObj;
-    return dateDelta !== 0 ? dateDelta : a.time.localeCompare(b.time);
-  });
+  return result.sort(compareGamesByDateTime);
 }
 
 async function fetchGamesCsv(params) {
@@ -622,6 +640,8 @@ async function fetchGamesAdapter(params) {
     jugendId: params.jugendId,
     fromDate: params.fromDate,
     turnier: params.turnier,
+    allowUnknownTime: true,
+    defaultFallbackTime: "--:--",
   });
 
   const broadFilteredGames = filterGamesBySelection(report.games, {

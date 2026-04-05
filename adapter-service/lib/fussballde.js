@@ -183,7 +183,105 @@ function parseTimeFromText(value) {
     return "";
   }
 
-  return `${match[1].padStart(2, "0")}:${match[2]}`;
+  const normalized = `${match[1].padStart(2, "0")}:${match[2]}`;
+  return normalized === "00:00" ? "" : normalized;
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function collectTimesFromMatches(sourceText, regex) {
+  const text = String(sourceText || "");
+  const candidates = [];
+
+  for (const match of text.matchAll(regex)) {
+    const raw = stripTags(match[1] || "");
+    const time = parseTimeFromText(raw);
+    if (!time) {
+      continue;
+    }
+    candidates.push({
+      index: match.index ?? 0,
+      time,
+    });
+  }
+
+  return candidates;
+}
+
+function pickNearestPrecedingTime(candidates, anchorIndex, maxDistance) {
+  let picked = "";
+  let pickedIndex = -1;
+
+  for (const candidate of candidates) {
+    if (candidate.index > anchorIndex) {
+      continue;
+    }
+
+    const distance = anchorIndex - candidate.index;
+    if (distance > maxDistance) {
+      continue;
+    }
+
+    if (candidate.index > pickedIndex) {
+      picked = candidate.time;
+      pickedIndex = candidate.index;
+    }
+  }
+
+  return picked;
+}
+
+function extractKickoffFromTeamPageHtml(html, matchId) {
+  if (!matchId) {
+    return "";
+  }
+
+  const text = String(html || "");
+  if (!text.includes(matchId)) {
+    return "";
+  }
+
+  const positions = [];
+  let cursor = text.indexOf(matchId);
+  while (cursor >= 0) {
+    positions.push(cursor);
+    cursor = text.indexOf(matchId, cursor + 1);
+  }
+
+  const columnDateTimes = collectTimesFromMatches(
+    text,
+    /<td[^>]*class="[^"]*\bcolumn-date\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi,
+  );
+  const rowHeadlineTimes = collectTimesFromMatches(
+    text,
+    /<tr[^>]*class="[^"]*\brow-headline\b[^"]*"[^>]*>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi,
+  );
+
+  for (const index of positions) {
+    const fromColumnDate = pickNearestPrecedingTime(columnDateTimes, index, 2200);
+    if (fromColumnDate) {
+      return fromColumnDate;
+    }
+
+    const fromHeadline = pickNearestPrecedingTime(rowHeadlineTimes, index, 2600);
+    if (fromHeadline) {
+      return fromHeadline;
+    }
+  }
+
+  const escapedMatchId = escapeRegExp(matchId);
+  const cardRegex = new RegExp(
+    `<a[^>]*href="[^"]*${escapedMatchId}[^"]*"[^>]*>[\\s\\S]*?<div[^>]*class="match-meta"[^>]*>([\\s\\S]*?)<\\/div>[\\s\\S]*?<\\/a>`,
+    "gi",
+  );
+  const cardTimes = collectTimesFromMatches(text, cardRegex);
+  if (cardTimes.length > 0) {
+    return cardTimes[0].time;
+  }
+
+  return "";
 }
 
 function parseIsoDateFromGerman(value) {
@@ -336,6 +434,7 @@ export {
   KREIS_AREA_KEYWORDS,
   buildDateRange,
   extractCompetitionEntries,
+  extractKickoffFromTeamPageHtml,
   extractMatchDetails,
   extractMatchesFromDatePage,
   extractStaffelId,

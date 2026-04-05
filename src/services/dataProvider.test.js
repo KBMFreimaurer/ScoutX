@@ -138,6 +138,45 @@ describe("data provider", () => {
     expect(result.games[0].home).toBe("ETB Schwarz-Weiß Essen");
   });
 
+  it("keeps unknown adapter kickoff as '--:--' instead of forcing 10:00", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-05-01",
+              time: "**",
+              home: "Team Unknown Time",
+              away: "Team B",
+              venue: "Sportpark",
+              km: 8,
+              kreisId: "duisburg",
+              jugendId: "d-jugend",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-07",
+      teams: ["Team Unknown Time"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].time).toBe("--:--");
+  });
+
   it("keeps unfiltered adapter week data when selected teams have no match", async () => {
     vi.stubGlobal(
       "fetch",

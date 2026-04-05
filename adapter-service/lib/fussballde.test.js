@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDateRange,
+  extractKickoffFromTeamPageHtml,
   extractMatchDetails,
   extractMatchesFromDatePage,
   pickAreaIdsForLeague,
@@ -86,6 +87,34 @@ describe("fussballde helpers", () => {
       home: "SC Viktoria Anrath D1",
       away: "TSV Kaldenkirchen",
     });
+  });
+
+  it("extracts kickoff from team page row data for a specific match id", () => {
+    const html = `
+      <table>
+        <tbody>
+          <tr class="row-competition hidden-small">
+            <td class="column-date"><span class="hidden-small inline">Sa, 11.04.26 |&nbsp;</span>13:00</td>
+          </tr>
+          <tr class="odd">
+            <td class="column-score">
+              <a href="https://www.fussball.de/spiel/team-a-team-b/-/spiel/02TESTMATCHID000000VS5489BTV000000">Zum Spiel</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    expect(extractKickoffFromTeamPageHtml(html, "02TESTMATCHID000000VS5489BTV000000")).toBe("13:00");
+  });
+
+  it("does not pick unrelated nearby times for team-page kickoff", () => {
+    const html = `
+      <div class="match-meta"><span>Letztes Spiel: 15:00 | Meisterschaften</span></div>
+      <a href="https://www.fussball.de/spiel/team-c-team-d/-/spiel/02TESTMATCHID000000VS5489BTV000000">Zum Spiel</a>
+    `;
+
+    expect(extractKickoffFromTeamPageHtml(html, "02TESTMATCHID000000VS5489BTV000000")).toBe("");
   });
 
   it("matches kreis areas by keyword and falls back to regional areas", () => {

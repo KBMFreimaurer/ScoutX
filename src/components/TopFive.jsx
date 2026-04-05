@@ -1,6 +1,8 @@
 import { C, secH } from "../styles/theme";
 
 export function TopFive({ games }) {
+  const formatKickoff = (time) => (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen");
+
   return (
     <div
       className="fu2"
@@ -58,7 +60,7 @@ export function TopFive({ games }) {
           </span>
 
           <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
-          <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.time}</span>
+          <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{formatKickoff(game.time)}</span>
         </div>
       ))}
     </div>

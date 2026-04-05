@@ -5,6 +5,7 @@ import {
   JUGEND_TO_TEAM_TYPE,
   buildDateRange,
   extractCompetitionEntries,
+  extractKickoffFromTeamPageHtml,
   extractMatchDetails,
   extractMatchesFromDatePage,
   extractStaffelId,
@@ -159,6 +160,8 @@ function buildDateRangeFromEnv() {
 }
 
 function normalizeGames(games) {
+  const timeSortKey = (value) => (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || "").trim()) ? String(value) : "99:99");
+
   return uniqueBy(games, (game) => `${game.date}|${game.time}|${game.home}|${game.away}`)
     .sort((a, b) => {
       const dateDelta = a.date.localeCompare(b.date);
@@ -166,7 +169,7 @@ function normalizeGames(games) {
         return dateDelta;
       }
 
-      const timeDelta = a.time.localeCompare(b.time);
+      const timeDelta = timeSortKey(a.time).localeCompare(timeSortKey(b.time));
       if (timeDelta !== 0) {
         return timeDelta;
       }
@@ -200,42 +203,6 @@ function extractTeamPageUrlsFromMatchHtml(html) {
     homeTeamUrl: fallback[0] || "",
     awayTeamUrl: fallback[1] || "",
   };
-}
-
-function extractKickoffFromTeamPageHtml(html, matchId) {
-  if (!matchId) {
-    return "";
-  }
-
-  const text = String(html || "");
-  let cursor = text.indexOf(matchId);
-  const positions = [];
-  while (cursor >= 0) {
-    positions.push(cursor);
-    cursor = text.indexOf(matchId, cursor + 1);
-  }
-
-  for (const idx of positions) {
-    const localWindow = text.slice(Math.max(0, idx - 260), idx + 260);
-    const localTimes = [...localWindow.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)];
-    if (localTimes.length > 0) {
-      const [, hour, minute] = localTimes[0];
-      return `${hour}:${minute}`;
-    }
-  }
-
-  // Fallback: broader scan around first match id occurrence
-  if (positions.length > 0) {
-    const idx = positions[0];
-    const wideWindow = text.slice(Math.max(0, idx - 900), idx + 900);
-    const wideTimes = [...wideWindow.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)];
-    if (wideTimes.length > 0) {
-      const [, hour, minute] = wideTimes[0];
-      return `${hour}:${minute}`;
-    }
-  }
-
-  return "";
 }
 
 async function getTeamPageHtml(url, cache) {
@@ -426,7 +393,7 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
         home: parsed.home || candidate.home,
         away: parsed.away || candidate.away,
         date,
-        time: kickoff || "10:00",
+        time: kickoff || "--:--",
         venue: parsed.venue || "Sportanlage",
         km: 0,
         kreisId,
