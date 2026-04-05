@@ -12,7 +12,7 @@ function renderSetupPage() {
     <MemoryRouter initialEntries={["/setup"]}>
       <SetupProvider defaultAdapterEndpoint="/api/games">
         <GamesProvider>
-          <PlanProvider defaultLlmEndpoint="/ollama">
+          <PlanProvider>
             <ScoutXProvider>
               <SetupPage />
             </ScoutXProvider>

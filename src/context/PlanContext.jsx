@@ -1,9 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LLM_PRESETS } from "../config/llmPresets";
-import { callLLM, testConnection } from "../services/llm";
 import { openScoutPdf } from "../services/pdf";
-import { cleanScoutPlanText, normalizeLlmEndpoint } from "./shared";
+import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
 
@@ -100,22 +98,12 @@ function buildQuickScoutPlan({ games, jugendLabel, isTurnier, jahrgang }) {
   return cleanScoutPlanText(lines.join("\n"));
 }
 
-export function PlanProvider({ children, defaultLlmEndpoint }) {
+export function PlanProvider({ children }) {
   const navigate = useNavigate();
   const setup = useSetup();
   const gamesCtx = useGames();
 
-  const fixedLlmPreset = LLM_PRESETS.qwen;
-  const llmType = "qwen";
-  const llmModel = fixedLlmPreset.model;
-  const llmEndpoint = normalizeLlmEndpoint(fixedLlmPreset.endpoint, defaultLlmEndpoint);
-  const llmKey = "";
-  const llmIsOllama = true;
-  const rememberApiKey = false;
-
   const [plan, setPlan] = useState("");
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [connStatus, setConnStatus] = useState(null);
 
   const cfg = useMemo(
     () => ({
@@ -131,161 +119,6 @@ export function PlanProvider({ children, defaultLlmEndpoint }) {
   useEffect(() => {
     setPlan("");
   }, [gamesCtx.games]);
-
-  const onTestConnection = useCallback(async () => {
-    setConnStatus("testing");
-
-    try {
-      const result = await testConnection({
-        endpoint: llmEndpoint,
-        isOllama: llmIsOllama,
-        model: llmModel,
-        apiKey: llmKey,
-      });
-      setConnStatus(result);
-    } catch (error) {
-      setConnStatus({ ok: false, error: error.message });
-    }
-  }, [llmEndpoint, llmIsOllama, llmModel, llmKey]);
-
-  const onGenerateAI = useCallback(async ({ navigateToPlan = true, pdfPopup = null } = {}) => {
-    setLoadingAI(true);
-    setup.setErr("");
-
-    try {
-      const isTurnier = setup.jugend?.turnier ?? false;
-      const toSortableTime = (value) => {
-        const text = String(value || "").trim();
-        return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : "99:99";
-      };
-      const allSorted = [...gamesCtx.games].sort((a, b) => {
-        const dateDelta = a.dateObj - b.dateObj;
-        return dateDelta !== 0 ? dateDelta : toSortableTime(a.time).localeCompare(toSortableTime(b.time));
-      });
-
-      const PROMPT_GAME_LIMIT = 60;
-      const promptGames = allSorted.slice(0, PROMPT_GAME_LIMIT);
-      const wasTrimmed = allSorted.length > promptGames.length;
-
-      const spielListe = promptGames
-        .map((game, index) => {
-          const priorityText = game.priority >= 5 ? "[★ NLZ-relevant]" : game.priority >= 4 ? "[gehobenes Niveau]" : "";
-          const kickoffText = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game.time || "").trim())
-            ? `${game.time} Uhr`
-            : "Anstoß offen";
-
-          return `${index + 1}. ${game.dateLabel} ${kickoffText} — ${game.home} vs. ${game.away}\n   Spielort: ${
-            game.venue
-          }${priorityText ? ` | ${priorityText}` : ""}`;
-        })
-        .join("\n\n");
-
-      const currentYear = new Date().getFullYear();
-      const alterRange = setup.jugend?.alter ?? "?";
-      const [minAlter] = alterRange.split("–").map(Number);
-      const jahrgang = Number.isNaN(minAlter) ? "unbekannt" : `${currentYear - minAlter - 1}/${currentYear - minAlter}`;
-
-      const prompt = `Du bist ein professioneller Fußball-Scout-Analyst für Jugendfußball im Gebiet FVN/Niederrhein, tätig für das NLZ von Borussia Mönchengladbach.
-
-KONTEXT
-Kreis: ${setup.kreis?.label} (FVN Niederrhein)
-Altersklasse: ${setup.jugend?.label} — Jahrgang ca. ${jahrgang} (${setup.jugend?.alter} Jahre)${isTurnier ? " — TURNIERFORMAT (kein klassisches Heim/Auswärts)" : ""}
-Scout-Fokus: ${setup.focus || "Allgemein — Talente, Spielstärke, taktisches Niveau"}
-Scouting-Datum: ab ${setup.fromDate}
-
-SPIELLISTE (${promptGames.length}${wasTrimmed ? ` von ${allSorted.length}` : ""} ${isTurnier ? "Turnierbegegnungen" : "Spiele"})
-${spielListe}
-
-AUFGABEN
-1. SCOUTING-BEWERTUNG
-Ranke die TOP 5 Spiele nach Relevanz für NLZ-Scouting (Borussia Mönchengladbach).
-Kriterien (absteigend gewichtet):
-1) Vereinsniveau und Nachwuchsarbeit
-2) Wettbewerbsklasse
-3) Gegnerqualität
-4) Jahrgangsreinheit (${setup.jugend?.label} exakt vs. gemischt)
-Ausgabe je Spiel:
-- Rang + Spiel
-- Begründung (maximal 2 Sätze)
-- Kennzeichnung: wahrscheinlich ${jahrgang.split("/")[0]}-lastig / gemischt / unklar
-
-2. VALIDIERUNG (nur für die TOP 5 aus Aufgabe 1)
-Für jedes Top-Spiel:
-- Altersklasse plausibel? (Ja / Unsicher / Nicht eindeutig)
-- Wettbewerbsniveau
-- ${isTurnier ? "Turnier-Besonderheiten" : "Heim/Auswärts-Vorteil relevant?"}
-- Kennzeichnung [NLZ-relevant], falls zutreffend
-
-3. ROUTENPLAN (MAX. 3 SPIELE)
-Erstelle den optimalen Scouting-Tag mit realistischen Fahrtzeiten zwischen Spielorten und mindestens 45 Minuten Anwesenheit pro Spiel.
-Format:
-SCOUTING PLAN
-[Uhrzeit] — [Spiel] | [Spielort]
-[Uhrzeit] — [Spiel] | [Spielort]
-[Uhrzeit] — [Spiel] | [Spielort]
-Kurze Begründung der Route
-
-REGELN
-- Keine Spekulationen, keine erfundenen Daten
-- Wenn Wettbewerb unklar, explizit kennzeichnen
-- Den Punkt Beobachtungspunkte vollständig weglassen
-- Keine Markdown-Syntax verwenden
-- Keine Zeichen # und * verwenden
-- Antwort klar, professionell, faktenbasiert und ohne unnötigen Text
-- Kurz und kompakt antworten
-- Sprache: Deutsch`;
-
-      const result = await callLLM({
-        endpoint: llmEndpoint,
-        isOllama: llmIsOllama,
-        model: llmModel,
-        apiKey: llmKey,
-        prompt,
-        maxOutputTokens: 1100,
-      });
-
-      const cleanedResult = cleanScoutPlanText(result);
-      setPlan(cleanedResult);
-
-      if (pdfPopup) {
-        openScoutPdf(gamesCtx.games, cleanedResult, cfg, pdfPopup);
-      }
-
-      if (navigateToPlan) {
-        navigate("/plan");
-      }
-
-      return cleanedResult;
-    } catch (error) {
-      if (pdfPopup && !pdfPopup.closed) {
-        pdfPopup.close();
-      }
-      const message = String(error?.message || "Unbekannter Fehler");
-      if (/timeout/i.test(message)) {
-        setup.setErr(
-          `LLM Fehler: ${message}. Qwen braucht länger als erwartet. Prüfe die lokale Ollama-Performance oder erhöhe VITE_LLM_TIMEOUT_MS / VITE_LLM_TIMEOUT_OLLAMA_MS.`,
-        );
-      } else if (/http 504|gateway time-out|gateway timeout/i.test(message)) {
-        setup.setErr(
-          "LLM Fehler: HTTP 504 Gateway Timeout. Der LLM-Server war zu langsam erreichbar. Bitte erneut versuchen; ScoutX wiederholt den Aufruf bereits automatisch.",
-        );
-      } else {
-        setup.setErr(`LLM Fehler: ${message}`);
-      }
-      return "";
-    } finally {
-      setLoadingAI(false);
-    }
-  }, [
-    setup,
-    gamesCtx.games,
-    llmEndpoint,
-    llmIsOllama,
-    llmModel,
-    llmKey,
-    cfg,
-    navigate,
-  ]);
 
   const onGeneratePlanPdf = useCallback(async () => {
     if (String(plan || "").trim()) {
@@ -331,18 +164,8 @@ REGELN
   const value = useMemo(
     () => ({
       plan,
-      loadingAI,
       cfg,
-      llmType,
-      llmModel,
-      llmEndpoint,
-      llmKey,
-      llmIsOllama,
-      rememberApiKey,
-      connStatus,
       setPlan,
-      onTestConnection,
-      onGenerateAI,
       onGeneratePlanPdf,
       onBackGames,
       onResetSoft,
@@ -350,17 +173,7 @@ REGELN
     }),
     [
       plan,
-      loadingAI,
       cfg,
-      llmType,
-      llmModel,
-      llmEndpoint,
-      llmKey,
-      llmIsOllama,
-      rememberApiKey,
-      connStatus,
-      onTestConnection,
-      onGenerateAI,
       onGeneratePlanPdf,
       onBackGames,
       onResetSoft,

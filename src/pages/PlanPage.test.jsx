@@ -15,7 +15,6 @@ function createBaseContext(overrides = {}) {
     plan: "",
     kreis: { label: "Duisburg" },
     jugend: { label: "D-Jugend" },
-    llmModel: "qwen2.5:7b",
     isMobile: false,
     cfg: {
       kreisLabel: "Duisburg",

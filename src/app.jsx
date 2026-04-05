@@ -13,7 +13,6 @@ const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ def
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
-const DEFAULT_LLM_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || "/ollama";
 
 const RAIL_ICONS = {
   setup: (
@@ -70,7 +69,7 @@ function RouteFallback() {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { width, isMobile, games, plan, err, loadingGames, loadingAI, clearErr, onResetSoft } = useScoutX();
+  const { width, isMobile, games, plan, err, loadingGames, clearErr, onResetSoft } = useScoutX();
 
   const currentStep = useMemo(() => {
     if (location.pathname.startsWith("/games")) {
@@ -101,9 +100,7 @@ function AppLayout() {
     ? err
     : loadingGames
       ? "Spiele werden geladen."
-      : loadingAI
-        ? "Scout-Plan wird erstellt."
-        : "";
+      : "";
 
   return (
     <div className="app-shell" style={{ color: C.offWhite, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
@@ -262,7 +259,7 @@ export default function App() {
       <style>{GCSS}</style>
       <SetupProvider defaultAdapterEndpoint={DEFAULT_ADAPTER_ENDPOINT}>
         <GamesProvider>
-          <PlanProvider defaultLlmEndpoint={DEFAULT_LLM_ENDPOINT}>
+          <PlanProvider>
             <ScoutXProvider>
               <AppLayout />
             </ScoutXProvider>

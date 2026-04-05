@@ -68,11 +68,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     );
   }, [kreisId, jugendId, activeTeams, fromDate, focus, dataMode, adapterEndpoint]);
 
-  useEffect(() => {
-    window.localStorage.removeItem(STORAGE_KEYS.llm);
-    window.sessionStorage.removeItem(STORAGE_KEYS.llmSessionKey);
-  }, []);
-
   const clearErr = useCallback(() => setErr(""), []);
 
   const onSelectKreis = useCallback((id) => {

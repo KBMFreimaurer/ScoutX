@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
-import { SkeletonLoader } from "../components/SkeletonLoader";
 import { TopFive } from "../components/TopFive";
 import { DATA_SOURCE_LABELS } from "../services/dataProvider";
 import { useScoutX } from "../context/ScoutXContext";
@@ -16,8 +15,6 @@ export function GamesPage() {
     activeTeams,
     teamValidation,
     prioritized,
-    llmModel,
-    loadingAI,
     dataSourceUsed,
     onBackSetup,
     onGeneratePlanPdf,
@@ -128,21 +125,12 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} disabled={loadingAI} style={{ width: "100%" }}>
-        {loadingAI ? (
-          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-            <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
-            Plan wird erstellt mit {llmModel}...
-          </span>
-        ) : (
-          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            Scout-Plan erstellen
-          </span>
-        )}
+      <PrimaryButton onClick={onGeneratePlanPdf} style={{ width: "100%" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Scout-Plan erstellen
+        </span>
       </PrimaryButton>
-
-      {loadingAI ? <SkeletonLoader rows={6} /> : null}
     </div>
   );
 }

@@ -13,7 +13,6 @@ export function PlanPage() {
     plan,
     kreis,
     jugend,
-    llmModel,
     isMobile,
     cfg,
     onBackGames,
@@ -62,7 +61,7 @@ export function PlanPage() {
           </div>
 
           <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
-            {kreis?.label} · {llmModel}
+            {kreis?.label}
           </div>
         </div>
 
