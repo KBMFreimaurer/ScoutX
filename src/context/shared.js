@@ -112,9 +112,12 @@ export function normalizeTeamParameters(values) {
 }
 
 export function cleanScoutPlanText(rawText) {
-  return String(rawText || "")
+  const lines = String(rawText || "")
     .replace(/[#*]/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => !/^(?:VALIDIERUNG)$/i.test(line.trim()))
+    .filter((line) => !/^(?:Wettbewerbsniveau|Scout-?Niveau)\s*:/i.test(line.trim()));
+
+  return lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }

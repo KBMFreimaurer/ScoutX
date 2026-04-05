@@ -137,6 +137,14 @@ function sanitizePlanText(rawPlan) {
     const line = sourceLine.replace(/^\s*[-•]\s+/, "").trim();
     const lookup = line.toLowerCase();
 
+    if (/^(?:validierung)$/i.test(line)) {
+      continue;
+    }
+
+    if (/^(?:wettbewerbsniveau|scout-?niveau)\s*:/i.test(line)) {
+      continue;
+    }
+
     if (/beobachtungspunkte/.test(lookup)) {
       skipObservation = true;
       continue;

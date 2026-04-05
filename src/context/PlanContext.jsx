@@ -20,17 +20,6 @@ function kickoffLabel(value) {
   return KNOWN_TIME_RE.test(text) ? `${text} Uhr` : "Anstoß offen";
 }
 
-function inferLevel(priority) {
-  const value = Number(priority || 0);
-  if (value >= 5) {
-    return "gehobenes Niveau";
-  }
-  if (value >= 4) {
-    return "solides Wettbewerbsniveau";
-  }
-  return "offenes Wettbewerbsniveau";
-}
-
 function inferReason(priority) {
   const value = Number(priority || 0);
   if (value >= 5) {
@@ -57,7 +46,6 @@ function buildQuickScoutPlan({ games, jugendLabel, isTurnier, jahrgang }) {
   const firstYear = String(jahrgang || "").split("/")[0] || "unbekannt";
   const lines = [];
 
-  lines.push("VALIDIERUNG");
   lines.push("Validierung der Top-Spiele:");
 
   if (topGames.length === 0) {
@@ -67,7 +55,6 @@ function buildQuickScoutPlan({ games, jugendLabel, isTurnier, jahrgang }) {
       const game = topGames[index];
       lines.push(`Spiel ${index + 1}: ${game.home} vs. ${game.away} (${kickoffLabel(game.time)})`);
       lines.push(`Altersklasse: Plausibel für ${jugendLabel || "die gewählte Altersklasse"}.`);
-      lines.push(`Wettbewerbsniveau: ${inferLevel(game.priority)}.`);
       lines.push(
         isTurnier
           ? "Turnier-Besonderheiten: Kurze Spielzeiten und enge Wechselrhythmen berücksichtigen."

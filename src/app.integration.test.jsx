@@ -77,7 +77,7 @@ describe("ScoutX Integration", () => {
     await screen.findByRole("button", { name: /Scout-Plan erstellen/i });
     fireEvent.click(screen.getByRole("button", { name: /Scout-Plan erstellen/i }));
 
-    await screen.findByText(/VALIDIERUNG/i);
+    await screen.findByText(/Validierung der Top-Spiele/i);
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
