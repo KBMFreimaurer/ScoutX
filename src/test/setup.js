@@ -45,4 +45,10 @@ function ensureStorage(name) {
 if (typeof window !== "undefined") {
   ensureStorage("localStorage");
   ensureStorage("sessionStorage");
+
+  Object.defineProperty(window, "open", {
+    value: () => null,
+    configurable: true,
+    writable: true,
+  });
 }

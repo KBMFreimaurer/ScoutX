@@ -196,11 +196,23 @@ REGELN
   ]);
 
   const onGeneratePlanPdf = useCallback(async () => {
+    if (String(plan || "").trim()) {
+      openScoutPdf(gamesCtx.games, plan, cfg);
+      navigate("/plan");
+      return;
+    }
+
+    const pdfPopup = window.open("", "_blank", "noopener,noreferrer");
+    if (pdfPopup && !pdfPopup.closed) {
+      pdfPopup.document.write("<!doctype html><html><head><title>ScoutX PDF</title></head><body style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:16px;color:#222'>PDF wird vorbereitet...</body></html>");
+      pdfPopup.document.close();
+    }
+
     await onGenerateAI({
       navigateToPlan: true,
-      pdfPopup: null,
+      pdfPopup,
     });
-  }, [onGenerateAI]);
+  }, [plan, gamesCtx.games, cfg, navigate, onGenerateAI]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
