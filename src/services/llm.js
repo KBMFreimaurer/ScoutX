@@ -21,6 +21,14 @@ function normalizeMaxOutputTokens(value, fallback = 1100) {
   return fallback;
 }
 
+function normalizeRetryCount(value, fallback = 0, max = 3) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return Math.max(0, Math.min(max, Math.round(parsed)));
+  }
+  return fallback;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -137,13 +145,15 @@ function isRetryableLlmError(error) {
   return /timeout|nicht erreichbar|network|failed to fetch|gateway time-out|gateway timeout/.test(message);
 }
 
-async function requestLlmWithRetry(url, options, timeoutMs, errorPrefix) {
+async function requestLlmWithRetry(url, options, timeoutMs, errorPrefix, retryOptions = {}) {
+  const maxHttpRetries = normalizeRetryCount(retryOptions.maxHttpRetries, 2, 4);
+  const maxTimeoutRetries = normalizeRetryCount(retryOptions.maxTimeoutRetries, 1, 3);
   let currentTimeout = timeoutMs;
   let lastError = null;
 
-  for (let attempt = 0; attempt <= LLM_HTTP_RETRY_DELAYS_MS.length; attempt += 1) {
+  for (let attempt = 0; attempt <= maxHttpRetries; attempt += 1) {
     try {
-      const response = await fetchWithTimeoutRetry(url, options, currentTimeout, errorPrefix, 1);
+      const response = await fetchWithTimeoutRetry(url, options, currentTimeout, errorPrefix, maxTimeoutRetries);
       if (response.ok) {
         return response;
       }
@@ -152,26 +162,37 @@ async function requestLlmWithRetry(url, options, timeoutMs, errorPrefix) {
       const responseError = buildHttpError(response.status, text);
       lastError = responseError;
 
-      const canRetryStatus = attempt < LLM_HTTP_RETRY_DELAYS_MS.length && isRetryableHttpStatus(response.status);
+      const canRetryStatus = attempt < maxHttpRetries && isRetryableHttpStatus(response.status);
       if (!canRetryStatus) {
         throw responseError;
       }
     } catch (error) {
       lastError = error;
-      const canRetryError = attempt < LLM_HTTP_RETRY_DELAYS_MS.length && isRetryableLlmError(error);
+      const canRetryError = attempt < maxHttpRetries && isRetryableLlmError(error);
       if (!canRetryError) {
         throw error;
       }
     }
 
-    await sleep(SKIP_RETRY_WAIT ? 0 : LLM_HTTP_RETRY_DELAYS_MS[attempt]);
+    const delayMs = LLM_HTTP_RETRY_DELAYS_MS[Math.min(attempt, LLM_HTTP_RETRY_DELAYS_MS.length - 1)] || 0;
+    await sleep(SKIP_RETRY_WAIT ? 0 : delayMs);
     currentTimeout = Math.round(currentTimeout * 1.2);
   }
 
   throw lastError || new Error("LLM Anfrage fehlgeschlagen.");
 }
 
-export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeoutMs, maxOutputTokens }) {
+export async function callLLM({
+  endpoint,
+  isOllama,
+  model,
+  apiKey,
+  prompt,
+  timeoutMs,
+  maxOutputTokens,
+  maxHttpRetries,
+  maxTimeoutRetries,
+}) {
   const url = isOllama ? `${endpoint}/api/generate` : `${endpoint}/v1/chat/completions`;
   const resolvedTimeoutMs = resolveTimeoutMs({ timeoutMs, isOllama, prompt });
   const resolvedMaxOutputTokens = normalizeMaxOutputTokens(
@@ -192,7 +213,16 @@ export async function callLLM({ endpoint, isOllama, model, apiKey, prompt, timeo
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const response = await requestLlmWithRetry(url, { method: "POST", headers, body }, resolvedTimeoutMs, "LLM");
+  const response = await requestLlmWithRetry(
+    url,
+    { method: "POST", headers, body },
+    resolvedTimeoutMs,
+    "LLM",
+    {
+      maxHttpRetries,
+      maxTimeoutRetries,
+    },
+  );
 
   const data = await response.json();
   return isOllama ? data.response ?? "" : data.choices?.[0]?.message?.content ?? "";

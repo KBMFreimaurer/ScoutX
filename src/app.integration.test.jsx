@@ -2,6 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./app";
+import { openScoutPdf } from "./services/pdf";
+
+vi.mock("./services/pdf", () => ({
+  openScoutPdf: vi.fn(),
+}));
 
 describe("ScoutX Integration", () => {
   beforeEach(() => {
@@ -14,7 +19,7 @@ describe("ScoutX Integration", () => {
     vi.restoreAllMocks();
   });
 
-  it("durchlaeuft Setup -> Games -> Plan mit gemocktem LLM", async () => {
+  it("durchlaeuft Setup -> Games -> Plan mit schnellem PDF-Flow", async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
 
@@ -53,17 +58,6 @@ describe("ScoutX Integration", () => {
         };
       }
 
-      if (url.includes("/api/generate")) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            response:
-              "VALIDIERUNG\nSpiel 1: Duisburger FV 08 vs Tuspo Saarn\nSCOUTING-BEWERTUNG\nTOP 5 Spiele\nROUTENPLAN\n14:00 — Duisburger FV 08 vs Tuspo Saarn | Sportanlage Mitte",
-          }),
-        };
-      }
-
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
@@ -86,6 +80,7 @@ describe("ScoutX Integration", () => {
     await screen.findByText(/VALIDIERUNG/i);
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
+    expect(openScoutPdf).toHaveBeenCalledTimes(1);
   });
 });
