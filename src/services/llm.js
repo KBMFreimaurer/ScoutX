@@ -15,10 +15,16 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
   try {
     return await fetch(url, { ...options, signal });
   } catch (error) {
+    const message = String(error?.message || "");
+    const isNetworkError =
+      error instanceof TypeError ||
+      error?.name === "TypeError" ||
+      /load failed|failed to fetch|networkerror/i.test(message);
+
     if (error?.name === "AbortError") {
       throw new Error(`${errorPrefix} Timeout nach ${timeoutMs}ms`);
     }
-    if (error instanceof TypeError) {
+    if (isNetworkError) {
       throw new Error(`${errorPrefix} nicht erreichbar (${url}). Prüfe Endpoint/Proxy/CORS.`);
     }
     throw error;

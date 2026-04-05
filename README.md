@@ -23,6 +23,8 @@ Der Adapter kann dann die angefragte Woche automatisch aktualisieren:
 - `Auto`-Datenmodus nutzt nur echte Quellen (`CSV -> Adapter`), kein stiller Demo-Fallback
 - Frontend-Default für den Adapter ist `/api/games` (Proxy über Vite/Nginx)
 - Optionales Frontend-Override: `VITE_ADAPTER_ENDPOINT=https://dein-host/api/games`
+- Teamauswahl in ScoutX wird beim Live-Adapter als Such-Hinweis genutzt (nicht als harter Filter): passende Vereins-Spiele werden priorisiert, aber weitere Kreis/Jugend-Spiele bleiben im Plan/PDF enthalten.
+- Frisch exportierte Wochen-Daten ersetzen für diese Woche vorhandene Store-Daten (inkl. Sample), damit PDFs reale Ergebnisse enthalten.
 
 Dadurch ist kein manueller Import vor jeder Planung nötig.
 

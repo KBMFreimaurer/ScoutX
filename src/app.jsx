@@ -44,7 +44,15 @@ function readSessionValue(key, fallback = "") {
 
 function isLocalHost(hostname) {
   const host = String(hostname || "").toLowerCase();
-  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
+}
+
+function tryParseAbsoluteUrl(urlText) {
+  try {
+    return new URL(urlText);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
@@ -58,9 +66,13 @@ function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
   }
 
   const appIsLocal = isLocalHost(window.location.hostname);
-  const endpointIsLocal = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(endpoint);
+  const parsed = tryParseAbsoluteUrl(endpoint);
+  const endpointIsAbsolute = Boolean(parsed);
+  const endpointIsLocal = endpointIsAbsolute ? isLocalHost(parsed.hostname) : false;
+  const mixedContentRisk =
+    window.location.protocol === "https:" && endpointIsAbsolute && parsed.protocol.toLowerCase() === "http:";
 
-  if (!appIsLocal && endpointIsLocal) {
+  if ((!appIsLocal && endpointIsLocal) || mixedContentRisk) {
     return fallbackEndpoint;
   }
 
@@ -78,9 +90,13 @@ function normalizeLlmEndpoint(savedEndpoint, fallbackEndpoint) {
   }
 
   const appIsLocal = isLocalHost(window.location.hostname);
-  const endpointIsLocal = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(endpoint);
+  const parsed = tryParseAbsoluteUrl(endpoint);
+  const endpointIsAbsolute = Boolean(parsed);
+  const endpointIsLocal = endpointIsAbsolute ? isLocalHost(parsed.hostname) : false;
+  const mixedContentRisk =
+    window.location.protocol === "https:" && endpointIsAbsolute && parsed.protocol.toLowerCase() === "http:";
 
-  if (!appIsLocal && endpointIsLocal) {
+  if ((!appIsLocal && endpointIsLocal) || mixedContentRisk) {
     return fallbackEndpoint;
   }
 

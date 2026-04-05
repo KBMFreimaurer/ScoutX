@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  KREIS_AREA_KEYWORDS,
   JUGEND_TO_TEAM_TYPE,
   buildDateRange,
   extractCompetitionEntries,
@@ -9,10 +10,12 @@ import {
   extractStaffelId,
   formatIsoDate,
   getValueByFlexibleKey,
+  normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
   uniqueBy,
 } from "../lib/fussballde.js";
+import { isLikelyTeamMatch } from "../lib/games.js";
 
 const BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
 const MANDANT = process.env.FUSSBALLDE_MANDANT || "22";
@@ -28,6 +31,17 @@ const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
 const kreisId = process.env.SCOUTPLAN_KREIS_ID || "";
 const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
 const jugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
+const selectedTeams = (() => {
+  try {
+    const parsed = JSON.parse(process.env.SCOUTPLAN_TEAMS_JSON || "[]");
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((item) => String(item || "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+})();
 
 function toIsoDate(date) {
   return formatIsoDate(date);
@@ -166,6 +180,34 @@ function extractMatchId(matchUrl) {
   return id || undefined;
 }
 
+function matchesSelectedTeams(home, away) {
+  if (selectedTeams.length === 0) {
+    return false;
+  }
+
+  return selectedTeams.some((team) => isLikelyTeamMatch(team, home) || isLikelyTeamMatch(team, away));
+}
+
+function applyKreisHeuristicFilter(games) {
+  const keywords = KREIS_AREA_KEYWORDS[kreisId] || [];
+  if (!kreisId || keywords.length === 0 || games.length === 0) {
+    return games;
+  }
+
+  const filtered = games.filter((game) => {
+    const lookup = normalizeLookup(`${game.home || ""} ${game.away || ""} ${game.venue || ""}`);
+    return keywords.some((keyword) => lookup.includes(keyword));
+  });
+
+  if (filtered.length > 0) {
+    log(`Kreis heuristic filter: ${filtered.length}/${games.length}`);
+    return filtered;
+  }
+
+  warn("Kreis heuristic filter found no matches. Falling back to unfiltered matches.");
+  return games;
+}
+
 async function discoverCompetitions({ season, competitionType, teamType, kreis }) {
   const kindsUrl = buildWamKindsUrl({ season, competitionType });
   const kinds = await fetchJson(kindsUrl);
@@ -254,7 +296,15 @@ async function collectMatchCandidates(competitions, from, to) {
     }
   });
 
-  return uniqueBy(rows.flat(), (item) => item.matchUrl);
+  const allCandidates = uniqueBy(rows.flat(), (item) => item.matchUrl);
+
+  if (selectedTeams.length > 0) {
+    const matchedCount = allCandidates.filter((candidate) => matchesSelectedTeams(candidate.home, candidate.away)).length;
+    log(`Team-hint candidates matched: ${matchedCount}/${allCandidates.length}`);
+  }
+
+  // Teams are hints for discovery, not a hard filter.
+  return allCandidates;
 }
 
 async function enrichMatches(matchCandidates, dateRangeSet) {
@@ -285,7 +335,15 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
     }
   });
 
-  return details.filter(Boolean);
+  const allDetails = applyKreisHeuristicFilter(details.filter(Boolean));
+
+  if (selectedTeams.length > 0) {
+    const matchedCount = allDetails.filter((game) => matchesSelectedTeams(game.home, game.away)).length;
+    log(`Team-hint details matched: ${matchedCount}/${allDetails.length}`);
+  }
+
+  // Teams are hints for discovery, not a hard filter.
+  return allDetails;
 }
 
 async function main() {
@@ -343,6 +401,8 @@ async function main() {
         fetchedAt: nowIso(),
         competitions: competitions.length,
         candidates: candidates.length,
+        selectedTeamsHintCount: selectedTeams.length,
+        selectedTeamsMatchCount: games.filter((game) => matchesSelectedTeams(game.home, game.away)).length,
       },
     })}\n`,
   );

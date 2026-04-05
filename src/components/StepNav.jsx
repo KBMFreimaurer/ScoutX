@@ -41,7 +41,7 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
       borderRadius: 10,
       padding: 3,
     }}>
-      {STEPS.map((step, index) => {
+      {STEPS.map((step) => {
         const active = currentStep === step;
         const clickable = canAccessStep(step) && !active;
         const unlocked = canAccessStep(step);

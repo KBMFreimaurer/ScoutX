@@ -27,6 +27,11 @@ Wenn `ADAPTER_EXPORT_COMMAND` nicht gesetzt ist, nutzt der Adapter standardmäß
 
 `node /app/scripts/fetch-week.fussballde.mjs`
 
+Wichtig für den produktiven Betrieb:
+
+- `teams` aus ScoutX werden als Hint ausgewertet (`teamFilter.binding=false` in der API-Antwort), nicht als harter Filter. Dadurch bleiben auch andere Spiele derselben Kreis/Jugend-Woche verfügbar.
+- Bei erfolgreichem Wochen-Export werden bestehende Store-Einträge derselben Woche/Kreis/Jugend durch die frischen Exportdaten ersetzt (kein dauerhafter Sample-Leak in echte Wochen-Pläne).
+
 ### Option A: Export Command (empfohlen)
 
 Setze z. B.:

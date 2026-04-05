@@ -115,10 +115,16 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
   try {
     return await fetch(url, { ...options, signal });
   } catch (error) {
+    const message = String(error?.message || "");
+    const isNetworkError =
+      error instanceof TypeError ||
+      error?.name === "TypeError" ||
+      /load failed|failed to fetch|networkerror/i.test(message);
+
     if (error?.name === "AbortError") {
       throw new Error(`${errorPrefix} Timeout nach ${timeoutMs}ms`);
     }
-    if (error instanceof TypeError) {
+    if (isNetworkError) {
       throw new Error(`${errorPrefix} nicht erreichbar (${url}). Prüfe Endpoint/Proxy/CORS.`);
     }
     throw error;
@@ -421,6 +427,30 @@ function filterGamesBySelection(games, { kreisId, jugendId, fromDate, toDate, te
     });
 }
 
+function markSelectedTeamGames(games, teams) {
+  const selectedTeams = Array.isArray(teams) ? teams.filter(Boolean) : [];
+  if (!selectedTeams.length) {
+    return games;
+  }
+
+  return games.map((game) => {
+    const selectedTeamMatch = selectedTeams.some(
+      (team) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away),
+    );
+
+    if (!selectedTeamMatch) {
+      return game;
+    }
+
+    return {
+      ...game,
+      selectedTeamMatch: true,
+      // Keep selected clubs visible in Top-5 without excluding other matches.
+      priority: Math.max(5, Number(game.priority) || 0),
+    };
+  });
+}
+
 export function buildMockSchedule(teams, jugendId, fromDate, kreisId, toDate) {
   const jugend = JUGEND_KLASSEN.find((item) => item.id === jugendId);
   const venues = VENUES_JE_KREIS[kreisId] || ["Sportanlage", "Kunstrasen", "Sportpark"];
@@ -503,7 +533,8 @@ async function fetchGamesCsv(params) {
 }
 
 async function fetchGamesAdapter(params) {
-  if (!params.adapterEndpoint) {
+  const adapterEndpoint = String(params.adapterEndpoint || "").trim();
+  if (!adapterEndpoint) {
     throw new Error("Adapter-Endpoint fehlt.");
   }
 
@@ -514,7 +545,7 @@ async function fetchGamesAdapter(params) {
 
   const weekRange = getWeekRange(params.fromDate);
   const response = await fetchWithTimeout(
-    params.adapterEndpoint,
+    adapterEndpoint,
     {
       method: "POST",
       headers,
@@ -548,12 +579,16 @@ async function fetchGamesAdapter(params) {
     turnier: params.turnier,
   });
 
-  const filteredGames = filterGamesBySelection(report.games, params);
-  if (!filteredGames.length) {
-    throw new Error("Adapterdaten passen nicht zur aktuellen Auswahl.");
+  const broadFilteredGames = filterGamesBySelection(report.games, {
+    ...params,
+    teams: [],
+  });
+
+  if (broadFilteredGames.length > 0) {
+    return markSelectedTeamGames(broadFilteredGames, params.teams);
   }
 
-  return filteredGames;
+  throw new Error("Adapterdaten passen nicht zur aktuellen Auswahl.");
 }
 
 async function fetchGamesMock(params) {

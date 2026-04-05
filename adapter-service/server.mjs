@@ -142,6 +142,22 @@ function filterGamesToWeek(games, range) {
   return games.filter((game) => isDateInRange(game.date, range));
 }
 
+function shouldKeepExistingGameForWeek(game, params, weekRange) {
+  if (!isDateInRange(game.date, weekRange)) {
+    return true;
+  }
+
+  if (params.kreisId && game.kreisId && game.kreisId !== params.kreisId) {
+    return true;
+  }
+
+  if (params.jugendId && game.jugendId && game.jugendId !== params.jugendId) {
+    return true;
+  }
+
+  return false;
+}
+
 async function maybeAutoRefreshWeek(payload) {
   const hasDynamicSource = Boolean(EXPORT_COMMAND || WEEK_SOURCE_TEMPLATE);
   if (!AUTO_REFRESH_WEEK || !hasDynamicSource) {
@@ -226,7 +242,13 @@ async function maybeAutoRefreshWeek(payload) {
     // Reload import/remote baseline after command execution
     const refreshed = await refreshData("auto-week-base");
 
-    const merged = dedupeGames([...refreshed.games, ...collected]);
+    const replaceBaseline =
+      collected.length > 0
+        ? refreshed.games.filter((game) => shouldKeepExistingGameForWeek(game, params, weekRange))
+        : refreshed.games;
+
+    const replaced = refreshed.games.length - replaceBaseline.length;
+    const merged = dedupeGames([...replaceBaseline, ...collected]);
     const added = merged.length - refreshed.games.length;
 
     const weekMeta = {
@@ -234,6 +256,7 @@ async function maybeAutoRefreshWeek(payload) {
       cacheKey,
       refreshedAt: new Date().toISOString(),
       added,
+      replaced,
       collected: collected.length,
       warnings,
     };
@@ -262,6 +285,8 @@ async function maybeAutoRefreshWeek(payload) {
       weekRange,
       cacheKey,
       added,
+      replaced,
+      collected: collected.length,
       warnings,
     };
   })();
@@ -328,7 +353,18 @@ const server = createServer(async (req, res) => {
     try {
       const payload = await readBody(req);
       const autoRefresh = await maybeAutoRefreshWeek(payload);
-      const games = filterGames(state.games, payload, { aliasMap: state.aliasMap });
+      const requestedTeamCount = Array.isArray(payload.teams) ? payload.teams.filter(Boolean).length : 0;
+      const gamesWithTeamFilter =
+        requestedTeamCount > 0 ? filterGames(state.games, payload, { aliasMap: state.aliasMap }) : [];
+      const games = filterGames(
+        state.games,
+        {
+          ...payload,
+          teams: [],
+        },
+        { aliasMap: state.aliasMap },
+      );
+      const teamFilterFallback = requestedTeamCount > 0 && games.length > gamesWithTeamFilter.length;
 
       sendJson(
         res,
@@ -338,6 +374,13 @@ const server = createServer(async (req, res) => {
           source: "adapter-store",
           count: games.length,
           autoRefresh,
+          teamFilter: {
+            requested: requestedTeamCount > 0,
+            requestedCount: requestedTeamCount,
+            matchedCount: gamesWithTeamFilter.length,
+            binding: false,
+            fallbackToUnfiltered: teamFilterFallback,
+          },
           games,
         },
         origin,

@@ -277,7 +277,9 @@ function pickAreaIdsForLeague(areaMap, kreisId) {
     return regional;
   }
 
-  return entries.map(([areaId]) => areaId);
+  // Kreis is known but no area match found -> skip this league/area combination
+  // instead of broadening to unrelated kreise.
+  return [];
 }
 
 function extractCompetitionEntries(payload) {

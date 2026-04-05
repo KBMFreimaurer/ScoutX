@@ -138,6 +138,103 @@ describe("data provider", () => {
     expect(result.games[0].home).toBe("ETB Schwarz-Weiß Essen");
   });
 
+  it("keeps unfiltered adapter week data when selected teams have no match", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-05-01",
+              time: "10:00",
+              home: "DJK Arminia U12",
+              away: "Rhenania Bottrop",
+              venue: "Sportpark",
+              km: 8,
+              kreisId: "duisburg",
+              jugendId: "d-jugend",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-07",
+      teams: ["MSV Duisburg (U)", "SV Hamborn 07"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].home).toBe("DJK Arminia U12");
+  });
+
+  it("boosts selected-team matches without excluding other adapter games", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-05-01",
+              time: "10:00",
+              home: "MSV Duisburg U12",
+              away: "SV Adler Osterfeld",
+              venue: "Sportpark",
+              km: 8,
+              kreisId: "duisburg",
+              jugendId: "d-jugend",
+              priority: 3,
+            },
+            {
+              date: "2026-05-01",
+              time: "12:00",
+              home: "DJK Arminia U12",
+              away: "Rhenania Bottrop",
+              venue: "Sportpark",
+              km: 8,
+              kreisId: "duisburg",
+              jugendId: "d-jugend",
+              priority: 3,
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-07",
+      teams: ["MSV Duisburg (U)"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(2);
+
+    const selectedGame = result.games.find((game) => game.home === "MSV Duisburg U12");
+    const otherGame = result.games.find((game) => game.home === "DJK Arminia U12");
+
+    expect(selectedGame?.selectedTeamMatch).toBe(true);
+    expect(selectedGame?.priority).toBe(5);
+    expect(otherGame?.selectedTeamMatch).toBeUndefined();
+    expect(otherGame?.priority).toBeGreaterThan(0);
+  });
+
   it("returns a timeout error when adapter request aborts", async () => {
     const abortError = new Error("aborted");
     abortError.name = "AbortError";

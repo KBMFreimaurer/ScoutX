@@ -100,4 +100,12 @@ describe("fussballde helpers", () => {
       "0123456789ABCDEF0123456700004110",
     ]);
   });
+
+  it("does not fall back to unrelated areas when kreis mapping has no match", () => {
+    const areaMap = {
+      _00ES8GMVUO00000CVV0AG08LVUPGND5I: "Kreis Oberhausen-Bottrop",
+    };
+
+    expect(pickAreaIdsForLeague(areaMap, "duisburg")).toEqual([]);
+  });
 });
