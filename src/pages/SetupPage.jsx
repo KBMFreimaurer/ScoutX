@@ -7,6 +7,7 @@ import { DataSourceConfig } from "../components/DataSourceConfig";
 import { KreisSelector } from "../components/KreisSelector";
 import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
+import { C, card, inp, lbl, secH } from "../styles/theme";
 
 export function SetupPage() {
   const {
@@ -21,13 +22,16 @@ export function SetupPage() {
     focus,
     canBuild,
     loadingGames,
-    dataMode,
+    err,
     adapterEndpoint,
     adapterToken,
-    uploadName,
-    uploadedGames,
-    uploadError,
-    uploadSummary,
+    startLocation,
+    locationDraft,
+    locationError,
+    resolvingLocation,
+    hasLocation,
+    favorites,
+    favoriteDraft,
     onSelectKreis,
     onSelectJugend,
     onAddTeamField,
@@ -39,10 +43,16 @@ export function SetupPage() {
     onSetFromDate,
     onSetFocus,
     onBuildAndGo,
-    onDataModeChange,
-    onFileImport,
     onAdapterEndpointChange,
     onAdapterTokenChange,
+    onSetLocationDraft,
+    onResolveLocation,
+    onUseCurrentLocation,
+    onClearLocation,
+    onSetFavoriteDraft,
+    onAddFavoriteTeam,
+    onRemoveFavoriteTeam,
+    onClearFavoriteTeams,
   } = useScoutX();
 
   return (
@@ -82,14 +92,153 @@ export function SetupPage() {
           </div>
 
           <div className="setup-span-two">
+            <div style={{ ...card, marginBottom: 16 }}>
+              <div style={{ ...secH, marginBottom: 14 }}>
+                <span className="section-number">06</span>
+                Startort & Favoriten
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <label htmlFor="start-location-input" style={lbl}>
+                  Startort / Abfahrtsadresse
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    id="start-location-input"
+                    className="scout-input"
+                    value={locationDraft}
+                    onChange={(event) => onSetLocationDraft(event.target.value)}
+                    placeholder="Straße, PLZ, Ort"
+                    style={{ ...inp, flex: 1, minWidth: 220 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onResolveLocation()}
+                    disabled={resolvingLocation}
+                    style={{
+                      ...inp,
+                      width: "auto",
+                      minWidth: 132,
+                      cursor: resolvingLocation ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onUseCurrentLocation}
+                    disabled={resolvingLocation}
+                    style={{
+                      ...inp,
+                      width: "auto",
+                      minWidth: 210,
+                      cursor: resolvingLocation ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Aktuellen Standort verwenden
+                  </button>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
+                  {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
+                  {startLocation?.label ? ` · ${startLocation.label}` : ""}
+                </div>
+                {locationError ? (
+                  <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
+                ) : null}
+                {hasLocation ? (
+                  <button
+                    type="button"
+                    onClick={onClearLocation}
+                    style={{
+                      marginTop: 8,
+                      border: "none",
+                      background: "transparent",
+                      color: C.gray,
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: 12,
+                    }}
+                  >
+                    Standort entfernen
+                  </button>
+                ) : null}
+              </div>
+
+              <div>
+                <label htmlFor="favorite-team-input" style={lbl}>
+                  Beobachtete Teams (immer priorisieren)
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    id="favorite-team-input"
+                    className="scout-input"
+                    value={favoriteDraft}
+                    onChange={(event) => onSetFavoriteDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onAddFavoriteTeam();
+                      }
+                    }}
+                    placeholder="Verein/Team eingeben"
+                    style={{ ...inp, flex: 1, minWidth: 220 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onAddFavoriteTeam()}
+                    style={{ ...inp, width: "auto", minWidth: 120, cursor: "pointer" }}
+                  >
+                    Favorit +
+                  </button>
+                </div>
+
+                {favorites.length ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {favorites.map((team, index) => (
+                        <button
+                          key={`${team}-${index}`}
+                          type="button"
+                          onClick={() => onRemoveFavoriteTeam(index)}
+                          style={{
+                            border: `1px solid ${C.greenBorder}`,
+                            background: C.greenDim,
+                            color: C.green,
+                            borderRadius: 999,
+                            padding: "5px 10px",
+                            fontSize: 12,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ★ {team}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onClearFavoriteTeams}
+                      style={{
+                        marginTop: 8,
+                        border: "none",
+                        background: "transparent",
+                        color: C.gray,
+                        cursor: "pointer",
+                        padding: 0,
+                        fontSize: 12,
+                      }}
+                    >
+                      Alle Favoriten entfernen
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>Keine Favoriten gesetzt.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="setup-span-two">
             <DataSourceConfig
-              dataMode={dataMode}
-              onDataModeChange={onDataModeChange}
-              onFileImport={onFileImport}
-              uploadName={uploadName}
-              importedCount={uploadedGames.length}
-              uploadError={uploadError}
-              uploadSummary={uploadSummary}
               adapterEndpoint={adapterEndpoint}
               adapterToken={adapterToken}
               onAdapterEndpointChange={onAdapterEndpointChange}
@@ -122,6 +271,24 @@ export function SetupPage() {
           </span>
         )}
       </PrimaryButton>
+
+      {err ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 12,
+            borderRadius: 10,
+            border: "1px solid rgba(248,113,113,0.35)",
+            background: "rgba(127,29,29,0.28)",
+            color: "#fecaca",
+            padding: "10px 12px",
+            fontSize: 13,
+          }}
+        >
+          {err}
+        </div>
+      ) : null}
     </div>
   );
 }

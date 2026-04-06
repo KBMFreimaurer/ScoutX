@@ -1,24 +1,42 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { parseUploadedGamesReport } from "../services/dataProvider";
-import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
+import { STORAGE_KEYS } from "../config/storage";
+import { geocodeAddress, reverseGeocode } from "../utils/geo";
+import { normalizeAdapterEndpoint, normalizeTeamParameters, readStorage } from "./shared";
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const SetupContext = createContext(null);
+
+function sanitizeLocation(value) {
+  const lat = Number(value?.lat);
+  const lon = Number(value?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  return {
+    lat,
+    lon,
+    label: String(value?.label || "").trim() || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+  };
+}
 
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
+    const storedLocation = sanitizeLocation(readStorage(STORAGE_KEYS.location, {}));
+    const storedFavorites = readStorage(STORAGE_KEYS.favorites, { teams: [] });
+
     return {
       kreisId: "",
       jugendId: "",
       selTeams: [],
       fromDate: todayIso,
       focus: "",
-      dataMode: "auto",
       adapterEndpoint: normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
+      startLocation: storedLocation,
+      favorites: normalizeTeamParameters(storedFavorites?.teams),
       todayIso,
     };
   });
@@ -33,19 +51,50 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
   const [focus, setFocus] = useState(setupDefaults.focus);
-  const [dataMode, setDataMode] = useState(setupDefaults.dataMode);
   const [adapterEndpoint, setAdapterEndpoint] = useState(setupDefaults.adapterEndpoint);
   const [adapterToken, setAdapterToken] = useState("");
-  const [uploadedGames, setUploadedGames] = useState([]);
-  const [uploadName, setUploadName] = useState("");
-  const [uploadError, setUploadError] = useState("");
-  const [uploadSummary, setUploadSummary] = useState(null);
+  const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
+  const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
+  const [locationError, setLocationError] = useState("");
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+  const [favoriteTeams, setFavoriteTeams] = useState(() => normalizeTeamParameters(setupDefaults.favorites));
+  const [favoriteDraft, setFavoriteDraft] = useState("");
   const [err, setErr] = useState("");
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
   const activeTeams = useMemo(() => normalizeTeamParameters(selectedTeams), [selectedTeams]);
+  const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
   const canBuild = Boolean(kreisId && jugendId);
+  const hasLocation = Boolean(startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon));
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      if (startLocation) {
+        window.localStorage.setItem(STORAGE_KEYS.location, JSON.stringify(startLocation));
+      } else {
+        window.localStorage.removeItem(STORAGE_KEYS.location);
+      }
+    } catch {
+      // Ignore localStorage write errors.
+    }
+  }, [startLocation]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.favorites, JSON.stringify({ teams: favorites }));
+    } catch {
+      // Ignore localStorage write errors.
+    }
+  }, [favorites]);
 
   const clearErr = useCallback(() => setErr(""), []);
 
@@ -55,16 +104,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamDraft("");
     setTeamValidation(null);
     setErr("");
-    setUploadError("");
-    setUploadSummary(null);
   }, []);
 
   const onSelectJugend = useCallback((id) => {
     setJugendId(id);
     setTeamValidation(null);
     setErr("");
-    setUploadError("");
-    setUploadSummary(null);
   }, []);
 
   const onClearAllTeams = useCallback(() => {
@@ -72,16 +117,19 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamValidation(null);
   }, []);
 
-  const onAddTeamField = useCallback((value = teamDraft) => {
-    const team = String(value || "").trim();
-    if (!team) {
-      return;
-    }
+  const onAddTeamField = useCallback(
+    (value = teamDraft) => {
+      const team = String(value || "").trim();
+      if (!team) {
+        return;
+      }
 
-    setSelectedTeams((prev) => normalizeTeamParameters([...prev, team]));
-    setTeamDraft("");
-    setTeamValidation(null);
-  }, [teamDraft]);
+      setSelectedTeams((prev) => normalizeTeamParameters([...prev, team]));
+      setTeamDraft("");
+      setTeamValidation(null);
+    },
+    [teamDraft],
+  );
 
   const onUpdateTeamField = useCallback((index, value) => {
     setSelectedTeams((prev) => {
@@ -102,43 +150,102 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamValidation(null);
   }, []);
 
-  const onFileImport = useCallback(async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+  const onResolveLocation = useCallback(
+    async (value = locationDraft) => {
+      const query = String(value || "").trim();
+      if (!query) {
+        setStartLocation(null);
+        setLocationError("");
+        return;
+      }
+
+      setResolvingLocation(true);
+      setLocationError("");
+
+      try {
+        const result = await geocodeAddress(query);
+        if (!result) {
+          throw new Error("Adresse konnte nicht aufgelöst werden.");
+        }
+
+        setStartLocation(result);
+        setLocationDraft(result.label || query);
+      } catch (error) {
+        setLocationError(error?.message || "Startort konnte nicht bestimmt werden.");
+      } finally {
+        setResolvingLocation(false);
+      }
+    },
+    [locationDraft],
+  );
+
+  const onUseCurrentLocation = useCallback(async () => {
+    if (!navigator?.geolocation) {
+      setLocationError("Geolocation wird von diesem Browser nicht unterstützt.");
       return;
     }
 
-    setUploadError("");
-    setUploadSummary(null);
+    setResolvingLocation(true);
+    setLocationError("");
 
     try {
-      if (file.size > MAX_UPLOAD_BYTES) {
-        throw new Error("Datei ist zu groß. Maximal 5 MB erlaubt.");
-      }
-
-      const fileText = await file.text();
-      const report = parseUploadedGamesReport(fileText, file.name, {
-        kreisId,
-        jugendId,
-        fromDate,
-        turnier: Boolean(jugend?.turnier),
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 120000,
+        });
       });
 
-      if (!report.games.length) {
-        throw new Error("Keine gültigen Spiele erkannt.");
+      const lat = Number(position?.coords?.latitude);
+      const lon = Number(position?.coords?.longitude);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        throw new Error("Ungültige Standortdaten empfangen.");
       }
 
-      setUploadedGames(report.games);
-      setUploadName(file.name);
-      setUploadSummary(report.stats);
-      setTeamValidation(null);
+      const reverse = await reverseGeocode(lat, lon).catch(() => null);
+      const location = {
+        lat,
+        lon,
+        label: reverse?.label || `Aktueller Standort (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+      };
+
+      setStartLocation(location);
+      setLocationDraft(location.label);
     } catch (error) {
-      setUploadedGames([]);
-      setUploadName("");
-      setUploadError(error.message || "Datei konnte nicht verarbeitet werden.");
-      setUploadSummary(null);
+      setLocationError(error?.message || "Aktueller Standort konnte nicht verwendet werden.");
+    } finally {
+      setResolvingLocation(false);
     }
-  }, [kreisId, jugendId, fromDate, jugend?.turnier]);
+  }, []);
+
+  const onClearLocation = useCallback(() => {
+    setStartLocation(null);
+    setLocationDraft("");
+    setLocationError("");
+  }, []);
+
+  const onAddFavoriteTeam = useCallback(
+    (value = favoriteDraft) => {
+      const team = String(value || "").trim();
+      if (!team) {
+        return;
+      }
+
+      setFavoriteTeams((prev) => normalizeTeamParameters([...prev, team]));
+      setFavoriteDraft("");
+    },
+    [favoriteDraft],
+  );
+
+  const onRemoveFavoriteTeam = useCallback((index) => {
+    setFavoriteTeams((prev) => prev.filter((_, idx) => idx !== index));
+  }, []);
+
+  const onClearFavoriteTeams = useCallback(() => {
+    setFavoriteTeams([]);
+  }, []);
 
   const resetSetupState = useCallback(() => {
     setKreisId("");
@@ -146,12 +253,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
-    setUploadedGames([]);
-    setUploadName("");
-    setUploadError("");
-    setUploadSummary(null);
-    setDataMode("auto");
-    setAdapterEndpoint(defaultAdapterEndpoint);
+    setAdapterEndpoint(normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint));
     setAdapterToken("");
     setFromDate(setupDefaults.todayIso);
     setFocus("");
@@ -172,13 +274,15 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamValidation,
       fromDate,
       focus,
-      dataMode,
       adapterEndpoint,
       adapterToken,
-      uploadedGames,
-      uploadName,
-      uploadError,
-      uploadSummary,
+      startLocation,
+      locationDraft,
+      locationError,
+      resolvingLocation,
+      hasLocation,
+      favorites,
+      favoriteDraft,
       canBuild,
       err,
       setErr,
@@ -194,10 +298,16 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onClearAllTeams,
       onSetFromDate: setFromDate,
       onSetFocus: setFocus,
-      onDataModeChange: setDataMode,
       onAdapterEndpointChange: setAdapterEndpoint,
       onAdapterTokenChange: setAdapterToken,
-      onFileImport,
+      onSetLocationDraft: setLocationDraft,
+      onResolveLocation,
+      onUseCurrentLocation,
+      onClearLocation,
+      onSetFavoriteDraft: setFavoriteDraft,
+      onAddFavoriteTeam,
+      onRemoveFavoriteTeam,
+      onClearFavoriteTeams,
       resetSetupState,
     }),
     [
@@ -213,13 +323,15 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamValidation,
       fromDate,
       focus,
-      dataMode,
       adapterEndpoint,
       adapterToken,
-      uploadedGames,
-      uploadName,
-      uploadError,
-      uploadSummary,
+      startLocation,
+      locationDraft,
+      locationError,
+      resolvingLocation,
+      hasLocation,
+      favorites,
+      favoriteDraft,
       canBuild,
       err,
       clearErr,
@@ -230,7 +342,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onNormalizeTeamField,
       onRemoveTeamField,
       onClearAllTeams,
-      onFileImport,
+      onResolveLocation,
+      onUseCurrentLocation,
+      onClearLocation,
+      onAddFavoriteTeam,
+      onRemoveFavoriteTeam,
+      onClearFavoriteTeams,
       resetSetupState,
     ],
   );

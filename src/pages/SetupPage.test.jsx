@@ -51,4 +51,17 @@ describe("SetupPage", () => {
     expect(screen.queryByText(/Alle löschen/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
   });
+
+  it("pflegt Favoritenliste im Setup", () => {
+    renderSetupPage();
+
+    expect(screen.getByLabelText(/Startort \/ Abfahrtsadresse/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Beobachtete Teams/i), {
+      target: { value: "TSV Heimaterde" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Favorit \+/i }));
+
+    expect(screen.getByRole("button", { name: /★ TSV Heimaterde/i })).toBeInTheDocument();
+  });
 });

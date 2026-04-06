@@ -13,9 +13,12 @@ export function GamesPage() {
     jugend,
     kreis,
     activeTeams,
+    startLocation,
     teamValidation,
     prioritized,
+    gameNotes,
     dataSourceUsed,
+    onSetGameNote,
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
@@ -30,7 +33,34 @@ export function GamesPage() {
       : games.filter((game) => game.selectedTeamMatch).length;
   const showTeamHint = requestedTeamCount > 0;
   const shouldPaginate = games.length > 100;
-  const totalPages = shouldPaginate ? Math.ceil(games.length / PAGE_SIZE) : 1;
+  const [sortMode, setSortMode] = useState("priority");
+  const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const sortedGames = useMemo(() => {
+    if (sortMode === "distance") {
+      return [...games].sort((a, b) => {
+        const da = Number.isFinite(a.distanceKm) ? a.distanceKm : Number.POSITIVE_INFINITY;
+        const db = Number.isFinite(b.distanceKm) ? b.distanceKm : Number.POSITIVE_INFINITY;
+        if (da !== db) {
+          return da - db;
+        }
+        return Number(b.priority || 0) - Number(a.priority || 0);
+      });
+    }
+
+    if (sortMode === "date") {
+      return [...games].sort((a, b) => {
+        const ad = a?.dateObj instanceof Date ? a.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        const bd = b?.dateObj instanceof Date ? b.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        if (ad !== bd) {
+          return ad - bd;
+        }
+        return String(a.time || "99:99").localeCompare(String(b.time || "99:99"));
+      });
+    }
+
+    return [...games].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+  }, [games, sortMode]);
+  const totalPages = shouldPaginate ? Math.ceil(sortedGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -39,12 +69,12 @@ export function GamesPage() {
 
   const visibleGames = useMemo(() => {
     if (!shouldPaginate) {
-      return games;
+      return sortedGames;
     }
 
     const start = (currentPage - 1) * PAGE_SIZE;
-    return games.slice(start, start + PAGE_SIZE);
-  }, [games, currentPage, shouldPaginate]);
+    return sortedGames.slice(start, start + PAGE_SIZE);
+  }, [sortedGames, currentPage, shouldPaginate]);
 
   return (
     <div className="fu">
@@ -93,13 +123,55 @@ export function GamesPage() {
               Team-Hinweise: {matchedGameCount} passende Spiele · {matchedTeamCount}/{requestedTeamCount} Vereine erkannt
             </div>
           ) : null}
+
+          {startLocation?.label ? (
+            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+              Startort: {startLocation.label}
+            </div>
+          ) : null}
         </div>
       </div>
 
       <TopFive games={prioritized} />
 
-      <GameTable games={visibleGames} />
-      <GameCards games={visibleGames} />
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.gray }}>
+          Sortierung
+          <select
+            value={sortMode}
+            onChange={(event) => setSortMode(event.target.value)}
+            className="scout-select"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              color: C.offWhite,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              padding: "6px 10px",
+              minHeight: 34,
+            }}
+          >
+            <option value="priority">Priorität</option>
+            <option value="distance">Entfernung</option>
+            <option value="date">Datum/Uhrzeit</option>
+          </select>
+        </label>
+      </div>
+
+      <GameTable
+        games={visibleGames}
+        sortMode={sortMode}
+        notes={gameNotes}
+        expandedNoteId={expandedNoteId}
+        onToggleNote={(gameId) => setExpandedNoteId((current) => (current === gameId ? null : gameId))}
+        onSetNote={onSetGameNote}
+      />
+      <GameCards
+        games={visibleGames}
+        notes={gameNotes}
+        expandedNoteId={expandedNoteId}
+        onToggleNote={(gameId) => setExpandedNoteId((current) => (current === gameId ? null : gameId))}
+        onSetNote={onSetGameNote}
+      />
 
       {shouldPaginate ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>

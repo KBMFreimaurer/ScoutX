@@ -1,4 +1,6 @@
+import { Fragment } from "react";
 import { C } from "../styles/theme";
+import { formatDistanceKm } from "../utils/geo";
 
 function formatKickoff(time) {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen";
@@ -21,7 +23,72 @@ function sortByPriority(left, right) {
   return leftTime.localeCompare(rightTime);
 }
 
-export function GameTable({ games, mode = "games" }) {
+function sortByDistance(left, right) {
+  const leftDistance = Number.isFinite(left?.distanceKm) ? Number(left.distanceKm) : Number.POSITIVE_INFINITY;
+  const rightDistance = Number.isFinite(right?.distanceKm) ? Number(right.distanceKm) : Number.POSITIVE_INFINITY;
+  if (leftDistance !== rightDistance) {
+    return leftDistance - rightDistance;
+  }
+  return sortByPriority(left, right);
+}
+
+function sortByDateTime(left, right) {
+  const leftDate = left?.dateObj instanceof Date ? left.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+  const rightDate = right?.dateObj instanceof Date ? right.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+  if (leftDate !== rightDate) {
+    return leftDate - rightDate;
+  }
+
+  const leftTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(left?.time || "")) ? String(left.time) : "99:99";
+  const rightTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(right?.time || "")) ? String(right.time) : "99:99";
+  return leftTime.localeCompare(rightTime);
+}
+
+function weatherLabel(weather) {
+  if (!weather) {
+    return "—";
+  }
+
+  const temperature = Number.isFinite(weather.temperatureC) ? `${Math.round(weather.temperatureC)}°C` : "n/a";
+  const precipitation = Number.isFinite(weather.precipitationProbability) ? `${Math.round(weather.precipitationProbability)}%` : "n/a";
+  return `${temperature} · ${precipitation}`;
+}
+
+function weatherIcon(type) {
+  if (type === "rain") {
+    return "🌧";
+  }
+  if (type === "snow") {
+    return "❄";
+  }
+  if (type === "storm") {
+    return "⛈";
+  }
+  if (type === "clear") {
+    return "☀";
+  }
+  return "☁";
+}
+
+function sortGames(games, sortMode) {
+  if (sortMode === "distance") {
+    return [...games].sort(sortByDistance);
+  }
+  if (sortMode === "date") {
+    return [...games].sort(sortByDateTime);
+  }
+  return [...games].sort(sortByPriority);
+}
+
+export function GameTable({
+  games,
+  mode = "games",
+  sortMode = "priority",
+  notes = {},
+  onSetNote,
+  expandedNoteId = null,
+  onToggleNote,
+}) {
   if (mode === "plan") {
     return (
       <div
@@ -58,13 +125,14 @@ export function GameTable({ games, mode = "games" }) {
             </span>
             <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
             <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatKickoff(game.time)}</span>
+            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatDistanceKm(game.distanceKm)}</span>
           </div>
         ))}
       </div>
     );
   }
 
-  const sortedGames = [...games].sort(sortByPriority);
+  const sortedGames = sortGames(games, sortMode);
 
   return (
     <div
@@ -86,33 +154,88 @@ export function GameTable({ games, mode = "games" }) {
       >
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
-            <th scope="col" style={{ width: "38%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
-            <th scope="col" style={{ width: "20%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
-            <th scope="col" style={{ width: "14%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
-            <th scope="col" style={{ width: "28%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
+            <th scope="col" style={{ width: "30%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
+            <th scope="col" style={{ width: "14%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
+            <th scope="col" style={{ width: "10%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
+            <th scope="col" style={{ width: "18%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
+            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Entfernung</th>
+            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Wetter</th>
+            <th scope="col" style={{ width: "10%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
           </tr>
         </thead>
 
         <tbody>
-          {sortedGames.map((game, index) => (
-            <tr
-              key={game.id}
-              className="row-item"
-              style={{
-                borderBottom: index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none",
-                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              }}
-            >
-              <td style={{ padding: "11px 16px", fontSize: 13 }}>
-                <strong style={{ color: C.white }}>{game.home}</strong>
-                <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
-                <span style={{ color: C.offWhite }}>{game.away}</span>
-              </td>
-              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{game.dateLabel}</td>
-              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatKickoff(game.time)}</td>
-              <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</td>
-            </tr>
-          ))}
+          {sortedGames.map((game, index) => {
+            const noteOpen = expandedNoteId === game.id;
+            return (
+              <Fragment key={game.id}>
+                <tr
+                  className="row-item"
+                  style={{
+                    borderBottom: noteOpen ? "none" : index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none",
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                  }}
+                >
+                  <td style={{ padding: "11px 16px", fontSize: 13 }}>
+                    {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
+                    <strong style={{ color: C.white }}>{game.home}</strong>
+                    <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
+                    <span style={{ color: C.offWhite }}>{game.away}</span>
+                  </td>
+                  <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{game.dateLabel}</td>
+                  <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatKickoff(game.time)}</td>
+                  <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</td>
+                  <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatDistanceKm(game.distanceKm)}</td>
+                  <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
+                    <span style={{ marginRight: 4 }}>{weatherIcon(game.weather?.type)}</span>
+                    {weatherLabel(game.weather)}
+                  </td>
+                  <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
+                    <button
+                      type="button"
+                      onClick={() => onToggleNote?.(game.id)}
+                      aria-expanded={noteOpen}
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 8,
+                        background: "rgba(255,255,255,0.03)",
+                        color: C.gray,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                        minHeight: 30,
+                      }}
+                    >
+                      Notiz
+                    </button>
+                  </td>
+                </tr>
+                {noteOpen ? (
+                  <tr key={`${game.id}-note`} style={{ borderBottom: index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <td colSpan={7} style={{ padding: "8px 12px" }}>
+                      <textarea
+                        aria-label={`Notiz für ${game.home} gegen ${game.away}`}
+                        value={notes[game.id] || ""}
+                        onChange={(event) => onSetNote?.(game.id, event.target.value)}
+                        placeholder="Notiz zum Spiel..."
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${C.border}`,
+                          background: "rgba(255,255,255,0.02)",
+                          color: C.offWhite,
+                          padding: "10px 12px",
+                          fontSize: 12,
+                          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                          minHeight: 74,
+                          resize: "vertical",
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

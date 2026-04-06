@@ -21,6 +21,10 @@ const KREIS_AREA_KEYWORDS = {
   kleve: ["kleve", "geldern", "rees", "bocholt"],
 };
 
+function warnParser(message) {
+  console.warn(`[fussballde-parser] ${message}`);
+}
+
 function normalizeLookup(value) {
   return String(value || "")
     .toLowerCase()
@@ -144,19 +148,27 @@ function extractMatchesFromDatePage(html) {
   const scoped = fromMatchesSection.split('<section id="table">')[0];
 
   const rows = [...scoped.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+  if (rows.length === 0) {
+    warnParser("Keine Tabellenzeilen in der Spieltagsseite gefunden (Selektor <tr> leer).");
+  }
+
   const matches = [];
   const seen = new Set();
+  let rowsWithoutTeams = 0;
+  let rowsWithoutLink = 0;
 
   for (const rowMatch of rows) {
     const row = rowMatch[0];
     const teamNames = [...row.matchAll(/<div class="club-name">([\s\S]*?)<\/div>/gi)].map((m) => stripTags(m[1]));
 
     if (teamNames.length < 2) {
+      rowsWithoutTeams += 1;
       continue;
     }
 
     const matchLink = row.match(/href="((?:https:\/\/www\.fussball\.de)?\/spiel\/[^"]+)"/i);
     if (!matchLink) {
+      rowsWithoutLink += 1;
       continue;
     }
 
@@ -171,6 +183,13 @@ function extractMatchesFromDatePage(html) {
       away: teamNames[1],
       matchUrl,
     });
+  }
+
+  if (rowsWithoutTeams > 0) {
+    warnParser(`${rowsWithoutTeams} Tabellenzeilen ohne Teamnamen erkannt (Selektor .club-name prüfen).`);
+  }
+  if (rowsWithoutLink > 0) {
+    warnParser(`${rowsWithoutLink} Tabellenzeilen ohne Spiel-Link erkannt (Selektor /spiel/... prüfen).`);
   }
 
   return matches;
@@ -240,6 +259,7 @@ function extractKickoffFromTeamPageHtml(html, matchId) {
 
   const text = String(html || "");
   if (!text.includes(matchId)) {
+    warnParser(`Match-ID ${matchId} nicht in Teamseite gefunden.`);
     return "";
   }
 
@@ -281,6 +301,7 @@ function extractKickoffFromTeamPageHtml(html, matchId) {
     return cardTimes[0].time;
   }
 
+  warnParser(`Keine Anstoßzeit für Match-ID ${matchId} auf Teamseite gefunden.`);
   return "";
 }
 
@@ -309,6 +330,19 @@ function extractMatchDetails(html) {
   const teamNames = [...text.matchAll(/<div class="team-name">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/div>/gi)].map((m) =>
     stripTags(m[1]),
   );
+
+  if (!dateFromLink && !dateFromTitle) {
+    warnParser("Spiel-Detailseite ohne Datum erkannt (weder /spieldatum/ noch Titel-Datum).");
+  }
+  if (!kickoffText) {
+    warnParser("Spiel-Detailseite ohne Anpfiff-Block erkannt.");
+  }
+  if (!venueBlock) {
+    warnParser("Spiel-Detailseite ohne Location-Block erkannt.");
+  }
+  if (teamNames.length < 2) {
+    warnParser("Spiel-Detailseite ohne vollständige Teamnamen erkannt (Selektor .team-name).");
+  }
 
   return {
     date: dateFromLink || dateFromTitle,

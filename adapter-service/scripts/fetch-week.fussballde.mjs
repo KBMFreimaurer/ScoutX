@@ -26,6 +26,7 @@ const PAGE_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_PAGE_CONCURRE
 const MATCH_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_MATCH_CONCURRENCY || 6));
 const MAX_COMPETITIONS = Math.max(1, Number(process.env.FUSSBALLDE_MAX_COMPETITIONS || 80));
 const MAX_MATCHES = Math.max(1, Number(process.env.FUSSBALLDE_MAX_MATCHES || 600));
+const FETCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const DEBUG = process.env.SCOUTPLAN_DEBUG_EXPORTER === "true";
 
 const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
@@ -72,7 +73,7 @@ function createAbortController(timeoutMs) {
   };
 }
 
-async function fetchText(url, { retries = 2 } = {}) {
+async function fetchText(url, { retries = FETCH_RETRY_DELAYS_MS.length } = {}) {
   let attempt = 0;
 
   while (attempt <= retries) {
@@ -97,7 +98,9 @@ async function fetchText(url, { retries = 2 } = {}) {
         throw new Error(`${url} -> ${error.message || error}`);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      const delayMs = FETCH_RETRY_DELAYS_MS[Math.min(attempt, FETCH_RETRY_DELAYS_MS.length - 1)] || 0;
+      warn(`Request retry ${attempt + 1}/${retries} for ${url}: ${error.message || error}`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
       attempt += 1;
     } finally {
       clear();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildDateRange,
   extractKickoffFromTeamPageHtml,
@@ -9,6 +9,16 @@ import {
 } from "./fussballde";
 
 describe("fussballde helpers", () => {
+  it("warnt bei fehlenden Match-Selektoren", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const matches = extractMatchesFromDatePage("<div>leer</div>");
+    expect(matches).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
   it("builds a spieldatum url from a competition url", () => {
     const url = toSpieldatumUrl(
       "https://www.fussball.de/spieltagsuebersicht/a-junioren-nrl-niederrhein-a-junioren-niederrheinliga-a-junioren-saison2526-niederrhein/-/staffel/02TP6I0PF4000009VS5489BUVSPHI8RP-G",
@@ -89,6 +99,22 @@ describe("fussballde helpers", () => {
     });
   });
 
+  it("warnt bei unvollständiger Match-Detailseite", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const details = extractMatchDetails("<html><body><div>ohne struktur</div></body></html>");
+    expect(details).toEqual({
+      date: "",
+      time: "",
+      venue: "",
+      home: "",
+      away: "",
+    });
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
   it("extracts kickoff from team page row data for a specific match id", () => {
     const html = `
       <table>
@@ -115,6 +141,20 @@ describe("fussballde helpers", () => {
     `;
 
     expect(extractKickoffFromTeamPageHtml(html, "02TESTMATCHID000000VS5489BTV000000")).toBe("");
+  });
+
+  it("warnt wenn kickoff auf Teamseite nicht ermittelt werden kann", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const kickoff = extractKickoffFromTeamPageHtml(
+      '<a href="https://www.fussball.de/spiel/x/-/spiel/02TESTMATCHID000000VS5489BTV000000">Zum Spiel</a>',
+      "02TESTMATCHID000000VS5489BTV000000",
+    );
+
+    expect(kickoff).toBe("");
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
   it("matches kreis areas by keyword and falls back to regional areas", () => {

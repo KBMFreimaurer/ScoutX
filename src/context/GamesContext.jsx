@@ -1,10 +1,103 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
+import { geocodeAddress, haversineDistance } from "../utils/geo";
+import { fetchWeatherForGame } from "../utils/weather";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
+
+function normalizeLookup(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function matchesFavorite(game, favoriteTeams) {
+  const home = normalizeLookup(game?.home);
+  const away = normalizeLookup(game?.away);
+  const venue = normalizeLookup(game?.venue);
+
+  return favoriteTeams.some((favorite) => {
+    const token = normalizeLookup(favorite);
+    return token && (home.includes(token) || away.includes(token) || venue.includes(token));
+  });
+}
+
+function withFavoriteBoost(games, favorites) {
+  const favoriteTeams = Array.isArray(favorites) ? favorites.filter(Boolean) : [];
+  if (!favoriteTeams.length) {
+    return games;
+  }
+
+  return games.map((game) => {
+    const favoriteMatch = matchesFavorite(game, favoriteTeams);
+    if (!favoriteMatch) {
+      return { ...game, isFavoriteGame: false };
+    }
+
+    return {
+      ...game,
+      isFavoriteGame: true,
+      priority: Number(game.priority || 0) + 2,
+    };
+  });
+}
+
+function withNotes(games, notesById) {
+  return games.map((game) => ({
+    ...game,
+    note: notesById?.[game.id] || "",
+  }));
+}
+
+async function enrichGames(games, startLocation) {
+  const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
+
+  const enriched = await Promise.all(
+    games.map(async (game) => {
+      try {
+        const geo = await geocodeAddress(game.venue || "").catch(() => null);
+        const venueLat = Number(geo?.lat);
+        const venueLon = Number(geo?.lon);
+
+        const distanceKm =
+          hasLocation && Number.isFinite(venueLat) && Number.isFinite(venueLon)
+            ? haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon)
+            : null;
+
+        const weather =
+          Number.isFinite(venueLat) && Number.isFinite(venueLon)
+            ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: game.date, time: game.time }).catch(() => null)
+            : null;
+
+        return {
+          ...game,
+          venueLat: Number.isFinite(venueLat) ? venueLat : null,
+          venueLon: Number.isFinite(venueLon) ? venueLon : null,
+          distanceKm,
+          weather,
+        };
+      } catch {
+        return {
+          ...game,
+          venueLat: null,
+          venueLon: null,
+          distanceKm: null,
+          weather: null,
+        };
+      }
+    }),
+  );
+
+  return enriched;
+}
 
 export function GamesProvider({ children }) {
   const navigate = useNavigate();
@@ -13,12 +106,12 @@ export function GamesProvider({ children }) {
     kreisId,
     jugendId,
     fromDate,
-    dataMode,
     activeTeams,
-    uploadedGames,
+    favorites,
     adapterEndpoint,
     adapterToken,
     jugend,
+    startLocation,
     setErr,
     setTeamValidation,
   } = setup;
@@ -26,6 +119,34 @@ export function GamesProvider({ children }) {
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(false);
   const [dataSourceUsed, setDataSourceUsed] = useState("mock");
+  const [gameNotes, setGameNotes] = useState(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEYS.notes);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw);
+      return parsed?.byId && typeof parsed.byId === "object" ? parsed.byId : {};
+    } catch {
+      return {};
+    }
+  });
+  const buildRunRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(STORAGE_KEYS.notes, JSON.stringify({ byId: gameNotes }));
+    } catch {
+      // Ignore sessionStorage write errors.
+    }
+  }, [gameNotes]);
 
   const prioritized = useMemo(
     () => [...games].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0)).slice(0, 5),
@@ -40,6 +161,32 @@ export function GamesProvider({ children }) {
   const onBackSetup = useCallback(() => {
     navigate("/setup");
   }, [navigate]);
+
+  const onSetGameNote = useCallback((gameId, noteText) => {
+    const text = String(noteText || "");
+
+    setGameNotes((prev) => {
+      const next = { ...prev };
+      if (!text.trim()) {
+        delete next[gameId];
+      } else {
+        next[gameId] = text;
+      }
+      return next;
+    });
+
+    setGames((prev) =>
+      prev.map((game) => {
+        if (game.id !== gameId) {
+          return game;
+        }
+        return {
+          ...game,
+          note: text,
+        };
+      }),
+    );
+  }, []);
 
   const onBuildAndGo = useCallback(async () => {
     if (!kreisId) {
@@ -56,40 +203,59 @@ export function GamesProvider({ children }) {
     setLoadingGames(true);
     setTeamValidation(null);
 
+    const runId = buildRunRef.current + 1;
+    buildRunRef.current = runId;
+
     try {
       const weekRange = getWeekRange(fromDate);
       const { games: fetchedGames, source, meta } = await fetchGamesWithProviders({
-        mode: dataMode,
+        mode: "adapter",
         kreisId,
         jugendId,
         fromDate: weekRange.fromDate,
         toDate: weekRange.toDate,
         teams: activeTeams,
-        uploadedGames,
+        uploadedGames: [],
         adapterEndpoint,
         adapterToken,
         turnier: Boolean(jugend?.turnier),
       });
 
-      setGames(fetchedGames);
+      const boostedGames = withFavoriteBoost(fetchedGames, favorites);
+      const initialGames = withNotes(boostedGames, gameNotes);
+      setGames(initialGames);
       setDataSourceUsed(source);
       setTeamValidation(meta?.teamFilter || null);
       navigate("/games");
+
+      void enrichGames(initialGames, startLocation)
+        .then((enrichedGames) => {
+          if (buildRunRef.current !== runId) {
+            return;
+          }
+          setGames(withNotes(withFavoriteBoost(enrichedGames, favorites), gameNotes));
+        })
+        .catch(() => {
+          // Keep initial games if enrichment fails.
+        });
     } catch (error) {
       setErr(`Spieldaten konnten nicht geladen werden: ${error.message}`);
     } finally {
-      setLoadingGames(false);
+      if (buildRunRef.current === runId) {
+        setLoadingGames(false);
+      }
     }
   }, [
     kreisId,
     jugendId,
     fromDate,
-    dataMode,
     activeTeams,
-    uploadedGames,
     adapterEndpoint,
     adapterToken,
     jugend,
+    favorites,
+    gameNotes,
+    startLocation,
     setErr,
     setTeamValidation,
     navigate,
@@ -98,6 +264,7 @@ export function GamesProvider({ children }) {
   const value = useMemo(
     () => ({
       games,
+      gameNotes,
       loadingGames,
       dataSourceUsed,
       prioritized,
@@ -106,8 +273,9 @@ export function GamesProvider({ children }) {
       resetGames,
       onBackSetup,
       onBuildAndGo,
+      onSetGameNote,
     }),
-    [games, loadingGames, dataSourceUsed, prioritized, resetGames, onBackSetup, onBuildAndGo],
+    [games, gameNotes, loadingGames, dataSourceUsed, prioritized, resetGames, onBackSetup, onBuildAndGo, onSetGameNote],
   );
 
   return <GamesContext.Provider value={value}>{children}</GamesContext.Provider>;

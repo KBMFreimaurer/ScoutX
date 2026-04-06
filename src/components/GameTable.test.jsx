@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { GameTable } from "./GameTable";
 
 describe("GameTable", () => {
@@ -44,5 +44,51 @@ describe("GameTable", () => {
 
     expect(within(firstDataRow).getByText("Team A")).toBeInTheDocument();
     expect(within(firstDataRow).getByText("Team B")).toBeInTheDocument();
+  });
+
+  it("zeigt Favoriten, Entfernung, Wetter und speichert Notizen", () => {
+    const onToggleNote = vi.fn();
+    const onSetNote = vi.fn();
+
+    const games = [
+      {
+        id: "game-1",
+        home: "Team A",
+        away: "Team B",
+        priority: 5,
+        dateObj: new Date("2026-05-01T00:00:00"),
+        dateLabel: "Fr, 01.05.2026",
+        time: "14:00",
+        venue: "Platz A",
+        isFavoriteGame: true,
+        distanceKm: 12.4,
+        weather: {
+          type: "rain",
+          temperatureC: 11.2,
+          precipitationProbability: 65,
+        },
+      },
+    ];
+
+    render(
+      <GameTable
+        games={games}
+        notes={{ "game-1": "Spieler #10 beobachten" }}
+        expandedNoteId="game-1"
+        onToggleNote={onToggleNote}
+        onSetNote={onSetNote}
+      />,
+    );
+
+    expect(screen.getByText("★")).toBeInTheDocument();
+    expect(screen.getByText("12 km")).toBeInTheDocument();
+    expect(screen.getByText(/11°C · 65%/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Notiz" }));
+    expect(onToggleNote).toHaveBeenCalledWith("game-1");
+
+    const textarea = screen.getByLabelText(/Notiz für Team A gegen Team B/i);
+    fireEvent.change(textarea, { target: { value: "Neuer Hinweis" } });
+    expect(onSetNote).toHaveBeenCalledWith("game-1", "Neuer Hinweis");
   });
 });

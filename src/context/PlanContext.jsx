@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { openScoutPdf } from "../services/pdf";
+import { calculateRoute } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
@@ -112,17 +113,44 @@ export function PlanProvider({ children }) {
       jugendAlter: setup.jugend?.alter ?? "",
       fromDate: setup.fromDate,
       focus: setup.focus,
+      startLocationLabel: setup.startLocation?.label ?? "",
     }),
-    [setup.kreis, setup.jugend, setup.fromDate, setup.focus],
+    [setup.kreis, setup.jugend, setup.fromDate, setup.focus, setup.startLocation],
   );
+
+  const routeGames = useMemo(() => {
+    return [...(Array.isArray(gamesCtx.games) ? gamesCtx.games : [])]
+      .sort((a, b) => {
+        const ad = a?.dateObj instanceof Date ? a.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        const bd = b?.dateObj instanceof Date ? b.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        if (ad !== bd) {
+          return ad - bd;
+        }
+        return toSortableKickoff(a.time).localeCompare(toSortableKickoff(b.time));
+      })
+      .slice(0, 3);
+  }, [gamesCtx.games]);
+
+  const routeOverview = useMemo(() => {
+    if (!setup.startLocation) {
+      return null;
+    }
+    return calculateRoute(setup.startLocation, routeGames);
+  }, [setup.startLocation, routeGames]);
 
   useEffect(() => {
     setPlan("");
   }, [gamesCtx.games]);
 
   const onGeneratePlanPdf = useCallback(async () => {
+    const pdfCfg = {
+      ...cfg,
+      startLocation: setup.startLocation || null,
+      routeOverview: routeOverview || null,
+    };
+
     if (String(plan || "").trim()) {
-      openScoutPdf(gamesCtx.games, plan, cfg);
+      openScoutPdf(gamesCtx.games, plan, pdfCfg);
       navigate("/plan");
       return;
     }
@@ -140,9 +168,9 @@ export function PlanProvider({ children }) {
     });
 
     setPlan(quickPlan);
-    openScoutPdf(gamesCtx.games, quickPlan, cfg);
+    openScoutPdf(gamesCtx.games, quickPlan, pdfCfg);
     navigate("/plan");
-  }, [plan, gamesCtx.games, cfg, navigate, setup.jugend]);
+  }, [plan, gamesCtx.games, cfg, routeOverview, navigate, setup.jugend, setup.startLocation]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
@@ -165,6 +193,7 @@ export function PlanProvider({ children }) {
     () => ({
       plan,
       cfg,
+      routeOverview,
       setPlan,
       onGeneratePlanPdf,
       onBackGames,
@@ -174,6 +203,7 @@ export function PlanProvider({ children }) {
     [
       plan,
       cfg,
+      routeOverview,
       onGeneratePlanPdf,
       onBackGames,
       onResetSoft,

@@ -9,6 +9,20 @@ vi.mock("./services/pdf", () => ({
 }));
 
 describe("ScoutX Integration", () => {
+  async function renderSetupAndSubmit(fetchMock) {
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter initialEntries={["/setup"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Kreis Duisburg auswählen/i }));
+    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Spielplan generieren/i }));
+  }
+
   beforeEach(() => {
     if (typeof window.localStorage?.clear === "function") {
       window.localStorage.clear();
@@ -61,17 +75,7 @@ describe("ScoutX Integration", () => {
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(
-      <MemoryRouter initialEntries={["/setup"]}>
-        <App />
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: /Kreis Duisburg auswählen/i }));
-    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Spielplan generieren/i }));
+    await renderSetupAndSubmit(fetchMock);
 
     await screen.findByText(/Top-Empfehlungen/i);
     await screen.findByRole("button", { name: /Scout-Plan erstellen/i });
@@ -82,5 +86,68 @@ describe("ScoutX Integration", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
     expect(openScoutPdf).toHaveBeenCalledTimes(1);
+  });
+
+  it("zeigt Adapter-Timeout im Setup als Fehlermeldung", async () => {
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+    const fetchMock = vi.fn().mockRejectedValue(abortError);
+
+    await renderSetupAndSubmit(fetchMock);
+
+    const matches = await screen.findAllByText(/Spieldaten konnten nicht geladen werden: Adapter Timeout nach 15000ms/i);
+    expect(matches.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    {
+      label: "401",
+      fetchMockFactory: () =>
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+        }),
+      expectedText: "Adapter HTTP 401",
+    },
+    {
+      label: "500",
+      fetchMockFactory: () =>
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+        }),
+      expectedText: "Adapter HTTP 500",
+    },
+    {
+      label: "leere Antwort",
+      fetchMockFactory: () =>
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ games: [] }),
+        }),
+      expectedText: "Adapter lieferte keine Spiele",
+    },
+    {
+      label: "malformed JSON",
+      fetchMockFactory: () =>
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new Error("Unexpected token < in JSON");
+          },
+        }),
+      expectedText: "Unexpected token < in JSON",
+    },
+  ])("zeigt Fehlerfall korrekt: $label", async ({ fetchMockFactory, expectedText }) => {
+    const fetchMock = fetchMockFactory();
+    await renderSetupAndSubmit(fetchMock);
+    const matches = await screen.findAllByText((_, element) =>
+      String(element?.textContent || "").includes(`Spieldaten konnten nicht geladen werden: ${expectedText}`),
+    );
+    expect(matches.length).toBeGreaterThan(0);
   });
 });

@@ -48,30 +48,6 @@ export function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
   return endpoint;
 }
 
-export function normalizeLlmEndpoint(savedEndpoint, fallbackEndpoint) {
-  const endpoint = String(savedEndpoint || "").trim();
-  if (!endpoint) {
-    return fallbackEndpoint;
-  }
-
-  if (typeof window === "undefined") {
-    return endpoint;
-  }
-
-  const appIsLocal = isLocalHost(window.location.hostname);
-  const parsed = tryParseAbsoluteUrl(endpoint);
-  const endpointIsAbsolute = Boolean(parsed);
-  const endpointIsLocal = endpointIsAbsolute ? isLocalHost(parsed.hostname) : false;
-  const mixedContentRisk =
-    window.location.protocol === "https:" && endpointIsAbsolute && parsed.protocol.toLowerCase() === "http:";
-
-  if ((!appIsLocal && endpointIsLocal) || mixedContentRisk) {
-    return fallbackEndpoint;
-  }
-
-  return endpoint;
-}
-
 export function getWeekRange(isoDate) {
   const [year, month, day] = String(isoDate || "").split("-").map(Number);
   const date = new Date(year, (month || 1) - 1, day || 1);
