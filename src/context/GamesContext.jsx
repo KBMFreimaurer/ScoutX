@@ -171,6 +171,16 @@ export function GamesProvider({ children }) {
     }
   });
   const buildRunRef = useRef(0);
+  const favoritesRef = useRef(favorites);
+  const gameNotesRef = useRef(gameNotes);
+
+  useEffect(() => {
+    favoritesRef.current = favorites;
+  }, [favorites]);
+
+  useEffect(() => {
+    gameNotesRef.current = gameNotes;
+  }, [gameNotes]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -257,8 +267,10 @@ export function GamesProvider({ children }) {
         turnier: Boolean(jugend?.turnier),
       });
 
-      const boostedGames = withFavoriteBoost(fetchedGames, favorites);
-      const initialGames = withNotes(boostedGames, gameNotes);
+      const favoriteSnapshot = favoritesRef.current;
+      const noteSnapshot = gameNotesRef.current;
+      const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
+      const initialGames = withNotes(boostedGames, noteSnapshot);
       setGames(initialGames);
       setDataSourceUsed(source);
       setTeamValidation(meta?.teamFilter || null);
@@ -269,7 +281,7 @@ export function GamesProvider({ children }) {
           if (buildRunRef.current !== runId) {
             return;
           }
-          setGames(withNotes(withFavoriteBoost(enrichedGames, favorites), gameNotes));
+          setGames(withNotes(withFavoriteBoost(enrichedGames, favoritesRef.current), gameNotesRef.current));
         })
         .catch(() => {
           // Keep initial games if enrichment fails.
@@ -289,8 +301,6 @@ export function GamesProvider({ children }) {
     adapterEndpoint,
     adapterToken,
     jugend,
-    favorites,
-    gameNotes,
     startLocation,
     setErr,
     setTeamValidation,
