@@ -18,7 +18,11 @@ export function PDFExport({
       aria-label={label}
       onClick={() => {
         if (!disabled) {
-          openScoutPdf(games, plan, cfg);
+          void openScoutPdf(games, plan, cfg).then((result) => {
+            if (!result?.ok) {
+              alert(`PDF Export fehlgeschlagen: ${result?.error || "Unbekannter Fehler"}`);
+            }
+          });
         }
       }}
       disabled={disabled}

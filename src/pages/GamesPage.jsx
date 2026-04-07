@@ -15,9 +15,11 @@ export function GamesPage() {
     activeTeams,
     startLocation,
     teamValidation,
+    enrichingGames,
     prioritized,
     gameNotes,
     dataSourceUsed,
+    pdfExporting,
     onSetGameNote,
     onBackSetup,
     onGeneratePlanPdf,
@@ -129,6 +131,15 @@ export function GamesPage() {
               Startort: {startLocation.label}
             </div>
           ) : null}
+
+          {enrichingGames ? (
+            <div
+              aria-live="polite"
+              style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+            >
+              Entfernungen und Wetter werden gerade aktualisiert.
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -197,10 +208,10 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} style={{ width: "100%" }}>
+      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          Scout-Plan erstellen
+          {pdfExporting ? "PDF wird erstellt..." : "Scout-Plan erstellen"}
         </span>
       </PrimaryButton>
     </div>

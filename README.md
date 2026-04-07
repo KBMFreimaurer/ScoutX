@@ -42,6 +42,9 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-07: Games-Seite zeigt jetzt einen Live-Hinweis, wenn Entfernungs-/Wetter-Enrichment im Hintergrund noch läuft.
+- 2026-04-07: PDF-Generierung hat jetzt kontrolliertes Fehler-Handling mit UI-Feedback und deaktiviertem Erstellen-Button während laufendem Export.
+- 2026-04-07: Games-Enrichment läuft jetzt mit begrenzter Parallelität (max. 5 gleichzeitig), um externe Geo/Wetter-Requests kontrollierter zu staffeln.
 - 2026-04-07: Enrichment-Update in Games nutzt jetzt stets aktuelle Favoriten/Notizen, damit zwischenzeitlich gesetzte Spiel-Notizen beim asynchronen Nachladen nicht überschrieben werden.
 - 2026-04-07: Setup-Auswahl (Kreis, Jugend, Teams, Startdatum, Fokus, Adapter-Endpoint) wird jetzt in `localStorage` persistiert und nach Reload automatisch wiederhergestellt.
 - 2026-04-07: Wetter-Anreicherung nutzt jetzt robuste Datumsauflösung (`date` oder `dateObj`), damit Open-Meteo-Daten auch bei Adapter-Imports zuverlässig geladen werden.

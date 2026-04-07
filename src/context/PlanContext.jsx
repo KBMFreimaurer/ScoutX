@@ -105,6 +105,7 @@ export function PlanProvider({ children }) {
   const gamesCtx = useGames();
 
   const [plan, setPlan] = useState("");
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   const cfg = useMemo(
     () => ({
@@ -143,34 +144,54 @@ export function PlanProvider({ children }) {
   }, [gamesCtx.games]);
 
   const onGeneratePlanPdf = useCallback(async () => {
+    if (pdfExporting) {
+      return;
+    }
+
+    setup.setErr("");
+    setPdfExporting(true);
+
     const pdfCfg = {
       ...cfg,
       startLocation: setup.startLocation || null,
       routeOverview: routeOverview || null,
     };
 
-    if (String(plan || "").trim()) {
-      openScoutPdf(gamesCtx.games, plan, pdfCfg);
+    try {
+      if (String(plan || "").trim()) {
+        const result = await openScoutPdf(gamesCtx.games, plan, pdfCfg);
+        if (result?.ok === false) {
+          setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
+          return;
+        }
+        navigate("/plan");
+        return;
+      }
+
+      const currentYear = new Date().getFullYear();
+      const alterRange = setup.jugend?.alter ?? "";
+      const [minAlter] = alterRange.split("–").map(Number);
+      const jahrgang = Number.isNaN(minAlter) ? "unbekannt" : `${currentYear - minAlter - 1}/${currentYear - minAlter}`;
+
+      const quickPlan = buildQuickScoutPlan({
+        games: gamesCtx.games,
+        jugendLabel: setup.jugend?.label,
+        isTurnier: Boolean(setup.jugend?.turnier),
+        jahrgang,
+      });
+
+      setPlan(quickPlan);
+      const result = await openScoutPdf(gamesCtx.games, quickPlan, pdfCfg);
+      if (result?.ok === false) {
+        setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
+        return;
+      }
+
       navigate("/plan");
-      return;
+    } finally {
+      setPdfExporting(false);
     }
-
-    const currentYear = new Date().getFullYear();
-    const alterRange = setup.jugend?.alter ?? "";
-    const [minAlter] = alterRange.split("–").map(Number);
-    const jahrgang = Number.isNaN(minAlter) ? "unbekannt" : `${currentYear - minAlter - 1}/${currentYear - minAlter}`;
-
-    const quickPlan = buildQuickScoutPlan({
-      games: gamesCtx.games,
-      jugendLabel: setup.jugend?.label,
-      isTurnier: Boolean(setup.jugend?.turnier),
-      jahrgang,
-    });
-
-    setPlan(quickPlan);
-    openScoutPdf(gamesCtx.games, quickPlan, pdfCfg);
-    navigate("/plan");
-  }, [plan, gamesCtx.games, cfg, routeOverview, navigate, setup.jugend, setup.startLocation]);
+  }, [pdfExporting, plan, gamesCtx.games, cfg, routeOverview, navigate, setup]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
@@ -192,6 +213,7 @@ export function PlanProvider({ children }) {
   const value = useMemo(
     () => ({
       plan,
+      pdfExporting,
       cfg,
       routeOverview,
       setPlan,
@@ -202,6 +224,7 @@ export function PlanProvider({ children }) {
     }),
     [
       plan,
+      pdfExporting,
       cfg,
       routeOverview,
       onGeneratePlanPdf,

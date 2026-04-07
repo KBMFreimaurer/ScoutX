@@ -91,13 +91,15 @@ export async function openScoutPdf(games, plan, cfg, popupWindow = null) {
       try {
         popupWindow.location.href = blobUrl;
         popupWindow.focus();
-        return;
+        return { ok: true };
       } catch {
         // Fall through to plain download-only behavior.
       }
     }
+
+    return { ok: true };
   } catch (error) {
     const message = String(error?.message || error || "Unbekannter Fehler");
-    alert(`PDF Export fehlgeschlagen: ${message}`);
+    return { ok: false, error: message };
   }
 }
