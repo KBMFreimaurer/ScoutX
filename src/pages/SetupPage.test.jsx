@@ -6,6 +6,7 @@ import { SetupProvider } from "../context/SetupContext";
 import { GamesProvider } from "../context/GamesContext";
 import { PlanProvider } from "../context/PlanContext";
 import { SetupPage } from "./SetupPage";
+import { STORAGE_KEYS } from "../config/storage";
 
 function renderSetupPage() {
   return render(
@@ -63,5 +64,27 @@ describe("SetupPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Favorit \+/i }));
 
     expect(screen.getByRole("button", { name: /★ TSV Heimaterde/i })).toBeInTheDocument();
+  });
+
+  it("stellt Setup-Defaults aus localStorage wieder her", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.setup,
+      JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        selTeams: ["TSV Heimaterde"],
+        fromDate: "2026-05-12",
+        focus: "Innenverteidiger",
+        adapterEndpoint: "https://example.com/api/games",
+      }),
+    );
+
+    renderSetupPage();
+
+    expect(screen.getByLabelText(/Scouting ab/i)).toHaveValue("2026-05-12");
+    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("Innenverteidiger");
+    expect(screen.getByDisplayValue("TSV Heimaterde")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Adapter Endpoint/i)).toHaveValue("https://example.com/api/games");
+    expect(screen.getByRole("button", { name: /Spielplan generieren/i })).toBeEnabled();
   });
 });

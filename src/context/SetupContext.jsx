@@ -22,19 +22,46 @@ function sanitizeLocation(value) {
   };
 }
 
+function sanitizeIsoDate(value, fallbackIso) {
+  const iso = String(value || "").trim();
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return fallbackIso;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return fallbackIso;
+  }
+
+  return iso;
+}
+
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
+    const storedSetup = readStorage(STORAGE_KEYS.setup, {});
     const storedLocation = sanitizeLocation(readStorage(STORAGE_KEYS.location, {}));
     const storedFavorites = readStorage(STORAGE_KEYS.favorites, { teams: [] });
+    const storedKreisId = KREISE.some((item) => item.id === storedSetup?.kreisId) ? storedSetup.kreisId : "";
+    const storedJugendId = JUGEND_KLASSEN.some((item) => item.id === storedSetup?.jugendId) ? storedSetup.jugendId : "";
 
     return {
-      kreisId: "",
-      jugendId: "",
-      selTeams: [],
-      fromDate: todayIso,
-      focus: "",
-      adapterEndpoint: normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
+      kreisId: storedKreisId,
+      jugendId: storedJugendId,
+      selTeams: normalizeTeamParameters(storedSetup?.selTeams),
+      fromDate: sanitizeIsoDate(storedSetup?.fromDate, todayIso),
+      focus: String(storedSetup?.focus || "").trim(),
+      adapterEndpoint: normalizeAdapterEndpoint(storedSetup?.adapterEndpoint, defaultAdapterEndpoint),
       startLocation: storedLocation,
       favorites: normalizeTeamParameters(storedFavorites?.teams),
       todayIso,
@@ -67,6 +94,28 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
   const canBuild = Boolean(kreisId && jugendId);
   const hasLocation = Boolean(startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon));
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.setup,
+        JSON.stringify({
+          kreisId,
+          jugendId,
+          selTeams: activeTeams,
+          fromDate: sanitizeIsoDate(fromDate, setupDefaults.todayIso),
+          focus,
+          adapterEndpoint,
+        }),
+      );
+    } catch {
+      // Ignore localStorage write errors.
+    }
+  }, [kreisId, jugendId, activeTeams, fromDate, focus, adapterEndpoint, setupDefaults.todayIso]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
