@@ -140,6 +140,10 @@ function normalizeTime(value) {
   return "--:--";
 }
 
+function toIsoDateLocal(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function timeSortKey(value) {
   const normalized = normalizeTime(value);
   return TIME_RE.test(normalized) ? normalized : "99:99";
@@ -172,7 +176,7 @@ function normalizeGame(raw, index, options = {}) {
     return null;
   }
 
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : parsedDate.toISOString().slice(0, 10);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : toIsoDateLocal(parsedDate);
 
   return {
     id: raw.id ?? `adapter-${index}`,

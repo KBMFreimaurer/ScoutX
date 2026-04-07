@@ -43,6 +43,7 @@ docker compose --profile prod up --build
 ## Letzte Änderungen
 
 - 2026-04-07: Wetter-Anreicherung nutzt jetzt robuste Datumsauflösung (`date` oder `dateObj`), damit Open-Meteo-Daten auch bei Adapter-Imports zuverlässig geladen werden.
+- 2026-04-07: Adapter-Datumsnormalisierung nutzt lokale Kalenderdaten statt UTC-Slice, um Tagesverschiebungen bei `dd.mm.yyyy` zu vermeiden.
 
 ## Qualität
 

@@ -148,4 +148,18 @@ describe("adapter games lib", () => {
     expect(filtered).toHaveLength(1);
     expect(filtered[0].home).toBe("ETB Schwarz-Weiß Essen");
   });
+
+  it("keeps calendar day stable for dd.mm.yyyy dates", () => {
+    const games = normalizeGames([
+      {
+        home: "Team A",
+        away: "Team B",
+        date: "07.04.2026",
+        time: "11:00",
+      },
+    ]);
+
+    expect(games).toHaveLength(1);
+    expect(games[0].date).toBe("2026-04-07");
+  });
 });
