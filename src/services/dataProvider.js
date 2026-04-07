@@ -148,9 +148,26 @@ function toIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function getWeekRange(isoDate) {
-  const [year, month, day] = isoDate.split("-").map(Number);
+function parseIsoDateStrict(isoDate) {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error("Ungültiges Startdatum. Bitte Format YYYY-MM-DD verwenden.");
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
   const date = new Date(year, month - 1, day);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error("Ungültiges Startdatum. Bitte Format YYYY-MM-DD verwenden.");
+  }
+
+  return date;
+}
+
+function getWeekRange(isoDate) {
+  const date = parseIsoDateStrict(isoDate);
   date.setHours(0, 0, 0, 0);
 
   const weekday = (date.getDay() + 6) % 7;

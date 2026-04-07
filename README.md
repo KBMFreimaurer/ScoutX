@@ -45,6 +45,7 @@ docker compose --profile prod up --build
 - 2026-04-07: Wetter-Anreicherung nutzt jetzt robuste Datumsauflösung (`date` oder `dateObj`), damit Open-Meteo-Daten auch bei Adapter-Imports zuverlässig geladen werden.
 - 2026-04-07: Adapter-Datumsnormalisierung nutzt lokale Kalenderdaten statt UTC-Slice, um Tagesverschiebungen bei `dd.mm.yyyy` zu vermeiden.
 - 2026-04-07: CSV-Import verarbeitet nun korrekt quoted Felder mit Trennzeichen und escaped Quotes (`""`).
+- 2026-04-07: Ungültige `fromDate`-Werte werden jetzt früh validiert und mit klarer Fehlermeldung abgewiesen (kein stilles `Invalid Date`-Folgeverhalten).
 
 ## Qualität
 

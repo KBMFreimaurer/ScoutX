@@ -309,6 +309,26 @@ describe("data provider", () => {
     ).rejects.toThrow("Adapter Timeout");
   });
 
+  it("fails fast for invalid fromDate before adapter request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "",
+        toDate: "2026-04-07",
+        teams: ["Team A"],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+      }),
+    ).rejects.toThrow("Ungültiges Startdatum");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("does not use mock fallback in auto mode", async () => {
     vi.stubGlobal(
       "fetch",

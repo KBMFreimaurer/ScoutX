@@ -11,6 +11,24 @@ export function readStorage(key, fallback) {
   }
 }
 
+function parseIsoDateStrict(isoDate) {
+  const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error("Ungültiges Startdatum. Bitte Format YYYY-MM-DD verwenden.");
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error("Ungültiges Startdatum. Bitte Format YYYY-MM-DD verwenden.");
+  }
+
+  return date;
+}
+
 function isLocalHost(hostname) {
   const host = String(hostname || "").toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
@@ -49,8 +67,7 @@ export function normalizeAdapterEndpoint(savedEndpoint, fallbackEndpoint) {
 }
 
 export function getWeekRange(isoDate) {
-  const [year, month, day] = String(isoDate || "").split("-").map(Number);
-  const date = new Date(year, (month || 1) - 1, day || 1);
+  const date = parseIsoDateStrict(isoDate);
   date.setHours(0, 0, 0, 0);
 
   const weekday = (date.getDay() + 6) % 7;
