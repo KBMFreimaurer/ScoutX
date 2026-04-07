@@ -22,6 +22,22 @@ describe("data provider", () => {
     expect(games[0].km).toBe(12);
   });
 
+  it("parses quoted csv cells with delimiters and escaped quotes", () => {
+    const csv =
+      'date;time;home;away;venue;km;kreisId;jugendId\n2026-05-01;10:00;"Team ""A""";"Team;B";"Platz ""Mitte""; Feld 1";12;duesseldorf;e-jugend';
+    const games = parseUploadedGames(csv, "games.csv", {
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-04-01",
+      turnier: false,
+    });
+
+    expect(games).toHaveLength(1);
+    expect(games[0].home).toBe('Team "A"');
+    expect(games[0].away).toBe("Team;B");
+    expect(games[0].venue).toBe('Platz "Mitte"; Feld 1');
+  });
+
   it("returns validation stats for mixed import rows", () => {
     const csv = `date,time,home,away\n2026-05-01,11:00,Team A,Team B\ninvalid,xx,Team C,Team D\n2026-05-03,13:00,Team E,`;
     const report = parseUploadedGamesReport(csv, "games.csv", {

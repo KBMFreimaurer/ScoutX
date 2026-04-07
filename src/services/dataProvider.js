@@ -356,6 +356,12 @@ function splitDelimitedLine(line, delimiter) {
     const char = line[i];
 
     if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
+
       inQuotes = !inQuotes;
       continue;
     }
