@@ -3,6 +3,8 @@ import { dirname, extname, join, resolve } from "node:path";
 import { dedupeGames, normalizeGames, toLookupKey } from "./games.js";
 import { parseCsvRows } from "./csv.js";
 
+const DEFAULT_REMOTE_TIMEOUT_MS = 10000;
+
 async function fileExists(path) {
   try {
     await access(path);
@@ -124,7 +126,31 @@ async function loadImportDirectory(importDir, aliasMap) {
   };
 }
 
-async function loadRemoteSource(remoteUrl, remoteToken, aliasMap) {
+function normalizeRemoteTimeoutMs(value) {
+  const timeoutMs = Number(value);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return DEFAULT_REMOTE_TIMEOUT_MS;
+  }
+  return Math.max(1000, Math.round(timeoutMs));
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Remote source Timeout nach ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadRemoteSource(remoteUrl, remoteToken, aliasMap, timeoutMs) {
   if (!remoteUrl) {
     return { source: "remote", games: [], files: [] };
   }
@@ -134,7 +160,7 @@ async function loadRemoteSource(remoteUrl, remoteToken, aliasMap) {
     headers.Authorization = `Bearer ${remoteToken}`;
   }
 
-  const response = await fetch(remoteUrl, { headers });
+  const response = await fetchWithTimeout(remoteUrl, { headers }, timeoutMs);
   if (!response.ok) {
     throw new Error(`Remote source HTTP ${response.status}`);
   }
@@ -196,13 +222,16 @@ async function refreshStore(config) {
 
   const aliasMap = await loadAliases(aliasesFile);
   const warnings = [];
+  const remoteTimeoutMs = normalizeRemoteTimeoutMs(
+    config.remoteTimeoutMs ?? process.env.ADAPTER_REMOTE_TIMEOUT_MS ?? DEFAULT_REMOTE_TIMEOUT_MS,
+  );
 
   const importsResult = await loadImportDirectory(importDir, aliasMap);
   let remoteResult = { source: "remote", games: [], files: [] };
 
   if (config.remoteUrl) {
     try {
-      remoteResult = await loadRemoteSource(config.remoteUrl, config.remoteToken, aliasMap);
+      remoteResult = await loadRemoteSource(config.remoteUrl, config.remoteToken, aliasMap, remoteTimeoutMs);
     } catch (error) {
       warnings.push(error.message || "Remote source failed.");
     }
@@ -238,6 +267,7 @@ async function refreshStore(config) {
       importDir,
       sampleFile,
       remoteConfigured: Boolean(config.remoteUrl),
+      remoteTimeoutMs,
     },
   };
 

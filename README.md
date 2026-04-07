@@ -46,6 +46,7 @@ docker compose --profile prod up --build
 - 2026-04-07: Adapter-Datumsnormalisierung nutzt lokale Kalenderdaten statt UTC-Slice, um Tagesverschiebungen bei `dd.mm.yyyy` zu vermeiden.
 - 2026-04-07: CSV-Import verarbeitet nun korrekt quoted Felder mit Trennzeichen und escaped Quotes (`""`).
 - 2026-04-07: Ungültige `fromDate`-Werte werden jetzt früh validiert und mit klarer Fehlermeldung abgewiesen (kein stilles `Invalid Date`-Folgeverhalten).
+- 2026-04-07: Adapter-Remote-Refresh hat nun Abort-Timeout (`ADAPTER_REMOTE_TIMEOUT_MS`) statt potenziell unbegrenzt zu hängen.
 
 ## Qualität
 

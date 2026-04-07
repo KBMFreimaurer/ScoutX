@@ -109,6 +109,7 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_ALIASES_FILE` (default: `adapter-service/data/team-aliases.json`)
 - `ADAPTER_REMOTE_URL` (optional)
 - `ADAPTER_REMOTE_TOKEN` (optional)
+- `ADAPTER_REMOTE_TIMEOUT_MS` (default: `10000`)
 - `ADAPTER_TOKEN` (optional Bearer-Schutz)
 - `ADAPTER_REFRESH_INTERVAL_SEC` (default: `0`, z. B. `300`)
 - `ADAPTER_AUTO_REFRESH_WEEK` (default: `true`)

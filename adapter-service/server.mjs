@@ -28,6 +28,7 @@ const ALIASES_FILE =
   process.env.ADAPTER_ALIASES_FILE || fileURLToPath(new URL("./data/team-aliases.json", import.meta.url));
 const REMOTE_URL = process.env.ADAPTER_REMOTE_URL || "";
 const REMOTE_TOKEN = process.env.ADAPTER_REMOTE_TOKEN || "";
+const REMOTE_TIMEOUT_MS = Number(process.env.ADAPTER_REMOTE_TIMEOUT_MS || 10000);
 const REFRESH_INTERVAL_SEC = Number(process.env.ADAPTER_REFRESH_INTERVAL_SEC || 0);
 
 // Fully automatic week refresh for every scouting request
@@ -190,6 +191,7 @@ async function refreshData(reason = "manual") {
         storeFile: STORE_FILE,
         remoteUrl: REMOTE_URL,
         remoteToken: REMOTE_TOKEN,
+        remoteTimeoutMs: REMOTE_TIMEOUT_MS,
       });
 
       state.games = result.games;
@@ -587,6 +589,9 @@ server.listen(PORT, HOST, () => {
   console.log(`[adapter] store: ${STORE_FILE}`);
   console.log(`[adapter] imports: ${IMPORT_DIR}`);
   console.log(`[adapter] remote: ${REMOTE_URL || "disabled"}`);
+  if (REMOTE_URL) {
+    console.log(`[adapter] remote-timeout-ms: ${REMOTE_TIMEOUT_MS}`);
+  }
   console.log(`[adapter] auto-week: ${AUTO_REFRESH_WEEK ? "enabled" : "disabled"}`);
   console.log(`[adapter] week-source-template: ${WEEK_SOURCE_TEMPLATE ? "configured" : "disabled"}`);
   console.log(`[adapter] export-command: ${EXPORT_COMMAND ? "configured" : "disabled"}`);

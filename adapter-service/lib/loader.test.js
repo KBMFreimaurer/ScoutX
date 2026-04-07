@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { refreshStore } from "./loader";
 
 const tempDirs = [];
@@ -13,6 +13,9 @@ async function makeTempDir() {
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+
   for (const dir of tempDirs.splice(0, tempDirs.length)) {
     await rm(dir, { recursive: true, force: true });
   }
@@ -84,5 +87,51 @@ describe("loader", () => {
 
     expect(result.games).toHaveLength(1);
     expect(result.meta.warnings.some((msg) => msg.includes("Sample-Fallback"))).toBe(true);
+  });
+
+  it("times out remote source requests and keeps service functional", async () => {
+    const root = await makeTempDir();
+    const importsDir = join(root, "imports");
+    const dataDir = join(root, "data");
+
+    await mkdir(importsDir, { recursive: true });
+    await mkdir(dataDir, { recursive: true });
+
+    const storeFile = join(dataDir, "store.json");
+    const sampleFile = join(dataDir, "sample.json");
+
+    await writeFile(
+      sampleFile,
+      JSON.stringify({ games: [{ home: "Team Timeout A", away: "Team Timeout B", date: "2026-04-05", time: "11:00" }] }),
+      "utf8",
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url, options) =>
+        new Promise((_, reject) => {
+          options?.signal?.addEventListener("abort", () => {
+            const abortError = new Error("aborted");
+            abortError.name = "AbortError";
+            reject(abortError);
+          });
+        }),
+      ),
+    );
+
+    const resultPromise = refreshStore({
+      aliasesFile: "",
+      importDir: importsDir,
+      sampleFile,
+      storeFile,
+      remoteUrl: "https://example.com/games.json",
+      remoteToken: "",
+      remoteTimeoutMs: 30,
+    });
+
+    const result = await resultPromise;
+
+    expect(result.games).toHaveLength(1);
+    expect(result.meta.warnings.some((msg) => msg.includes("Timeout"))).toBe(true);
   });
 });
