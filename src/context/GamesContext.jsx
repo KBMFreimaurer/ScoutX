@@ -9,6 +9,40 @@ import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
 
+function toIsoDate(value) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
+    const [day, month, year] = text.split(".").map(Number);
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+export function resolveGameWeatherDate(game) {
+  return toIsoDate(game?.date) ?? toIsoDate(game?.dateObj) ?? null;
+}
+
 function normalizeLookup(value) {
   return String(value || "")
     .toLowerCase()
@@ -72,9 +106,11 @@ async function enrichGames(games, startLocation) {
             ? haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon)
             : null;
 
+        const weatherDate = resolveGameWeatherDate(game);
+
         const weather =
-          Number.isFinite(venueLat) && Number.isFinite(venueLon)
-            ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: game.date, time: game.time }).catch(() => null)
+          Number.isFinite(venueLat) && Number.isFinite(venueLon) && weatherDate
+            ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: weatherDate, time: game.time }).catch(() => null)
             : null;
 
         return {
