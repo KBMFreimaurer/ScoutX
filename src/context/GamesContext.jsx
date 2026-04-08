@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
-import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance } from "../utils/geo";
+import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
 import { fetchWeatherForGame } from "../utils/weather";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
@@ -171,6 +171,7 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 
 async function enrichGames(games, startLocation) {
   const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
+  const strictGoogleRouting = hasLocation && isGoogleRoutingStrictMode();
 
   const enrichedGames = await mapWithConcurrency(games, 5, async (game) => {
     try {
@@ -180,10 +181,31 @@ async function enrichGames(games, startLocation) {
       const venueLat = Number(geo?.lat);
       const venueLon = Number(geo?.lon);
 
-      const distanceKm =
-        hasLocation && Number.isFinite(venueLat) && Number.isFinite(venueLon)
-          ? haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon)
-          : null;
+      let distanceKm = null;
+      let distanceSource = null;
+      let fromStartRouteDistanceKm = null;
+      let fromStartRouteMinutes = null;
+
+      if (hasLocation && Number.isFinite(venueLat) && Number.isFinite(venueLon)) {
+        if (strictGoogleRouting) {
+          const route = await fetchDrivingRoute(
+            { lat: startLocation.lat, lon: startLocation.lon },
+            { lat: venueLat, lon: venueLon },
+          ).catch(() => null);
+          const routeDistanceKm = Number(route?.distanceKm);
+          const routeMinutes = Number(route?.durationMinutes);
+
+          if (Number.isFinite(routeDistanceKm)) {
+            distanceKm = routeDistanceKm;
+            distanceSource = "route";
+            fromStartRouteDistanceKm = routeDistanceKm;
+            fromStartRouteMinutes = Number.isFinite(routeMinutes) ? Math.max(1, Math.round(routeMinutes)) : estimateMinutesFromDistance(routeDistanceKm);
+          }
+        } else {
+          distanceKm = haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon);
+          distanceSource = Number.isFinite(distanceKm) ? "haversine" : null;
+        }
+      }
 
       const weatherDate = resolveGameWeatherDate(game);
 
@@ -197,7 +219,9 @@ async function enrichGames(games, startLocation) {
         venueLat: Number.isFinite(venueLat) ? venueLat : null,
         venueLon: Number.isFinite(venueLon) ? venueLon : null,
         distanceKm,
-        distanceSource: Number.isFinite(distanceKm) ? "haversine" : null,
+        distanceSource,
+        fromStartRouteDistanceKm,
+        fromStartRouteMinutes,
         weather,
       };
     } catch {
@@ -207,12 +231,18 @@ async function enrichGames(games, startLocation) {
         venueLon: null,
         distanceKm: null,
         distanceSource: null,
+        fromStartRouteDistanceKm: null,
+        fromStartRouteMinutes: null,
         weather: null,
       };
     }
   });
 
   if (!hasLocation) {
+    return enrichedGames;
+  }
+
+  if (strictGoogleRouting) {
     return enrichedGames;
   }
 

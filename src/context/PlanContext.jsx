@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { openScoutPdf } from "../services/pdf";
-import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving } from "../utils/geo";
+import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
@@ -103,6 +103,7 @@ export function PlanProvider({ children }) {
   const navigate = useNavigate();
   const setup = useSetup();
   const gamesCtx = useGames();
+  const strictGoogleRouting = isGoogleRoutingStrictMode();
 
   const [plan, setPlan] = useState("");
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -169,8 +170,12 @@ export function PlanProvider({ children }) {
       };
     }
 
-    const fallback = calculateRoute(setup.startLocation, routeGames);
-    setRouteOverview(fallback);
+    if (strictGoogleRouting) {
+      setRouteOverview(null);
+    } else {
+      const fallback = calculateRoute(setup.startLocation, routeGames);
+      setRouteOverview(fallback);
+    }
     setRouteCalculating(true);
 
     void Promise.all([
@@ -186,9 +191,7 @@ export function PlanProvider({ children }) {
         }
         setRouteDirectOptions(Array.isArray(direct) ? direct : []);
       })
-      .catch(() => {
-        // Keep fallback route overview.
-      })
+      .catch(() => {})
       .finally(() => {
         if (!alive) {
           return;
@@ -199,7 +202,7 @@ export function PlanProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [setup.startLocation, routeGames]);
+  }, [setup.startLocation, routeGames, strictGoogleRouting]);
 
   useEffect(() => {
     setPlan("");
@@ -219,7 +222,7 @@ export function PlanProvider({ children }) {
       if (setup.startLocation && routeGames.length > 0) {
         setRouteCalculating(true);
         try {
-          if (!resolvedRouteOverview) {
+          if (!resolvedRouteOverview && !strictGoogleRouting) {
             resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
             setRouteOverview(resolvedRouteOverview);
           }
@@ -239,7 +242,7 @@ export function PlanProvider({ children }) {
             setRouteDirectOptions(direct);
           }
         } catch {
-          if (!resolvedRouteOverview) {
+          if (!resolvedRouteOverview && !strictGoogleRouting) {
             resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
             setRouteOverview(resolvedRouteOverview);
           }
@@ -288,7 +291,7 @@ export function PlanProvider({ children }) {
     } finally {
       setPdfExporting(false);
     }
-  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, routeDirectOptions, routeGames, navigate, setup]);
+  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, routeDirectOptions, routeGames, navigate, setup, strictGoogleRouting]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
