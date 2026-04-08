@@ -52,6 +52,24 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function toFiniteNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) {
+      return null;
+    }
+
+    const parsed = Number(text.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 function normalizeAddressKey(address) {
   return String(address || "")
     .trim()
@@ -152,10 +170,10 @@ function setCachedGeocode(address, value) {
 }
 
 function toRouteKey(fromPoint, toPoint) {
-  const fromLat = Number(fromPoint?.lat);
-  const fromLon = Number(fromPoint?.lon);
-  const toLat = Number(toPoint?.lat);
-  const toLon = Number(toPoint?.lon);
+  const fromLat = toFiniteNumber(fromPoint?.lat);
+  const fromLon = toFiniteNumber(fromPoint?.lon);
+  const toLat = toFiniteNumber(toPoint?.lat);
+  const toLon = toFiniteNumber(toPoint?.lon);
 
   if (!Number.isFinite(fromLat) || !Number.isFinite(fromLon) || !Number.isFinite(toLat) || !Number.isFinite(toLon)) {
     return "";
@@ -212,8 +230,8 @@ async function enqueueRateLimited(task) {
 }
 
 function toGeoResult(entry, fallbackLabel = "") {
-  const lat = Number(entry?.lat);
-  const lon = Number(entry?.lon);
+  const lat = toFiniteNumber(entry?.lat);
+  const lon = toFiniteNumber(entry?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return null;
   }
@@ -227,8 +245,8 @@ function toGeoResult(entry, fallbackLabel = "") {
 
 function toPhotonGeoResult(entry, fallbackLabel = "") {
   const coords = Array.isArray(entry?.geometry?.coordinates) ? entry.geometry.coordinates : [];
-  const lon = Number(coords[0]);
-  const lat = Number(coords[1]);
+  const lon = toFiniteNumber(coords[0]);
+  const lat = toFiniteNumber(coords[1]);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return null;
   }
@@ -373,10 +391,10 @@ function estimateMinutesFromDistance(distanceKm) {
 }
 
 export async function fetchDrivingRoute(fromPoint, toPoint) {
-  const fromLat = Number(fromPoint?.lat);
-  const fromLon = Number(fromPoint?.lon);
-  const toLat = Number(toPoint?.lat);
-  const toLon = Number(toPoint?.lon);
+  const fromLat = toFiniteNumber(fromPoint?.lat);
+  const fromLon = toFiniteNumber(fromPoint?.lon);
+  const toLat = toFiniteNumber(toPoint?.lat);
+  const toLon = toFiniteNumber(toPoint?.lon);
 
   if (!Number.isFinite(fromLat) || !Number.isFinite(fromLon) || !Number.isFinite(toLat) || !Number.isFinite(toLon)) {
     return null;
@@ -425,8 +443,8 @@ export async function fetchDrivingRoute(fromPoint, toPoint) {
 function toGameStopPoint(game) {
   return {
     label: `${game.home} vs ${game.away}`,
-    lat: Number(game?.venueLat),
-    lon: Number(game?.venueLon),
+    lat: toFiniteNumber(game?.venueLat),
+    lon: toFiniteNumber(game?.venueLon),
   };
 }
 
@@ -545,8 +563,8 @@ export function isPreciseRouteAddress(value) {
 }
 
 export function hasRoutableVenueAddress(game) {
-  const lat = Number(game?.venueLat);
-  const lon = Number(game?.venueLon);
+  const lat = toFiniteNumber(game?.venueLat);
+  const lon = toFiniteNumber(game?.venueLon);
   if (Number.isFinite(lat) && Number.isFinite(lon)) {
     return true;
   }
@@ -585,8 +603,8 @@ async function resolveGameStopPoint(game) {
 
   for (const query of venueQueries) {
     const geocoded = await geocodeAddress(query).catch(() => null);
-    const lat = Number(geocoded?.lat);
-    const lon = Number(geocoded?.lon);
+    const lat = toFiniteNumber(geocoded?.lat);
+    const lon = toFiniteNumber(geocoded?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
       if (!isPlausibleForKreis(lat, lon, game?.kreisId)) {
         continue;
@@ -631,11 +649,12 @@ export function calculateRoute(startPoint, games) {
   const legs = [];
   let totalKm = 0;
   let totalMinutes = 0;
+  let knownDistanceLegs = 0;
 
   const start = {
     label: String(startPoint?.label || "Startort"),
-    lat: Number(startPoint?.lat),
-    lon: Number(startPoint?.lon),
+    lat: toFiniteNumber(startPoint?.lat),
+    lon: toFiniteNumber(startPoint?.lon),
   };
 
   let previous = start;
@@ -644,16 +663,16 @@ export function calculateRoute(startPoint, games) {
     const game = stops[index];
     const current = {
       label: `${game.home} vs ${game.away}`,
-      lat: Number(game?.venueLat),
-      lon: Number(game?.venueLon),
+      lat: toFiniteNumber(game?.venueLat),
+      lon: toFiniteNumber(game?.venueLon),
     };
 
     let distanceKm = null;
     let durationMinutes = null;
     let source = "haversine";
 
-    const exactFromStartDistance = index === 0 ? Number(game?.fromStartRouteDistanceKm) : null;
-    const exactFromStartMinutes = index === 0 ? Number(game?.fromStartRouteMinutes) : null;
+    const exactFromStartDistance = index === 0 ? toFiniteNumber(game?.fromStartRouteDistanceKm) : null;
+    const exactFromStartMinutes = index === 0 ? toFiniteNumber(game?.fromStartRouteMinutes) : null;
 
     if (Number.isFinite(exactFromStartDistance)) {
       distanceKm = exactFromStartDistance;
@@ -667,6 +686,7 @@ export function calculateRoute(startPoint, games) {
 
     if (Number.isFinite(distanceKm)) {
       totalKm += distanceKm;
+      knownDistanceLegs += 1;
     }
     if (Number.isFinite(durationMinutes)) {
       totalMinutes += durationMinutes;
@@ -689,6 +709,7 @@ export function calculateRoute(startPoint, games) {
     returnDistanceKm = haversineDistance(previous.lat, previous.lon, start.lat, start.lon);
     returnDurationMinutes = estimateMinutesFromDistance(returnDistanceKm);
     totalKm += returnDistanceKm;
+    knownDistanceLegs += 1;
     if (Number.isFinite(returnDurationMinutes)) {
       totalMinutes += returnDurationMinutes;
     }
@@ -703,10 +724,11 @@ export function calculateRoute(startPoint, games) {
   });
 
   const estimatedMinutes = totalMinutes > 0 ? Math.round(totalMinutes) : null;
+  const normalizedTotalKm = knownDistanceLegs > 0 ? totalKm : null;
 
   return {
     legs,
-    totalKm,
+    totalKm: normalizedTotalKm,
     estimatedMinutes,
   };
 }
@@ -716,11 +738,12 @@ export async function calculateRouteWithDriving(startPoint, games) {
   const legs = [];
   let totalKm = 0;
   let totalMinutes = 0;
+  let knownDistanceLegs = 0;
 
   const start = {
     label: String(startPoint?.label || "Startort"),
-    lat: Number(startPoint?.lat),
-    lon: Number(startPoint?.lon),
+    lat: toFiniteNumber(startPoint?.lat),
+    lon: toFiniteNumber(startPoint?.lon),
   };
 
   let previous = start;
@@ -733,6 +756,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
 
     if (Number.isFinite(selected.distanceKm)) {
       totalKm += selected.distanceKm;
+      knownDistanceLegs += 1;
     }
     if (Number.isFinite(selected.durationMinutes)) {
       totalMinutes += selected.durationMinutes;
@@ -755,6 +779,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
 
   if (Number.isFinite(selectedBack.distanceKm)) {
     totalKm += selectedBack.distanceKm;
+    knownDistanceLegs += 1;
   }
   if (Number.isFinite(selectedBack.durationMinutes)) {
     totalMinutes += selectedBack.durationMinutes;
@@ -770,7 +795,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
 
   return {
     legs,
-    totalKm,
+    totalKm: knownDistanceLegs > 0 ? totalKm : null,
     estimatedMinutes: totalMinutes > 0 ? Math.round(totalMinutes) : null,
   };
 }
@@ -778,8 +803,8 @@ export async function calculateRouteWithDriving(startPoint, games) {
 export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5) {
   const start = {
     label: String(startPoint?.label || "Startort"),
-    lat: Number(startPoint?.lat),
-    lon: Number(startPoint?.lon),
+    lat: toFiniteNumber(startPoint?.lat),
+    lon: toFiniteNumber(startPoint?.lon),
   };
   if (!Number.isFinite(start.lat) || !Number.isFinite(start.lon)) {
     return [];

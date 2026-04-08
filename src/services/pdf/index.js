@@ -198,9 +198,13 @@ async function prepareGamesForPdf(games, syncContext) {
 export function buildPdf(JsPdfCtor, games, cfg) {
   const normalizedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
   const createdAt = new Date().toLocaleString("de-DE");
+  const buildId =
+    typeof globalThis.__SCOUTX_BUILD_ID__ === "string" && globalThis.__SCOUTX_BUILD_ID__.trim()
+      ? globalThis.__SCOUTX_BUILD_ID__.trim()
+      : "unknown";
   const cfgWithBuild = {
     ...(cfg || {}),
-    pdfBuildId: String(import.meta.env?.VITE_GIT_COMMIT || "unknown"),
+    pdfBuildId: buildId,
   };
 
   const doc = new JsPdfCtor({

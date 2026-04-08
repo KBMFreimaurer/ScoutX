@@ -17,7 +17,7 @@ function resolveGitCommit() {
 export default defineConfig({
   plugins: [react()],
   define: {
-    "import.meta.env.VITE_GIT_COMMIT": JSON.stringify(resolveGitCommit()),
+    "globalThis.__SCOUTX_BUILD_ID__": JSON.stringify(resolveGitCommit()),
   },
   server: {
     proxy: {

@@ -1041,13 +1041,13 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
 
   if (routeOverview) {
     state.y += 2;
-    writeText(
-      doc,
-      state,
-      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(Number(routeOverview.totalKm))} | Fahrzeit ca. ${formatMinutesLabel(Number(routeOverview.estimatedMinutes))}`,
-      {
-        fontSize: 9,
-        style: "bold",
+      writeText(
+        doc,
+        state,
+        `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(toFiniteNumberOrNull(routeOverview.totalKm))} | Fahrzeit ca. ${formatMinutesLabel(toFiniteNumberOrNull(routeOverview.estimatedMinutes))}`,
+        {
+          fontSize: 9,
+          style: "bold",
         color: COLORS.text,
         lineHeight: 4.4,
         sectionOnNewPage: "Routenberechnung",
