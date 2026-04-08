@@ -730,6 +730,29 @@ function kickoffText(value) {
   return Number.isFinite(parsed) ? formatMinutes(parsed) : "--:--";
 }
 
+function toFiniteNumberOrNull(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) {
+      return null;
+    }
+    const parsed = Number(text.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function truncatePlain(text, maxChars) {
+  const safe = toSafeString(text);
+  if (safe.length <= maxChars) {
+    return safe;
+  }
+  return `${safe.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
 function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
   const tableX = MARGIN_X;
   const headerHeight = 7;
@@ -849,14 +872,14 @@ function buildDirectRouteRows(routeOverview, games, directRoutes, maxGames = 5) 
 
   return selectedGames.map((game, index) => {
     const providedRow = provided[index] || {};
-    const distanceKm = Number(providedRow.distanceKm);
-    const durationMinutes = Number(providedRow.durationMinutes);
-    const fallbackDistance = Number(game?.fromStartRouteDistanceKm ?? game?.distanceKm);
-    const resolvedDistance = Number.isFinite(distanceKm) ? distanceKm : Number.isFinite(fallbackDistance) ? fallbackDistance : null;
-    const fallbackMinutes = Number(game?.fromStartRouteMinutes);
-    const resolvedMinutes = Number.isFinite(durationMinutes)
+    const distanceKm = toFiniteNumberOrNull(providedRow.distanceKm);
+    const durationMinutes = toFiniteNumberOrNull(providedRow.durationMinutes);
+    const fallbackDistance = toFiniteNumberOrNull(game?.fromStartRouteDistanceKm ?? game?.distanceKm);
+    const resolvedDistance = distanceKm ?? fallbackDistance ?? null;
+    const fallbackMinutes = toFiniteNumberOrNull(game?.fromStartRouteMinutes);
+    const resolvedMinutes = durationMinutes !== null
       ? durationMinutes
-      : Number.isFinite(fallbackMinutes)
+      : fallbackMinutes !== null
         ? fallbackMinutes
         : estimateMinutes(resolvedDistance);
 
@@ -883,8 +906,8 @@ function buildBetweenGamesRows(routeOverview, directRows) {
     label: `Spiel ${index + 1} → Spiel ${index + 2}`,
     from: toSafeString(leg?.from),
     to: toSafeString(leg?.to),
-    distanceKm: Number(leg?.distanceKm),
-    durationMinutes: Number(leg?.durationMinutes),
+    distanceKm: toFiniteNumberOrNull(leg?.distanceKm),
+    durationMinutes: toFiniteNumberOrNull(leg?.durationMinutes),
   }));
 }
 
@@ -962,7 +985,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       writeText(
         doc,
         state,
-        `${row.label}: ${truncateText(row.from, 34)} → ${truncateText(row.to, 34)} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+        `${row.label}: ${truncatePlain(row.from, 34)} -> ${truncatePlain(row.to, 34)} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
         {
           fontSize: 8.8,
           color: COLORS.text,
