@@ -2,15 +2,9 @@ import { CONTENT_TOP, sortGamesByDateTime } from "./layout";
 import { fetchGamesWithProviders } from "../dataProvider";
 import { buildFileName } from "./styles";
 import {
-  drawAnalysisPage,
-  drawCover,
-  drawGameDetails,
+  drawGamesOverviewPage,
   drawHeaderFooter,
-  drawRouteOverview,
-  drawScheduleTable,
-  extractReasonMap,
-  parseRouteStops,
-  sanitizePlanText,
+  drawRouteCalculationPage,
 } from "./sections";
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
@@ -200,12 +194,8 @@ async function prepareGamesForPdf(games, syncContext) {
   return applyAuthoritativeGameCorrections(games, authoritativeGames);
 }
 
-export function buildPdf(JsPdfCtor, games, plan, cfg) {
+export function buildPdf(JsPdfCtor, games, cfg) {
   const normalizedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
-  const topGames = [...normalizedGames].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0)).slice(0, 5);
-  const cleanedPlanText = sanitizePlanText(plan);
-  const routeStops = parseRouteStops(cleanedPlanText, normalizedGames);
-  const reasonMap = extractReasonMap(cleanedPlanText);
   const createdAt = new Date().toLocaleString("de-DE");
 
   const doc = new JsPdfCtor({
@@ -217,11 +207,15 @@ export function buildPdf(JsPdfCtor, games, plan, cfg) {
 
   const state = { y: CONTENT_TOP, sections: ["Überblick"] };
 
-  drawCover(doc, state, cfg, createdAt, normalizedGames, topGames, routeStops, reasonMap);
-  drawRouteOverview(doc, state, cfg?.routeOverview, cfg?.startLocationLabel || cfg?.startLocation?.label || "Startort");
-  drawScheduleTable(doc, state, normalizedGames, reasonMap);
-  drawGameDetails(doc, state, normalizedGames);
-  drawAnalysisPage(doc, state, cleanedPlanText);
+  drawGamesOverviewPage(doc, state, cfg, createdAt, normalizedGames);
+  drawRouteCalculationPage(
+    doc,
+    state,
+    cfg?.routeOverview,
+    cfg?.startLocationLabel || cfg?.startLocation?.label || "Startort",
+    normalizedGames,
+    cfg?.routeDirectOptions,
+  );
   drawHeaderFooter(doc, state, cfg, createdAt);
 
   return doc;
@@ -260,11 +254,11 @@ function triggerDownload(url, fileName) {
   document.body.removeChild(link);
 }
 
-export async function openScoutPdf(games, plan, cfg, popupWindow = null, syncContext = null) {
+export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncContext = null) {
   try {
     const prepared = await prepareGamesForPdf(games, syncContext);
     const JsPdfCtor = await loadJsPdfCtor();
-    const doc = buildPdf(JsPdfCtor, prepared.games, plan, cfg);
+    const doc = buildPdf(JsPdfCtor, prepared.games, cfg);
     const blob = doc.output("blob");
     const blobUrl = URL.createObjectURL(blob);
     const fileName = buildFileName(cfg);

@@ -342,6 +342,31 @@ function toGameStopPoint(game) {
   };
 }
 
+async function resolveGameStopPoint(game) {
+  const initial = toGameStopPoint(game);
+  if (Number.isFinite(initial.lat) && Number.isFinite(initial.lon)) {
+    return initial;
+  }
+
+  const venueText = String(game?.venue || "").trim();
+  if (!venueText) {
+    return initial;
+  }
+
+  const geocoded = await geocodeAddress(venueText).catch(() => null);
+  const lat = Number(geocoded?.lat);
+  const lon = Number(geocoded?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return initial;
+  }
+
+  return {
+    label: initial.label,
+    lat,
+    lon,
+  };
+}
+
 function buildFallbackLeg(previous, current) {
   if (!Number.isFinite(previous?.lat) || !Number.isFinite(previous?.lon) || !Number.isFinite(current?.lat) || !Number.isFinite(current?.lon)) {
     return {
@@ -466,7 +491,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
   let previous = start;
 
   for (const game of stops) {
-    const current = toGameStopPoint(game);
+    const current = await resolveGameStopPoint(game);
     const routed = await fetchDrivingRoute(previous, current).catch(() => null);
     const fallback = buildFallbackLeg(previous, current);
     const selected = routed && Number.isFinite(routed.distanceKm) ? routed : fallback;
@@ -513,4 +538,39 @@ export async function calculateRouteWithDriving(startPoint, games) {
     totalKm,
     estimatedMinutes: totalMinutes > 0 ? Math.round(totalMinutes) : null,
   };
+}
+
+export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5) {
+  const start = {
+    label: String(startPoint?.label || "Startort"),
+    lat: Number(startPoint?.lat),
+    lon: Number(startPoint?.lon),
+  };
+  if (!Number.isFinite(start.lat) || !Number.isFinite(start.lon)) {
+    return [];
+  }
+
+  const stops = Array.isArray(games) ? games.slice(0, Math.max(0, Number(maxGames) || 0)) : [];
+  const rows = [];
+
+  for (let index = 0; index < stops.length; index += 1) {
+    const game = stops[index];
+    const target = await resolveGameStopPoint(game);
+    const routed = await fetchDrivingRoute(start, target).catch(() => null);
+    const fallback = buildFallbackLeg(start, target);
+    const selected = routed && Number.isFinite(routed.distanceKm) ? routed : fallback;
+
+    rows.push({
+      index: index + 1,
+      match: `${String(game?.home || "").trim()} vs ${String(game?.away || "").trim()}`,
+      date: String(game?.dateLabel || game?.date || "").trim(),
+      time: String(game?.time || "").trim(),
+      venue: String(game?.venue || "").trim(),
+      distanceKm: Number.isFinite(selected?.distanceKm) ? selected.distanceKm : null,
+      durationMinutes: Number.isFinite(selected?.durationMinutes) ? selected.durationMinutes : null,
+      source: selected?.source || "unknown",
+    });
+  }
+
+  return rows;
 }

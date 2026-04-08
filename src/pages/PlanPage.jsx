@@ -25,6 +25,7 @@ export function PlanPage() {
     isMobile,
     cfg,
     routeOverview,
+    routeCalculating,
     startLocation,
     onBackGames,
     onResetSoft,
@@ -97,7 +98,7 @@ export function PlanPage() {
           }}
           variant="primary"
           label="PDF herunterladen"
-          disabled={!String(plan || "").trim()}
+          disabled={!String(plan || "").trim() || (Boolean(startLocation) && routeCalculating)}
         />
         <button
           type="button"
@@ -123,6 +124,12 @@ export function PlanPage() {
           In Kalender exportieren
         </button>
       </div>
+
+      {startLocation && routeCalculating ? (
+        <div aria-live="polite" style={{ fontSize: 12, color: C.grayDark, marginBottom: 10 }}>
+          Route wird berechnet. Danach ist der PDF-Export vollständig.
+        </div>
+      ) : null}
 
       <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} />
 

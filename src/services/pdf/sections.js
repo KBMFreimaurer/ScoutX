@@ -709,3 +709,283 @@ export function drawHeaderFooter(doc, state, cfg, createdAt) {
     doc.text(`Seite ${page}/${pageCount}`, PAGE_WIDTH - MARGIN_X, 291.3, { align: "right" });
   }
 }
+
+function estimateMinutes(distanceKm) {
+  if (!Number.isFinite(distanceKm)) {
+    return null;
+  }
+  return Math.max(1, Math.round((distanceKm / 50) * 60));
+}
+
+function formatDistanceLabel(distanceKm) {
+  return Number.isFinite(distanceKm) ? `${Math.round(distanceKm)} km` : "unbekannt";
+}
+
+function formatMinutesLabel(durationMinutes) {
+  return Number.isFinite(durationMinutes) ? `${Math.round(durationMinutes)} Min` : "unbekannt";
+}
+
+function kickoffText(value) {
+  const parsed = parseMinutes(value);
+  return Number.isFinite(parsed) ? formatMinutes(parsed) : "--:--";
+}
+
+function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
+  const tableX = MARGIN_X;
+  const headerHeight = 7;
+
+  ensureSpace(doc, state, headerHeight + 1, "Spielübersicht", () => {
+    drawSectionTitle(doc, state, sectionTitleOnBreak, "Spielübersicht");
+  });
+
+  doc.setFillColor(237, 242, 247);
+  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+  doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, headerHeight, "FD");
+
+  let cursorX = tableX + 1.8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  for (const column of headers) {
+    doc.text(sanitizePdfText(column.label), cursorX, state.y + 4.8);
+    cursorX += column.width;
+  }
+
+  state.y += headerHeight;
+}
+
+export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
+  const title = "ScoutX Scouting Report";
+  const subtitle = `${toSafeString(cfg?.kreisLabel) || "-"} · ${toSafeString(cfg?.jugendLabel) || "-"} (${toSafeString(cfg?.jugendAlter) || "-"} Jahre)`;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+  doc.text(sanitizePdfText(title), MARGIN_X, state.y);
+  state.y += 7;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  doc.text(sanitizePdfText(subtitle), MARGIN_X, state.y);
+  state.y += 5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.8);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  const meta = `Erstellt: ${createdAt} · ab ${toSafeString(cfg?.fromDate) || "-"}`;
+  doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
+  state.y += 6;
+
+  drawSectionTitle(doc, state, `Spielübersicht (${games.length} Spiele)`, "Spielübersicht");
+
+  const headers = [
+    { key: "nr", label: "Nr.", width: 10 },
+    { key: "date", label: "Datum", width: 26 },
+    { key: "time", label: "Anstoß", width: 16 },
+    { key: "match", label: "Begegnung", width: 62 },
+    { key: "venue", label: "Spielort", width: 72 },
+  ];
+  const tableX = MARGIN_X;
+  let rowIndex = 0;
+
+  drawGamesTableHeader(doc, state, headers, "Spielübersicht (Fortsetzung)");
+
+  for (let i = 0; i < games.length; i += 1) {
+    const game = games[i];
+    const row = {
+      nr: String(i + 1),
+      date: formatGameDate(game),
+      time: kickoffText(game.time),
+      match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
+      venue: toSafeString(game.venue || "Sportanlage"),
+    };
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.3);
+    const lineCollections = headers.map((column) =>
+      doc
+        .splitTextToSize(row[column.key], Math.max(6, column.width - 2))
+        .slice(0, column.key === "venue" || column.key === "match" ? 2 : 1),
+    );
+    const maxLines = Math.max(...lineCollections.map((lines) => lines.length || 1));
+    const rowHeight = Math.max(6.8, maxLines * 3.9 + 2.2);
+
+    if (state.y + rowHeight > CONTENT_BOTTOM) {
+      addPage(state, doc, "Spielübersicht");
+      drawSectionTitle(doc, state, "Spielübersicht (Fortsetzung)", "Spielübersicht");
+      drawGamesTableHeader(doc, state, headers, "Spielübersicht (Fortsetzung)");
+      rowIndex = 0;
+    }
+
+    if (rowIndex % 2 === 1) {
+      doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+      doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "F");
+    }
+
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+
+    let cursorX = tableX + 1.6;
+    for (let c = 0; c < headers.length; c += 1) {
+      const lines = lineCollections[c];
+      let textY = state.y + 4.1;
+      for (const line of lines) {
+        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+        doc.text(sanitizePdfText(line), cursorX, textY);
+        textY += 3.8;
+      }
+      cursorX += headers[c].width;
+    }
+
+    state.y += rowHeight;
+    rowIndex += 1;
+  }
+}
+
+function buildDirectRouteRows(routeOverview, games, directRoutes, maxGames = 5) {
+  const selectedGames = sortGamesByDateTime(Array.isArray(games) ? games : []).slice(0, maxGames);
+  const provided = Array.isArray(directRoutes) ? directRoutes : [];
+
+  return selectedGames.map((game, index) => {
+    const providedRow = provided[index] || {};
+    const distanceKm = Number(providedRow.distanceKm);
+    const durationMinutes = Number(providedRow.durationMinutes);
+    const fallbackDistance = Number(game?.fromStartRouteDistanceKm ?? game?.distanceKm);
+    const resolvedDistance = Number.isFinite(distanceKm) ? distanceKm : Number.isFinite(fallbackDistance) ? fallbackDistance : null;
+    const fallbackMinutes = Number(game?.fromStartRouteMinutes);
+    const resolvedMinutes = Number.isFinite(durationMinutes)
+      ? durationMinutes
+      : Number.isFinite(fallbackMinutes)
+        ? fallbackMinutes
+        : estimateMinutes(resolvedDistance);
+
+    return {
+      index: index + 1,
+      match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
+      date: formatGameDate(game),
+      time: kickoffText(game.time),
+      venue: toSafeString(game.venue || "Sportanlage"),
+      distanceKm: resolvedDistance,
+      durationMinutes: resolvedMinutes,
+    };
+  });
+}
+
+function buildBetweenGamesRows(routeOverview, directRows) {
+  const legs = Array.isArray(routeOverview?.legs) ? routeOverview.legs : [];
+  const maxBetweenRows = Math.max(0, directRows.length - 1);
+  if (maxBetweenRows === 0) {
+    return [];
+  }
+
+  return legs.slice(1, 1 + maxBetweenRows).map((leg, index) => ({
+    label: `Spiel ${index + 1} → Spiel ${index + 2}`,
+    from: toSafeString(leg?.from),
+    to: toSafeString(leg?.to),
+    distanceKm: Number(leg?.distanceKm),
+    durationMinutes: Number(leg?.durationMinutes),
+  }));
+}
+
+export function drawRouteCalculationPage(doc, state, routeOverview, startLocationLabel = "Startort", games = [], directRoutes = []) {
+  addPage(state, doc, "Routenberechnung");
+  drawSectionTitle(doc, state, "Routenberechnung", "Routenberechnung");
+
+  writeText(doc, state, `Startpunkt: ${toSafeString(startLocationLabel) || "Startort"}`, {
+    fontSize: 9.4,
+    style: "bold",
+    color: COLORS.text,
+    lineHeight: 4.4,
+    sectionOnNewPage: "Routenberechnung",
+  });
+
+  const directRows = buildDirectRouteRows(routeOverview, games, directRoutes, 5);
+
+  writeText(doc, state, "Direkt vom Startpunkt zu Spiel 1-5", {
+    fontSize: 9.2,
+    style: "bold",
+    color: COLORS.accent,
+    lineHeight: 4.3,
+    sectionOnNewPage: "Routenberechnung",
+  });
+
+  if (directRows.length === 0) {
+    writeText(doc, state, "Keine Spielrouten verfügbar.", {
+      fontSize: 8.8,
+      color: COLORS.muted,
+      lineHeight: 4.1,
+      sectionOnNewPage: "Routenberechnung",
+    });
+  } else {
+    for (const row of directRows) {
+      writeText(
+        doc,
+        state,
+        `Spiel ${row.index}: ${row.match} · ${row.date} ${row.time} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+        {
+          fontSize: 8.8,
+          color: COLORS.text,
+          lineHeight: 4.2,
+          sectionOnNewPage: "Routenberechnung",
+        },
+      );
+      writeText(doc, state, `Ort: ${row.venue}`, {
+        fontSize: 8.1,
+        color: COLORS.muted,
+        lineHeight: 3.9,
+        sectionOnNewPage: "Routenberechnung",
+      });
+      state.y += 0.5;
+    }
+  }
+
+  state.y += 1.5;
+  writeText(doc, state, "Zwischen den Spielen (in Reihenfolge)", {
+    fontSize: 9.2,
+    style: "bold",
+    color: COLORS.accent,
+    lineHeight: 4.3,
+    sectionOnNewPage: "Routenberechnung",
+  });
+
+  const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  if (betweenRows.length === 0) {
+    writeText(doc, state, "Keine Zwischenstrecken verfügbar.", {
+      fontSize: 8.8,
+      color: COLORS.muted,
+      lineHeight: 4.1,
+      sectionOnNewPage: "Routenberechnung",
+    });
+  } else {
+    for (const row of betweenRows) {
+      writeText(
+        doc,
+        state,
+        `${row.label}: ${truncateText(row.from, 34)} → ${truncateText(row.to, 34)} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+        {
+          fontSize: 8.8,
+          color: COLORS.text,
+          lineHeight: 4.2,
+          sectionOnNewPage: "Routenberechnung",
+        },
+      );
+    }
+  }
+
+  if (routeOverview) {
+    state.y += 2;
+    writeText(
+      doc,
+      state,
+      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(Number(routeOverview.totalKm))} · Fahrzeit ca. ${formatMinutesLabel(Number(routeOverview.estimatedMinutes))}`,
+      {
+        fontSize: 9,
+        style: "bold",
+        color: COLORS.text,
+        lineHeight: 4.4,
+        sectionOnNewPage: "Routenberechnung",
+      },
+    );
+  }
+}

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { openScoutPdf } from "../services/pdf";
-import { calculateRoute, calculateRouteWithDriving } from "../utils/geo";
+import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
@@ -107,6 +107,8 @@ export function PlanProvider({ children }) {
   const [plan, setPlan] = useState("");
   const [pdfExporting, setPdfExporting] = useState(false);
   const [routeOverview, setRouteOverview] = useState(null);
+  const [routeDirectOptions, setRouteDirectOptions] = useState([]);
+  const [routeCalculating, setRouteCalculating] = useState(false);
 
   const cfg = useMemo(
     () => ({
@@ -160,6 +162,8 @@ export function PlanProvider({ children }) {
 
     if (!setup.startLocation || routeGames.length === 0) {
       setRouteOverview(null);
+      setRouteDirectOptions([]);
+      setRouteCalculating(false);
       return () => {
         alive = false;
       };
@@ -167,16 +171,29 @@ export function PlanProvider({ children }) {
 
     const fallback = calculateRoute(setup.startLocation, routeGames);
     setRouteOverview(fallback);
+    setRouteCalculating(true);
 
-    void calculateRouteWithDriving(setup.startLocation, routeGames)
-      .then((routed) => {
-        if (!alive || !routed) {
+    void Promise.all([
+      calculateRouteWithDriving(setup.startLocation, routeGames).catch(() => null),
+      calculateDirectStartRoutes(setup.startLocation, routeGames, 5).catch(() => []),
+    ])
+      .then(([routed, direct]) => {
+        if (!alive) {
           return;
         }
-        setRouteOverview(routed);
+        if (routed) {
+          setRouteOverview(routed);
+        }
+        setRouteDirectOptions(Array.isArray(direct) ? direct : []);
       })
       .catch(() => {
         // Keep fallback route overview.
+      })
+      .finally(() => {
+        if (!alive) {
+          return;
+        }
+        setRouteCalculating(false);
       });
 
     return () => {
@@ -196,13 +213,48 @@ export function PlanProvider({ children }) {
     setup.setErr("");
     setPdfExporting(true);
 
-    const pdfCfg = {
-      ...cfg,
-      startLocation: setup.startLocation || null,
-      routeOverview: routeOverview || null,
-    };
-
     try {
+      let resolvedRouteOverview = routeOverview || null;
+      let resolvedDirectOptions = routeDirectOptions;
+      if (setup.startLocation && routeGames.length > 0) {
+        setRouteCalculating(true);
+        try {
+          if (!resolvedRouteOverview) {
+            resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
+            setRouteOverview(resolvedRouteOverview);
+          }
+
+          const [routed, direct] = await Promise.all([
+            calculateRouteWithDriving(setup.startLocation, routeGames).catch(() => null),
+            calculateDirectStartRoutes(setup.startLocation, routeGames, 5).catch(() => []),
+          ]);
+
+          if (routed) {
+            resolvedRouteOverview = routed;
+            setRouteOverview(routed);
+          }
+
+          if (Array.isArray(direct)) {
+            resolvedDirectOptions = direct;
+            setRouteDirectOptions(direct);
+          }
+        } catch {
+          if (!resolvedRouteOverview) {
+            resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
+            setRouteOverview(resolvedRouteOverview);
+          }
+        } finally {
+          setRouteCalculating(false);
+        }
+      }
+
+      const pdfCfg = {
+        ...cfg,
+        startLocation: setup.startLocation || null,
+        routeOverview: resolvedRouteOverview || null,
+        routeDirectOptions: Array.isArray(resolvedDirectOptions) ? resolvedDirectOptions : [],
+      };
+
       if (String(plan || "").trim()) {
         const result = await openScoutPdf(gamesCtx.games, plan, pdfCfg, null, pdfSyncContext);
         if (result?.ok === false) {
@@ -236,7 +288,7 @@ export function PlanProvider({ children }) {
     } finally {
       setPdfExporting(false);
     }
-  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, navigate, setup]);
+  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, routeDirectOptions, routeGames, navigate, setup]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
@@ -259,6 +311,8 @@ export function PlanProvider({ children }) {
     () => ({
       plan,
       pdfExporting,
+      routeDirectOptions,
+      routeCalculating,
       cfg,
       routeOverview,
       setPlan,
@@ -270,6 +324,8 @@ export function PlanProvider({ children }) {
     [
       plan,
       pdfExporting,
+      routeDirectOptions,
+      routeCalculating,
       cfg,
       routeOverview,
       onGeneratePlanPdf,
