@@ -2,6 +2,19 @@ const GEO_CACHE_KEY = "scoutplan.geo.cache.v1";
 const ROUTE_CACHE_KEY = "scoutplan.route.cache.v1";
 const REQUEST_INTERVAL_MS = 1000;
 const ROUTING_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
+const PHOTON_BASE_URL = "https://photon.komoot.io/api/";
+const KREIS_GEO_HINTS = {
+  duesseldorf: "Düsseldorf, Deutschland",
+  duisburg: "Duisburg, Deutschland",
+  essen: "Essen, Deutschland",
+  krefeld: "Krefeld, Deutschland",
+  moenchen: "Mönchengladbach, Deutschland",
+  neuss: "Neuss, Deutschland",
+  oberhausen: "Oberhausen, Deutschland",
+  viersen: "Viersen, Deutschland",
+  wesel: "Wesel, Deutschland",
+  kleve: "Kleve, Deutschland",
+};
 
 let queue = Promise.resolve();
 let lastRequestTs = 0;
@@ -189,6 +202,76 @@ function toGeoResult(entry, fallbackLabel = "") {
   };
 }
 
+function toPhotonGeoResult(entry, fallbackLabel = "") {
+  const coords = Array.isArray(entry?.geometry?.coordinates) ? entry.geometry.coordinates : [];
+  const lon = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  const properties = entry?.properties && typeof entry.properties === "object" ? entry.properties : {};
+  const label = [
+    properties.name,
+    properties.street && properties.housenumber ? `${properties.street} ${properties.housenumber}` : properties.street,
+    properties.postcode,
+    properties.city,
+    properties.country,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    lat,
+    lon,
+    label: label || fallbackLabel,
+  };
+}
+
+async function requestNominatim(query) {
+  const endpoint = new URL("https://nominatim.openstreetmap.org/search");
+  endpoint.searchParams.set("format", "jsonv2");
+  endpoint.searchParams.set("limit", "1");
+  endpoint.searchParams.set("addressdetails", "1");
+  endpoint.searchParams.set("q", query);
+
+  const response = await fetch(endpoint.toString(), {
+    headers: {
+      Accept: "application/json",
+      "Accept-Language": "de",
+    },
+  }).catch(() => null);
+
+  if (!response || !response.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null);
+  return Array.isArray(payload) ? toGeoResult(payload[0], query) : null;
+}
+
+async function requestPhoton(query) {
+  const endpoint = new URL(PHOTON_BASE_URL);
+  endpoint.searchParams.set("q", query);
+  endpoint.searchParams.set("limit", "1");
+  endpoint.searchParams.set("lang", "de");
+
+  const response = await fetch(endpoint.toString(), {
+    headers: {
+      Accept: "application/json",
+    },
+  }).catch(() => null);
+
+  if (!response || !response.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+  return toPhotonGeoResult(features[0], query);
+}
+
 export async function geocodeAddress(address) {
   const query = String(address || "").trim();
   if (!query) {
@@ -201,25 +284,7 @@ export async function geocodeAddress(address) {
   }
 
   return enqueueRateLimited(async () => {
-    const endpoint = new URL("https://nominatim.openstreetmap.org/search");
-    endpoint.searchParams.set("format", "jsonv2");
-    endpoint.searchParams.set("limit", "1");
-    endpoint.searchParams.set("addressdetails", "1");
-    endpoint.searchParams.set("q", query);
-
-    const response = await fetch(endpoint.toString(), {
-      headers: {
-        Accept: "application/json",
-        "Accept-Language": "de",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Geocoding HTTP ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const result = Array.isArray(payload) ? toGeoResult(payload[0], query) : null;
+    const result = (await requestNominatim(query)) || (await requestPhoton(query)) || null;
     if (result) {
       setCachedGeocode(query, result);
     }
@@ -342,29 +407,85 @@ function toGameStopPoint(game) {
   };
 }
 
+function addQueryCandidate(candidates, value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return;
+  }
+  if (!candidates.includes(text)) {
+    candidates.push(text);
+  }
+}
+
+function buildVenueQueryCandidates(game) {
+  const candidates = [];
+  const venue = String(game?.venue || "").trim();
+  const venueAddress = String(game?.venueAddress || "").trim();
+  const venueCity = String(game?.venueCity || "").trim();
+  const venuePostalCode = String(game?.venuePostalCode || "").trim();
+  const kreisHint = String(KREIS_GEO_HINTS[String(game?.kreisId || "").trim()] || "").trim();
+
+  addQueryCandidate(candidates, venueAddress);
+  addQueryCandidate(candidates, venue);
+
+  const venueSegments = venue
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (venueSegments.length >= 2) {
+    addQueryCandidate(candidates, `${venueSegments[venueSegments.length - 2]}, ${venueSegments[venueSegments.length - 1]}`);
+  }
+  if (venueSegments.length >= 3) {
+    addQueryCandidate(
+      candidates,
+      `${venueSegments[venueSegments.length - 3]}, ${venueSegments[venueSegments.length - 2]}, ${venueSegments[venueSegments.length - 1]}`,
+    );
+  }
+
+  if (venue && venueCity) {
+    addQueryCandidate(candidates, `${venue}, ${venueCity}, Deutschland`);
+  }
+
+  if (venue && venuePostalCode) {
+    addQueryCandidate(candidates, `${venue}, ${venuePostalCode}, Deutschland`);
+  }
+
+  if (venue && kreisHint) {
+    addQueryCandidate(candidates, `${venue}, ${kreisHint}`);
+  }
+
+  if (venue) {
+    addQueryCandidate(candidates, `${venue}, Nordrhein-Westfalen, Deutschland`);
+  }
+
+  return candidates;
+}
+
 async function resolveGameStopPoint(game) {
   const initial = toGameStopPoint(game);
   if (Number.isFinite(initial.lat) && Number.isFinite(initial.lon)) {
     return initial;
   }
 
-  const venueText = String(game?.venue || "").trim();
-  if (!venueText) {
+  const venueQueries = buildVenueQueryCandidates(game);
+  if (!venueQueries.length) {
     return initial;
   }
 
-  const geocoded = await geocodeAddress(venueText).catch(() => null);
-  const lat = Number(geocoded?.lat);
-  const lon = Number(geocoded?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return initial;
+  for (const query of venueQueries) {
+    const geocoded = await geocodeAddress(query).catch(() => null);
+    const lat = Number(geocoded?.lat);
+    const lon = Number(geocoded?.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return {
+        label: initial.label,
+        lat,
+        lon,
+      };
+    }
   }
 
-  return {
-    label: initial.label,
-    lat,
-    lon,
-  };
+  return initial;
 }
 
 function buildFallbackLeg(previous, current) {

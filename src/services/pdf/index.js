@@ -1,6 +1,7 @@
 import { CONTENT_TOP, sortGamesByDateTime } from "./layout";
 import { fetchGamesWithProviders } from "../dataProvider";
 import { buildFileName } from "./styles";
+import { calculateDirectStartRoutes, calculateRouteWithDriving } from "../../utils/geo";
 import {
   drawGamesOverviewPage,
   drawHeaderFooter,
@@ -254,14 +255,92 @@ function triggerDownload(url, fileName) {
   document.body.removeChild(link);
 }
 
+function hasFiniteDistance(value) {
+  return Number.isFinite(Number(value));
+}
+
+function hasDirectRouteCoverage(rows, expectedCount) {
+  if (!Array.isArray(rows) || expectedCount <= 0) {
+    return false;
+  }
+
+  const covered = rows.slice(0, expectedCount).filter((row) => hasFiniteDistance(row?.distanceKm)).length;
+  return covered >= expectedCount;
+}
+
+function mergeRouteOverview(baseOverview, patchOverview) {
+  const baseLegs = Array.isArray(baseOverview?.legs) ? baseOverview.legs : [];
+  const patchLegs = Array.isArray(patchOverview?.legs) ? patchOverview.legs : [];
+
+  if (patchLegs.length === 0) {
+    return baseOverview || null;
+  }
+
+  if (baseLegs.length === 0) {
+    return patchOverview;
+  }
+
+  const mergedLegs = [...baseLegs];
+  for (let index = 0; index < patchLegs.length; index += 1) {
+    mergedLegs[index] = patchLegs[index];
+  }
+
+  return {
+    ...baseOverview,
+    legs: mergedLegs,
+    totalKm: hasFiniteDistance(baseOverview?.totalKm) ? Number(baseOverview.totalKm) : patchOverview.totalKm,
+    estimatedMinutes: hasFiniteDistance(baseOverview?.estimatedMinutes)
+      ? Number(baseOverview.estimatedMinutes)
+      : patchOverview.estimatedMinutes,
+  };
+}
+
+async function enrichPdfRouteData(cfg, games) {
+  const sortedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
+  const startLocation = cfg?.startLocation;
+  if (!startLocation || sortedGames.length === 0) {
+    return cfg;
+  }
+
+  let nextCfg = { ...(cfg || {}) };
+  const directExpectedCount = Math.min(5, sortedGames.length);
+  const currentDirectRows = Array.isArray(nextCfg.routeDirectOptions) ? nextCfg.routeDirectOptions : [];
+
+  if (!hasDirectRouteCoverage(currentDirectRows, directExpectedCount)) {
+    const refreshedDirectRows = await calculateDirectStartRoutes(startLocation, sortedGames, 5).catch(() => []);
+    if (Array.isArray(refreshedDirectRows) && refreshedDirectRows.length > 0) {
+      nextCfg = {
+        ...nextCfg,
+        routeDirectOptions: refreshedDirectRows,
+      };
+    }
+  }
+
+  const overviewLegs = Array.isArray(nextCfg?.routeOverview?.legs) ? nextCfg.routeOverview.legs : [];
+  const needsOverviewRefresh = directExpectedCount > 0 && !hasFiniteDistance(overviewLegs[0]?.distanceKm);
+
+  if (needsOverviewRefresh) {
+    const previewRoute = await calculateRouteWithDriving(startLocation, sortedGames.slice(0, directExpectedCount)).catch(() => null);
+    if (previewRoute && Array.isArray(previewRoute.legs) && previewRoute.legs.length > 0) {
+      nextCfg = {
+        ...nextCfg,
+        routeOverview: mergeRouteOverview(nextCfg.routeOverview, previewRoute),
+      };
+    }
+  }
+
+  return nextCfg;
+}
+
 export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncContext = null) {
   try {
     const prepared = await prepareGamesForPdf(games, syncContext);
     const JsPdfCtor = await loadJsPdfCtor();
-    const doc = buildPdf(JsPdfCtor, prepared.games, cfg);
+    const routeEnrichedCfg = await enrichPdfRouteData(cfg, prepared.games);
+    const doc = buildPdf(JsPdfCtor, prepared.games, routeEnrichedCfg);
     const blob = doc.output("blob");
     const blobUrl = URL.createObjectURL(blob);
-    const fileName = buildFileName(cfg);
+    const fileName = buildFileName(routeEnrichedCfg);
 
     trackBlobUrl(blobUrl);
     triggerDownload(blobUrl, fileName);
