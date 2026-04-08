@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
-import { fetchDrivingRoute, geocodeAddress, haversineDistance } from "../utils/geo";
+import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance } from "../utils/geo";
 import { fetchWeatherForGame } from "../utils/weather";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
@@ -174,7 +174,9 @@ async function enrichGames(games, startLocation) {
 
   const enrichedGames = await mapWithConcurrency(games, 5, async (game) => {
     try {
-      const geo = await geocodeAddress(game.venue || "").catch(() => null);
+      const geo = hasRoutableVenueAddress(game)
+        ? await geocodeAddress(game.venue || "").catch(() => null)
+        : null;
       const venueLat = Number(geo?.lat);
       const venueLon = Number(geo?.lon);
 

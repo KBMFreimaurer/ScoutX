@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { buildFileName, sanitizeFileSegment, sanitizePdfText } from "./styles";
 
 describe("pdf/styles", () => {
-  it("escaped kritische Zeichen für PDF-Text", () => {
-    expect(sanitizePdfText(`A & B <C> "D" 'E'`)).toBe("A &amp; B &lt;C&gt; &quot;D&quot; &#39;E&#39;");
+  it("entfernt Steuerzeichen und behält sichtbare Zeichen", () => {
+    expect(sanitizePdfText(`A & B <C> "D" 'E'\u0000\u0007`)).toBe(`A & B <C> "D" 'E'`);
   });
 
   it("bereinigt Dateisegmente stabil", () => {

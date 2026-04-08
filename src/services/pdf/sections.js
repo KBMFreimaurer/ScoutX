@@ -753,6 +753,35 @@ function truncatePlain(text, maxChars) {
   return `${safe.slice(0, Math.max(0, maxChars - 3))}...`;
 }
 
+function normalizeVenueForRoute(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isPreciseRouteVenueText(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return false;
+  }
+
+  const normalized = normalizeVenueForRoute(text);
+  if (!normalized) {
+    return false;
+  }
+
+  const hasPostalCode = /\b\d{5}\b/.test(text);
+  const hasStreetNumber = /(?:str(?:a(?:ss|ß)e)?\.?|weg|allee|gasse|ring|damm|ufer|kamp|pfad|chaussee|wall|promenade)[^,\n]*\d{1,4}[a-z]?/i.test(
+    text,
+  );
+
+  return hasPostalCode || hasStreetNumber;
+}
+
 function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
   const tableX = MARGIN_X;
   const headerHeight = 7;
@@ -872,25 +901,30 @@ function buildDirectRouteRows(routeOverview, games, directRoutes, maxGames = 5) 
 
   return selectedGames.map((game, index) => {
     const providedRow = provided[index] || {};
+    const venue = toSafeString(game.venue || "Sportanlage");
+    const routeEligible = isPreciseRouteVenueText(venue) || isPreciseRouteVenueText(game?.venueAddress);
     const distanceKm = toFiniteNumberOrNull(providedRow.distanceKm);
     const durationMinutes = toFiniteNumberOrNull(providedRow.durationMinutes);
     const fallbackDistance = toFiniteNumberOrNull(game?.fromStartRouteDistanceKm ?? game?.distanceKm);
-    const resolvedDistance = distanceKm ?? fallbackDistance ?? null;
+    const resolvedDistance = routeEligible ? distanceKm ?? fallbackDistance ?? null : null;
     const fallbackMinutes = toFiniteNumberOrNull(game?.fromStartRouteMinutes);
-    const resolvedMinutes = durationMinutes !== null
-      ? durationMinutes
-      : fallbackMinutes !== null
-        ? fallbackMinutes
-        : estimateMinutes(resolvedDistance);
+    const resolvedMinutes = routeEligible
+      ? durationMinutes !== null
+        ? durationMinutes
+        : fallbackMinutes !== null
+          ? fallbackMinutes
+          : estimateMinutes(resolvedDistance)
+      : null;
 
     return {
       index: index + 1,
       match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
       date: formatGameDate(game),
       time: kickoffText(game.time),
-      venue: toSafeString(game.venue || "Sportanlage"),
+      venue,
       distanceKm: resolvedDistance,
       durationMinutes: resolvedMinutes,
+      routeEligible,
     };
   });
 }
@@ -902,13 +936,19 @@ function buildBetweenGamesRows(routeOverview, directRows) {
     return [];
   }
 
-  return legs.slice(1, 1 + maxBetweenRows).map((leg, index) => ({
-    label: `Spiel ${index + 1} → Spiel ${index + 2}`,
-    from: toSafeString(leg?.from),
-    to: toSafeString(leg?.to),
-    distanceKm: toFiniteNumberOrNull(leg?.distanceKm),
-    durationMinutes: toFiniteNumberOrNull(leg?.durationMinutes),
-  }));
+  return legs.slice(1, 1 + maxBetweenRows).map((leg, index) => {
+    const left = directRows[index];
+    const right = directRows[index + 1];
+    const routeEligible = Boolean(left?.routeEligible) && Boolean(right?.routeEligible);
+
+    return {
+      label: `Spiel ${index + 1} → Spiel ${index + 2}`,
+      from: toSafeString(leg?.from),
+      to: toSafeString(leg?.to),
+      distanceKm: routeEligible ? toFiniteNumberOrNull(leg?.distanceKm) : null,
+      durationMinutes: routeEligible ? toFiniteNumberOrNull(leg?.durationMinutes) : null,
+    };
+  });
 }
 
 export function drawRouteCalculationPage(doc, state, routeOverview, startLocationLabel = "Startort", games = [], directRoutes = []) {
@@ -945,7 +985,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       writeText(
         doc,
         state,
-        `Spiel ${row.index}: ${row.match} · ${row.date} ${row.time} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+        `Spiel ${row.index}: ${row.match} | ${row.date} ${row.time} | ${formatDistanceLabel(row.distanceKm)} | ${formatMinutesLabel(row.durationMinutes)}`,
         {
           fontSize: 8.8,
           color: COLORS.text,
@@ -985,7 +1025,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       writeText(
         doc,
         state,
-        `${row.label}: ${truncatePlain(row.from, 34)} -> ${truncatePlain(row.to, 34)} · ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+        `${row.label}: ${truncatePlain(row.from, 34)} -> ${truncatePlain(row.to, 34)} | ${formatDistanceLabel(row.distanceKm)} | ${formatMinutesLabel(row.durationMinutes)}`,
         {
           fontSize: 8.8,
           color: COLORS.text,
@@ -1001,7 +1041,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
     writeText(
       doc,
       state,
-      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(Number(routeOverview.totalKm))} · Fahrzeit ca. ${formatMinutesLabel(Number(routeOverview.estimatedMinutes))}`,
+      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(Number(routeOverview.totalKm))} | Fahrzeit ca. ${formatMinutesLabel(Number(routeOverview.estimatedMinutes))}`,
       {
         fontSize: 9,
         style: "bold",

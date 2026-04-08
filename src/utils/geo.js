@@ -15,6 +15,29 @@ const KREIS_GEO_HINTS = {
   wesel: "Wesel, Deutschland",
   kleve: "Kleve, Deutschland",
 };
+const KREIS_CENTERS = {
+  duesseldorf: { lat: 51.2277, lon: 6.7735 },
+  duisburg: { lat: 51.4344, lon: 6.7623 },
+  essen: { lat: 51.4556, lon: 7.0116 },
+  krefeld: { lat: 51.3388, lon: 6.5853 },
+  moenchen: { lat: 51.1805, lon: 6.4428 },
+  neuss: { lat: 51.2042, lon: 6.6879 },
+  oberhausen: { lat: 51.4963, lon: 6.8638 },
+  viersen: { lat: 51.2555, lon: 6.3948 },
+  wesel: { lat: 51.6585, lon: 6.6176 },
+  kleve: { lat: 51.7871, lon: 6.1381 },
+};
+const GENERIC_VENUE_TOKENS = new Set([
+  "sportanlage",
+  "sportplatz",
+  "kunstrasenplatz",
+  "rasenplatz",
+  "hartplatz",
+  "stadion",
+  "platz",
+  "hauptplatz",
+  "spielfeld",
+]);
 
 let queue = Promise.resolve();
 let lastRequestTs = 0;
@@ -424,45 +447,133 @@ function buildVenueQueryCandidates(game) {
   const venueCity = String(game?.venueCity || "").trim();
   const venuePostalCode = String(game?.venuePostalCode || "").trim();
   const kreisHint = String(KREIS_GEO_HINTS[String(game?.kreisId || "").trim()] || "").trim();
+  const hasPreciseVenue = isPreciseRouteAddress(venue);
+  const hasPreciseVenueAddress = isPreciseRouteAddress(venueAddress);
 
-  addQueryCandidate(candidates, venueAddress);
-  addQueryCandidate(candidates, venue);
+  if (hasPreciseVenueAddress) {
+    addQueryCandidate(candidates, venueAddress);
+  }
+  if (hasPreciseVenue) {
+    addQueryCandidate(candidates, venue);
+  }
+
+  if (!hasPreciseVenue && !hasPreciseVenueAddress) {
+    return candidates;
+  }
 
   const venueSegments = venue
     .split(",")
     .map((segment) => segment.trim())
     .filter(Boolean);
-  if (venueSegments.length >= 2) {
+  if (hasPreciseVenue && venueSegments.length >= 2) {
     addQueryCandidate(candidates, `${venueSegments[venueSegments.length - 2]}, ${venueSegments[venueSegments.length - 1]}`);
   }
-  if (venueSegments.length >= 3) {
+  if (hasPreciseVenue && venueSegments.length >= 3) {
     addQueryCandidate(
       candidates,
       `${venueSegments[venueSegments.length - 3]}, ${venueSegments[venueSegments.length - 2]}, ${venueSegments[venueSegments.length - 1]}`,
     );
   }
 
-  if (venue && venueCity) {
+  if (hasPreciseVenue && venueCity) {
     addQueryCandidate(candidates, `${venue}, ${venueCity}, Deutschland`);
   }
 
-  if (venue && venuePostalCode) {
+  if (hasPreciseVenue && venuePostalCode) {
     addQueryCandidate(candidates, `${venue}, ${venuePostalCode}, Deutschland`);
   }
 
-  if (venue && kreisHint) {
+  if (hasPreciseVenue && kreisHint) {
     addQueryCandidate(candidates, `${venue}, ${kreisHint}`);
   }
 
-  if (venue) {
+  if (hasPreciseVenue) {
     addQueryCandidate(candidates, `${venue}, Nordrhein-Westfalen, Deutschland`);
   }
 
   return candidates;
 }
 
+function normalizeVenueText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isGenericVenueText(value) {
+  const venue = normalizeVenueText(value);
+  if (!venue) {
+    return true;
+  }
+
+  const parts = venue.split(" ").filter(Boolean);
+  if (parts.length === 0) {
+    return true;
+  }
+
+  const hasDigits = /\d/.test(venue);
+  const nonGenericWords = parts.filter((part) => !GENERIC_VENUE_TOKENS.has(part));
+  return !hasDigits && nonGenericWords.length <= 1;
+}
+
+function hasStreetNumberPattern(value) {
+  const text = String(value || "");
+  return /(?:str(?:a(?:ss|ß)e)?\.?|weg|allee|gasse|ring|damm|ufer|kamp|pfad|chaussee|wall|promenade)[^,\n]*\d{1,4}[a-z]?/i.test(
+    text,
+  );
+}
+
+function hasPostalCode(value) {
+  return /\b\d{5}\b/.test(String(value || ""));
+}
+
+export function isPreciseRouteAddress(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return false;
+  }
+
+  if (isGenericVenueText(text)) {
+    return false;
+  }
+
+  return hasPostalCode(text) || hasStreetNumberPattern(text);
+}
+
+export function hasRoutableVenueAddress(game) {
+  const lat = Number(game?.venueLat);
+  const lon = Number(game?.venueLon);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return true;
+  }
+
+  return isPreciseRouteAddress(game?.venueAddress) || isPreciseRouteAddress(game?.venue);
+}
+
+function isPlausibleForKreis(lat, lon, kreisId) {
+  const center = KREIS_CENTERS[String(kreisId || "").trim()];
+  if (!center) {
+    return true;
+  }
+
+  const distanceToCenter = haversineDistance(lat, lon, center.lat, center.lon);
+  return Number.isFinite(distanceToCenter) ? distanceToCenter <= 120 : true;
+}
+
 async function resolveGameStopPoint(game) {
   const initial = toGameStopPoint(game);
+  if (!hasRoutableVenueAddress(game)) {
+    return {
+      label: initial.label,
+      lat: Number.NaN,
+      lon: Number.NaN,
+    };
+  }
+
   if (Number.isFinite(initial.lat) && Number.isFinite(initial.lon)) {
     return initial;
   }
@@ -477,6 +588,9 @@ async function resolveGameStopPoint(game) {
     const lat = Number(geocoded?.lat);
     const lon = Number(geocoded?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      if (!isPlausibleForKreis(lat, lon, game?.kreisId)) {
+        continue;
+      }
       return {
         label: initial.label,
         lat,

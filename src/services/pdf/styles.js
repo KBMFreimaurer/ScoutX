@@ -14,12 +14,26 @@ export function toSafeString(value) {
 }
 
 export function sanitizePdfText(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  const normalized = String(value ?? "").replace(/\r\n?/g, "\n");
+  let cleaned = "";
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const code = normalized.charCodeAt(index);
+    const isControl =
+      (code >= 0 && code <= 8) ||
+      code === 11 ||
+      code === 12 ||
+      (code >= 14 && code <= 31) ||
+      code === 127;
+
+    if (isControl) {
+      continue;
+    }
+
+    cleaned += normalized[index];
+  }
+
+  return cleaned;
 }
 
 export function sanitizeFileSegment(value, fallback = "ScoutX") {
