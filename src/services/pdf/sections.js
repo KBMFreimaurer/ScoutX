@@ -682,6 +682,7 @@ export function drawCover(doc, state, cfg, createdAt, games, topGames, routeStop
 export function drawHeaderFooter(doc, state, cfg, createdAt) {
   const pageCount = doc.getNumberOfPages();
   const sectionByPage = state.sections;
+  const buildId = toSafeString(cfg?.pdfBuildId || "unknown");
 
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page);
@@ -704,7 +705,9 @@ export function drawHeaderFooter(doc, state, cfg, createdAt) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-    const footerLeft = `${toSafeString(cfg?.kreisLabel) || "-"} · ${toSafeString(cfg?.jugendLabel) || "-"} · Export ${createdAt}`;
+    const footerLeft = `${toSafeString(cfg?.kreisLabel) || "-"} · ${
+      toSafeString(cfg?.jugendLabel) || "-"
+    } · Export ${createdAt} · Build ${buildId}`;
     doc.text(sanitizePdfText(footerLeft), MARGIN_X, 291.3);
     doc.text(`Seite ${page}/${pageCount}`, PAGE_WIDTH - MARGIN_X, 291.3, { align: "right" });
   }

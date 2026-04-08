@@ -198,6 +198,10 @@ async function prepareGamesForPdf(games, syncContext) {
 export function buildPdf(JsPdfCtor, games, cfg) {
   const normalizedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
   const createdAt = new Date().toLocaleString("de-DE");
+  const cfgWithBuild = {
+    ...(cfg || {}),
+    pdfBuildId: String(import.meta.env?.VITE_GIT_COMMIT || "unknown"),
+  };
 
   const doc = new JsPdfCtor({
     unit: "mm",
@@ -208,16 +212,16 @@ export function buildPdf(JsPdfCtor, games, cfg) {
 
   const state = { y: CONTENT_TOP, sections: ["Überblick"] };
 
-  drawGamesOverviewPage(doc, state, cfg, createdAt, normalizedGames);
+  drawGamesOverviewPage(doc, state, cfgWithBuild, createdAt, normalizedGames);
   drawRouteCalculationPage(
     doc,
     state,
-    cfg?.routeOverview,
-    cfg?.startLocationLabel || cfg?.startLocation?.label || "Startort",
+    cfgWithBuild?.routeOverview,
+    cfgWithBuild?.startLocationLabel || cfgWithBuild?.startLocation?.label || "Startort",
     normalizedGames,
-    cfg?.routeDirectOptions,
+    cfgWithBuild?.routeDirectOptions,
   );
-  drawHeaderFooter(doc, state, cfg, createdAt);
+  drawHeaderFooter(doc, state, cfgWithBuild, createdAt);
 
   return doc;
 }
