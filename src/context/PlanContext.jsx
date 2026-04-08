@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { openScoutPdf } from "../services/pdf";
-import { calculateRoute } from "../utils/geo";
+import { calculateRoute, calculateRouteWithDriving } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
@@ -41,7 +41,7 @@ function buildQuickScoutPlan({ games, jugendLabel, isTurnier, jahrgang }) {
   const topGames = [...sortedGames]
     .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))
     .slice(0, 5);
-  const routeGames = sortedGames.slice(0, 3);
+  const routeGames = sortedGames;
   const firstYear = String(jahrgang || "").split("/")[0] || "unbekannt";
   const lines = [];
 
@@ -80,7 +80,7 @@ function buildQuickScoutPlan({ games, jugendLabel, isTurnier, jahrgang }) {
     }
   }
 
-  lines.push("ROUTENPLAN (MAX. 3 SPIELE)");
+  lines.push("ROUTENPLAN");
   lines.push("SCOUTING PLAN");
 
   if (routeGames.length === 0) {
@@ -106,6 +106,7 @@ export function PlanProvider({ children }) {
 
   const [plan, setPlan] = useState("");
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [routeOverview, setRouteOverview] = useState(null);
 
   const cfg = useMemo(
     () => ({
@@ -119,6 +120,29 @@ export function PlanProvider({ children }) {
     [setup.kreis, setup.jugend, setup.fromDate, setup.focus, setup.startLocation],
   );
 
+  const pdfSyncContext = useMemo(
+    () => ({
+      source: gamesCtx.dataSourceUsed,
+      adapterEndpoint: setup.adapterEndpoint,
+      adapterToken: setup.adapterToken,
+      kreisId: setup.kreisId,
+      jugendId: setup.jugendId,
+      fromDate: setup.fromDate,
+      teams: setup.activeTeams,
+      turnier: Boolean(setup.jugend?.turnier),
+    }),
+    [
+      gamesCtx.dataSourceUsed,
+      setup.adapterEndpoint,
+      setup.adapterToken,
+      setup.kreisId,
+      setup.jugendId,
+      setup.fromDate,
+      setup.activeTeams,
+      setup.jugend,
+    ],
+  );
+
   const routeGames = useMemo(() => {
     return [...(Array.isArray(gamesCtx.games) ? gamesCtx.games : [])]
       .sort((a, b) => {
@@ -128,15 +152,36 @@ export function PlanProvider({ children }) {
           return ad - bd;
         }
         return toSortableKickoff(a.time).localeCompare(toSortableKickoff(b.time));
-      })
-      .slice(0, 3);
+      });
   }, [gamesCtx.games]);
 
-  const routeOverview = useMemo(() => {
-    if (!setup.startLocation) {
-      return null;
+  useEffect(() => {
+    let alive = true;
+
+    if (!setup.startLocation || routeGames.length === 0) {
+      setRouteOverview(null);
+      return () => {
+        alive = false;
+      };
     }
-    return calculateRoute(setup.startLocation, routeGames);
+
+    const fallback = calculateRoute(setup.startLocation, routeGames);
+    setRouteOverview(fallback);
+
+    void calculateRouteWithDriving(setup.startLocation, routeGames)
+      .then((routed) => {
+        if (!alive || !routed) {
+          return;
+        }
+        setRouteOverview(routed);
+      })
+      .catch(() => {
+        // Keep fallback route overview.
+      });
+
+    return () => {
+      alive = false;
+    };
   }, [setup.startLocation, routeGames]);
 
   useEffect(() => {
@@ -159,7 +204,7 @@ export function PlanProvider({ children }) {
 
     try {
       if (String(plan || "").trim()) {
-        const result = await openScoutPdf(gamesCtx.games, plan, pdfCfg);
+        const result = await openScoutPdf(gamesCtx.games, plan, pdfCfg, null, pdfSyncContext);
         if (result?.ok === false) {
           setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
           return;
@@ -181,7 +226,7 @@ export function PlanProvider({ children }) {
       });
 
       setPlan(quickPlan);
-      const result = await openScoutPdf(gamesCtx.games, quickPlan, pdfCfg);
+      const result = await openScoutPdf(gamesCtx.games, quickPlan, pdfCfg, null, pdfSyncContext);
       if (result?.ok === false) {
         setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
         return;
@@ -191,7 +236,7 @@ export function PlanProvider({ children }) {
     } finally {
       setPdfExporting(false);
     }
-  }, [pdfExporting, plan, gamesCtx.games, cfg, routeOverview, navigate, setup]);
+  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, navigate, setup]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");

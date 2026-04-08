@@ -446,12 +446,18 @@ export function drawRouteOverview(doc, state, routeOverview, startLocationLabel 
 
   for (const leg of routeOverview.legs) {
     const distanceLabel = Number.isFinite(leg?.distanceKm) ? `${Math.round(leg.distanceKm)} km` : "unbekannt";
-    writeText(doc, state, `${toSafeString(leg?.from)} → ${toSafeString(leg?.to)} · ${distanceLabel}`, {
+    const minutesLabel = Number.isFinite(leg?.durationMinutes) ? `${Math.round(leg.durationMinutes)} Min` : null;
+    writeText(
+      doc,
+      state,
+      `${toSafeString(leg?.from)} → ${toSafeString(leg?.to)} · ${distanceLabel}${minutesLabel ? ` · ${minutesLabel}` : ""}`,
+      {
       fontSize: 8.8,
       color: COLORS.muted,
       lineHeight: 4.2,
       sectionOnNewPage: "Routenübersicht",
-    });
+    },
+    );
   }
 
   const totalLabel = Number.isFinite(routeOverview.totalKm) ? `${Math.round(routeOverview.totalKm)} km` : "unbekannt";

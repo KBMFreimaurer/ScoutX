@@ -14,7 +14,14 @@ export function PlanPage() {
     games,
     plan,
     kreis,
+    kreisId,
     jugend,
+    jugendId,
+    activeTeams,
+    dataSourceUsed,
+    adapterEndpoint,
+    adapterToken,
+    fromDate,
     isMobile,
     cfg,
     routeOverview,
@@ -78,6 +85,16 @@ export function PlanPage() {
             startLocation,
             startLocationLabel: startLocation?.label || cfg?.startLocationLabel || "",
           }}
+          syncContext={{
+            source: dataSourceUsed,
+            adapterEndpoint,
+            adapterToken,
+            kreisId,
+            jugendId,
+            fromDate,
+            teams: activeTeams,
+            turnier: Boolean(jugend?.turnier),
+          }}
           variant="primary"
           label="PDF herunterladen"
           disabled={!String(plan || "").trim()}
@@ -126,6 +143,7 @@ export function PlanPage() {
             {routeOverview.legs.map((leg, index) => (
               <div key={`${leg.from}-${leg.to}-${index}`} style={{ fontSize: 12, color: C.gray }}>
                 {leg.from} → {leg.to} · {formatDistanceKm(leg.distanceKm)}
+                {Number.isFinite(leg.durationMinutes) ? ` · ${leg.durationMinutes} Min` : ""}
               </div>
             ))}
           </div>

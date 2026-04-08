@@ -5,6 +5,7 @@ export function PDFExport({
   games,
   plan = "",
   cfg,
+  syncContext = null,
   label = "PDF herunterladen",
   variant = "ghost",
   style = {},
@@ -18,7 +19,7 @@ export function PDFExport({
       aria-label={label}
       onClick={() => {
         if (!disabled) {
-          void openScoutPdf(games, plan, cfg).then((result) => {
+          void openScoutPdf(games, plan, cfg, null, syncContext).then((result) => {
             if (!result?.ok) {
               alert(`PDF Export fehlgeschlagen: ${result?.error || "Unbekannter Fehler"}`);
             }

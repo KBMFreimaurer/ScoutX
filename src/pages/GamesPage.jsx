@@ -6,6 +6,7 @@ import { TopFive } from "../components/TopFive";
 import { DATA_SOURCE_LABELS } from "../services/dataProvider";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
+import { formatDistanceKm } from "../utils/geo";
 
 export function GamesPage() {
   const {
@@ -37,6 +38,21 @@ export function GamesPage() {
   const shouldPaginate = games.length > 100;
   const [sortMode, setSortMode] = useState("priority");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const firstGameRoute = useMemo(() => {
+    const withExactStartRoute = [...games]
+      .filter((game) => Number.isFinite(game?.fromStartRouteDistanceKm))
+      .sort((a, b) => {
+        const ad = a?.dateObj instanceof Date ? a.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        const bd = b?.dateObj instanceof Date ? b.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+        if (ad !== bd) {
+          return ad - bd;
+        }
+        return String(a.time || "99:99").localeCompare(String(b.time || "99:99"));
+      });
+
+    return withExactStartRoute[0] || null;
+  }, [games]);
+
   const sortedGames = useMemo(() => {
     if (sortMode === "distance") {
       return [...games].sort((a, b) => {
@@ -129,6 +145,16 @@ export function GamesPage() {
           {startLocation?.label ? (
             <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
               Startort: {startLocation.label}
+            </div>
+          ) : null}
+
+          {firstGameRoute ? (
+            <div
+              aria-live="polite"
+              style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+            >
+              Straßenroute Start → 1. Spiel: {formatDistanceKm(firstGameRoute.fromStartRouteDistanceKm)} ·{" "}
+              {Number.isFinite(firstGameRoute.fromStartRouteMinutes) ? `${firstGameRoute.fromStartRouteMinutes} Min` : "Zeit unbekannt"}
             </div>
           ) : null}
 
