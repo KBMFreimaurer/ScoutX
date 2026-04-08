@@ -524,7 +524,7 @@ function estimateMinutesFromDistance(distanceKm) {
   return Math.max(1, Math.round((distanceKm / 50) * 60));
 }
 
-function buildRouteResult(distanceMeters, durationSeconds) {
+function buildRouteResult(distanceMeters, durationSeconds, provider = "unknown") {
   const parsedDistance = Number(distanceMeters);
   if (!Number.isFinite(parsedDistance) || parsedDistance <= 0) {
     return null;
@@ -537,6 +537,7 @@ function buildRouteResult(distanceMeters, durationSeconds) {
     durationMinutes:
       Number.isFinite(parsedDuration) && parsedDuration > 0 ? Math.max(1, Math.round(parsedDuration / 60)) : null,
     source: "route",
+    provider,
   };
 }
 
@@ -578,14 +579,14 @@ async function requestGoogleDrivingRoute(fromPoint, toPoint) {
   }
 
   const leg = Array.isArray(payload?.routes?.[0]?.legs) ? payload.routes[0].legs[0] : null;
-  const fromGoogleLeg = buildRouteResult(leg?.distance?.value, leg?.duration?.value);
+  const fromGoogleLeg = buildRouteResult(leg?.distance?.value, leg?.duration?.value, "google");
   if (fromGoogleLeg) {
     return fromGoogleLeg;
   }
 
   // Test-friendly fallback: accept OSRM-like payloads from mocked fetch responses.
   const osrmLike = Array.isArray(payload?.routes) ? payload.routes[0] : null;
-  return buildRouteResult(osrmLike?.distance, osrmLike?.duration);
+  return buildRouteResult(osrmLike?.distance, osrmLike?.duration, "google");
 }
 
 async function requestOsrmDrivingRoute(fromLat, fromLon, toLat, toLon) {
@@ -607,14 +608,15 @@ async function requestOsrmDrivingRoute(fromLat, fromLon, toLat, toLon) {
 
   const payload = await response.json();
   const route = Array.isArray(payload?.routes) ? payload.routes[0] : null;
-  return buildRouteResult(route?.distance, route?.duration);
+  return buildRouteResult(route?.distance, route?.duration, "osrm");
 }
 
-export async function fetchDrivingRoute(fromPoint, toPoint) {
+export async function fetchDrivingRoute(fromPoint, toPoint, options = {}) {
   const fromLat = toFiniteNumber(fromPoint?.lat);
   const fromLon = toFiniteNumber(fromPoint?.lon);
   const toLat = toFiniteNumber(toPoint?.lat);
   const toLon = toFiniteNumber(toPoint?.lon);
+  const requireGoogle = options?.requireGoogle === true;
 
   if (!Number.isFinite(fromLat) || !Number.isFinite(fromLon) || !Number.isFinite(toLat) || !Number.isFinite(toLon)) {
     return null;
@@ -622,8 +624,12 @@ export async function fetchDrivingRoute(fromPoint, toPoint) {
 
   const provider = getRouteProvider();
   const cached = getCachedRoute(fromPoint, toPoint, provider);
-  if (cached) {
+  if (cached && (!requireGoogle || String(cached?.provider || "").toLowerCase() === "google")) {
     return cached;
+  }
+
+  if (requireGoogle && !hasGoogleMapsApiKey()) {
+    return null;
   }
 
   const googleRoute = await requestGoogleDrivingRoute(fromPoint, toPoint);
@@ -632,7 +638,7 @@ export async function fetchDrivingRoute(fromPoint, toPoint) {
     return googleRoute;
   }
 
-  if (shouldUseGoogleStrictMode()) {
+  if (requireGoogle || shouldUseGoogleStrictMode()) {
     return null;
   }
 
@@ -645,16 +651,18 @@ export async function fetchDrivingRoute(fromPoint, toPoint) {
   return routeResult;
 }
 
-function selectLegResult(previous, current, routed) {
+function selectLegResult(previous, current, routed, options = {}) {
+  const requireGoogle = options?.requireGoogle === true;
   if (routed && Number.isFinite(routed.distanceKm)) {
     return routed;
   }
 
-  if (shouldUseGoogleStrictMode()) {
+  if (requireGoogle || shouldUseGoogleStrictMode()) {
     return {
       distanceKm: null,
       durationMinutes: null,
       source: "unknown",
+      provider: null,
     };
   }
 
@@ -805,6 +813,11 @@ function isPlausibleForKreis(lat, lon, kreisId) {
 
 async function resolveGameStopPoint(game) {
   const initial = toGameStopPoint(game);
+  const initialLat = toFiniteNumber(initial.lat);
+  const initialLon = toFiniteNumber(initial.lon);
+  const hasInitialCoordinates = Number.isFinite(initialLat) && Number.isFinite(initialLon);
+  const initialPlausible = hasInitialCoordinates ? isPlausibleForKreis(initialLat, initialLon, game?.kreisId) : false;
+
   if (!hasRoutableVenueAddress(game)) {
     return {
       label: initial.label,
@@ -813,13 +826,16 @@ async function resolveGameStopPoint(game) {
     };
   }
 
-  if (Number.isFinite(initial.lat) && Number.isFinite(initial.lon)) {
-    return initial;
-  }
-
   const venueQueries = buildVenueQueryCandidates(game);
   if (!venueQueries.length) {
-    return initial;
+    if (initialPlausible) {
+      return initial;
+    }
+    return {
+      label: initial.label,
+      lat: Number.NaN,
+      lon: Number.NaN,
+    };
   }
 
   for (const query of venueQueries) {
@@ -838,7 +854,15 @@ async function resolveGameStopPoint(game) {
     }
   }
 
-  return initial;
+  if (initialPlausible) {
+    return initial;
+  }
+
+  return {
+    label: initial.label,
+    lat: Number.NaN,
+    lon: Number.NaN,
+  };
 }
 
 function buildFallbackLeg(previous, current) {
@@ -954,7 +978,7 @@ export function calculateRoute(startPoint, games) {
   };
 }
 
-export async function calculateRouteWithDriving(startPoint, games) {
+export async function calculateRouteWithDriving(startPoint, games, options = {}) {
   const stops = Array.isArray(games) ? games : [];
   const legs = [];
   let totalKm = 0;
@@ -971,8 +995,8 @@ export async function calculateRouteWithDriving(startPoint, games) {
 
   for (const game of stops) {
     const current = await resolveGameStopPoint(game);
-    const routed = await fetchDrivingRoute(previous, current).catch(() => null);
-    const selected = selectLegResult(previous, current, routed);
+    const routed = await fetchDrivingRoute(previous, current, options).catch(() => null);
+    const selected = selectLegResult(previous, current, routed, options);
 
     if (Number.isFinite(selected.distanceKm)) {
       totalKm += selected.distanceKm;
@@ -988,13 +1012,14 @@ export async function calculateRouteWithDriving(startPoint, games) {
       distanceKm: Number.isFinite(selected.distanceKm) ? selected.distanceKm : null,
       durationMinutes: Number.isFinite(selected.durationMinutes) ? selected.durationMinutes : null,
       source: selected.source || "unknown",
+      provider: selected.provider || null,
     });
 
     previous = current;
   }
 
-  const routedBack = await fetchDrivingRoute(previous, start).catch(() => null);
-  const selectedBack = selectLegResult(previous, start, routedBack);
+  const routedBack = await fetchDrivingRoute(previous, start, options).catch(() => null);
+  const selectedBack = selectLegResult(previous, start, routedBack, options);
 
   if (Number.isFinite(selectedBack.distanceKm)) {
     totalKm += selectedBack.distanceKm;
@@ -1010,6 +1035,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
     distanceKm: Number.isFinite(selectedBack.distanceKm) ? selectedBack.distanceKm : null,
     durationMinutes: Number.isFinite(selectedBack.durationMinutes) ? selectedBack.durationMinutes : null,
     source: selectedBack.source || "unknown",
+    provider: selectedBack.provider || null,
   });
 
   return {
@@ -1019,7 +1045,7 @@ export async function calculateRouteWithDriving(startPoint, games) {
   };
 }
 
-export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5) {
+export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5, options = {}) {
   const start = {
     label: String(startPoint?.label || "Startort"),
     lat: toFiniteNumber(startPoint?.lat),
@@ -1035,8 +1061,8 @@ export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5
   for (let index = 0; index < stops.length; index += 1) {
     const game = stops[index];
     const target = await resolveGameStopPoint(game);
-    const routed = await fetchDrivingRoute(start, target).catch(() => null);
-    const selected = selectLegResult(start, target, routed);
+    const routed = await fetchDrivingRoute(start, target, options).catch(() => null);
+    const selected = selectLegResult(start, target, routed, options);
 
     rows.push({
       index: index + 1,
@@ -1047,6 +1073,7 @@ export async function calculateDirectStartRoutes(startPoint, games, maxGames = 5
       distanceKm: Number.isFinite(selected?.distanceKm) ? selected.distanceKm : null,
       durationMinutes: Number.isFinite(selected?.durationMinutes) ? selected.durationMinutes : null,
       source: selected?.source || "unknown",
+      provider: selected?.provider || null,
     });
   }
 

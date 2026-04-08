@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { calculateRoute, calculateRouteWithDriving, fetchDrivingRoute, haversineDistance } from "./geo";
+import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, fetchDrivingRoute, haversineDistance } from "./geo";
 
 describe("geo utils", () => {
   beforeEach(() => {
@@ -51,8 +51,8 @@ describe("geo utils", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    const fromPoint = { lat: 51.20001, lon: 6.70001 };
-    const toPoint = { lat: 51.30001, lon: 6.80001 };
+    const fromPoint = { lat: 51.21001, lon: 6.71001 };
+    const toPoint = { lat: 51.31001, lon: 6.81001 };
 
     const first = await fetchDrivingRoute(fromPoint, toPoint);
     const second = await fetchDrivingRoute(fromPoint, toPoint);
@@ -93,5 +93,55 @@ describe("geo utils", () => {
     expect(route.totalKm).toBeCloseTo(30, 4);
     expect(route.estimatedMinutes).toBe(45);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("verhindert OSRM-Fallback wenn requireGoogle aktiv ist", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distance: 12000,
+            duration: 1200,
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const fromPoint = { lat: 51.20001, lon: 6.70001 };
+    const toPoint = { lat: 51.30001, lon: 6.80001 };
+
+    const strictResult = await fetchDrivingRoute(fromPoint, toPoint, { requireGoogle: true });
+    const fallbackResult = await fetchDrivingRoute(fromPoint, toPoint);
+
+    expect(strictResult).toBeNull();
+    expect(fallbackResult?.distanceKm).toBeCloseTo(12, 4);
+  });
+
+  it("liefert bei Direktstrecken ohne Google-Wert 'unbekannt'", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distance: 8000,
+            duration: 900,
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rows = await calculateDirectStartRoutes(
+      { label: "Start", lat: 51.2, lon: 6.7 },
+      [{ home: "A", away: "B", venueLat: 51.25, venueLon: 6.75, venue: "Beispielstraße 1, 47000 Duisburg" }],
+      1,
+      { requireGoogle: true },
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].distanceKm).toBeNull();
+    expect(rows[0].provider).toBeNull();
   });
 });

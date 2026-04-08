@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractReasonMap, inferBadges, parseRouteStops, sanitizePlanText } from "./sections";
+import { computeVisibleChainTotals, extractReasonMap, inferBadges, parseRouteStops, sanitizePlanText } from "./sections";
 
 describe("pdf/sections", () => {
   it("bereinigt Plantext gemäß Ausgabe-Regeln", () => {
@@ -52,5 +52,28 @@ Begründung: Starkes Spiel für Vergleich auf gutem Niveau.
     expect(tags).toContain("NLZ-relevant");
     expect(tags).toContain("Leistungsklasse");
     expect(tags).toContain("Jahrgang gemischt");
+  });
+
+  it("berechnet Gesamtkette nur aus sichtbaren Segmenten", () => {
+    const totals = computeVisibleChainTotals(
+      [{ distanceKm: 50, durationMinutes: 40 }],
+      [
+        { distanceKm: 10, durationMinutes: 12 },
+        { distanceKm: 15, durationMinutes: 18 },
+      ],
+    );
+
+    expect(totals.totalKm).toBe(75);
+    expect(totals.totalMinutes).toBe(70);
+  });
+
+  it("setzt Gesamtkette auf unbekannt bei fehlendem Segment", () => {
+    const totals = computeVisibleChainTotals(
+      [{ distanceKm: 50, durationMinutes: 40 }],
+      [{ distanceKm: null, durationMinutes: null }],
+    );
+
+    expect(totals.totalKm).toBeNull();
+    expect(totals.totalMinutes).toBeNull();
   });
 });

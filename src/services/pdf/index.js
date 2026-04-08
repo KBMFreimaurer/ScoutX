@@ -263,46 +263,6 @@ function triggerDownload(url, fileName) {
   document.body.removeChild(link);
 }
 
-function hasFiniteDistance(value) {
-  return Number.isFinite(Number(value));
-}
-
-function hasDirectRouteCoverage(rows, expectedCount) {
-  if (!Array.isArray(rows) || expectedCount <= 0) {
-    return false;
-  }
-
-  const covered = rows.slice(0, expectedCount).filter((row) => hasFiniteDistance(row?.distanceKm)).length;
-  return covered >= expectedCount;
-}
-
-function mergeRouteOverview(baseOverview, patchOverview) {
-  const baseLegs = Array.isArray(baseOverview?.legs) ? baseOverview.legs : [];
-  const patchLegs = Array.isArray(patchOverview?.legs) ? patchOverview.legs : [];
-
-  if (patchLegs.length === 0) {
-    return baseOverview || null;
-  }
-
-  if (baseLegs.length === 0) {
-    return patchOverview;
-  }
-
-  const mergedLegs = [...baseLegs];
-  for (let index = 0; index < patchLegs.length; index += 1) {
-    mergedLegs[index] = patchLegs[index];
-  }
-
-  return {
-    ...baseOverview,
-    legs: mergedLegs,
-    totalKm: hasFiniteDistance(baseOverview?.totalKm) ? Number(baseOverview.totalKm) : patchOverview.totalKm,
-    estimatedMinutes: hasFiniteDistance(baseOverview?.estimatedMinutes)
-      ? Number(baseOverview.estimatedMinutes)
-      : patchOverview.estimatedMinutes,
-  };
-}
-
 async function enrichPdfRouteData(cfg, games) {
   const sortedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
   const startLocation = cfg?.startLocation;
@@ -312,30 +272,21 @@ async function enrichPdfRouteData(cfg, games) {
 
   let nextCfg = { ...(cfg || {}) };
   const directExpectedCount = Math.min(5, sortedGames.length);
-  const currentDirectRows = Array.isArray(nextCfg.routeDirectOptions) ? nextCfg.routeDirectOptions : [];
+  const routeGames = sortedGames.slice(0, directExpectedCount);
 
-  if (!hasDirectRouteCoverage(currentDirectRows, directExpectedCount)) {
-    const refreshedDirectRows = await calculateDirectStartRoutes(startLocation, sortedGames, 5).catch(() => []);
-    if (Array.isArray(refreshedDirectRows) && refreshedDirectRows.length > 0) {
-      nextCfg = {
-        ...nextCfg,
-        routeDirectOptions: refreshedDirectRows,
-      };
-    }
-  }
+  const [refreshedDirectRows, refreshedOverview] = await Promise.all([
+    calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount, { requireGoogle: true }).catch(() => []),
+    calculateRouteWithDriving(startLocation, routeGames, { requireGoogle: true }).catch(() => null),
+  ]);
 
-  const overviewLegs = Array.isArray(nextCfg?.routeOverview?.legs) ? nextCfg.routeOverview.legs : [];
-  const needsOverviewRefresh = directExpectedCount > 0 && !hasFiniteDistance(overviewLegs[0]?.distanceKm);
-
-  if (needsOverviewRefresh) {
-    const previewRoute = await calculateRouteWithDriving(startLocation, sortedGames.slice(0, directExpectedCount)).catch(() => null);
-    if (previewRoute && Array.isArray(previewRoute.legs) && previewRoute.legs.length > 0) {
-      nextCfg = {
-        ...nextCfg,
-        routeOverview: mergeRouteOverview(nextCfg.routeOverview, previewRoute),
-      };
-    }
-  }
+  nextCfg = {
+    ...nextCfg,
+    routeDirectOptions: Array.isArray(refreshedDirectRows) ? refreshedDirectRows : [],
+    routeOverview:
+      refreshedOverview && Array.isArray(refreshedOverview.legs) && refreshedOverview.legs.length > 0
+        ? refreshedOverview
+        : null,
+  };
 
   return nextCfg;
 }

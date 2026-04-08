@@ -954,6 +954,49 @@ function buildBetweenGamesRows(routeOverview, directRows) {
   });
 }
 
+export function computeVisibleChainTotals(directRows, betweenRows) {
+  if (!Array.isArray(directRows) || directRows.length === 0) {
+    return { totalKm: null, totalMinutes: null };
+  }
+
+  const firstLegDistance = toFiniteNumberOrNull(directRows[0]?.distanceKm);
+  const firstLegMinutes = toFiniteNumberOrNull(directRows[0]?.durationMinutes);
+  if (firstLegDistance === null) {
+    return { totalKm: null, totalMinutes: null };
+  }
+
+  let totalKm = firstLegDistance;
+  let totalMinutes = firstLegMinutes;
+  let minutesKnown = firstLegMinutes !== null;
+
+  const safeBetweenRows = Array.isArray(betweenRows) ? betweenRows : [];
+  for (const row of safeBetweenRows) {
+    const legDistance = toFiniteNumberOrNull(row?.distanceKm);
+    if (legDistance === null) {
+      return { totalKm: null, totalMinutes: null };
+    }
+    totalKm += legDistance;
+
+    if (minutesKnown) {
+      const legMinutes = toFiniteNumberOrNull(row?.durationMinutes);
+      if (legMinutes === null) {
+        minutesKnown = false;
+      } else {
+        totalMinutes = (totalMinutes ?? 0) + legMinutes;
+      }
+    }
+  }
+
+  return {
+    totalKm,
+    totalMinutes: minutesKnown ? Math.round(totalMinutes ?? 0) : null,
+  };
+}
+
+function formatChainLeg(fromLabel, toLabel, distanceKm, durationMinutes) {
+  return `VON (${fromLabel}) NACH (${toLabel}) = ${formatDistanceLabel(distanceKm)} (${formatMinutesLabel(durationMinutes)})`;
+}
+
 export function drawRouteCalculationPage(doc, state, routeOverview, startLocationLabel = "Startort", games = [], directRoutes = []) {
   addPage(state, doc, "Routenberechnung");
   drawSectionTitle(doc, state, "Routenberechnung", "Routenberechnung");
@@ -1016,6 +1059,29 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
   });
 
   const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  if (directRows.length > 0) {
+    const first = directRows[0];
+    writeText(
+      doc,
+      state,
+      formatChainLeg("Startpunkt", "Spiel 1", first.distanceKm, first.durationMinutes),
+      {
+        fontSize: 8.8,
+        style: "bold",
+        color: COLORS.accent,
+        lineHeight: 4.2,
+        sectionOnNewPage: "Routenberechnung",
+      },
+    );
+    writeText(doc, state, `Spiel 1: ${truncatePlain(first.match, 44)} | Ort: ${truncatePlain(first.venue, 44)}`, {
+      fontSize: 8.2,
+      color: COLORS.text,
+      lineHeight: 3.9,
+      sectionOnNewPage: "Routenberechnung",
+    });
+    state.y += 0.4;
+  }
+
   if (betweenRows.length === 0) {
     writeText(doc, state, "Keine Zwischenstrecken verfügbar.", {
       fontSize: 8.8,
@@ -1024,27 +1090,45 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       sectionOnNewPage: "Routenberechnung",
     });
   } else {
-    for (const row of betweenRows) {
+    for (let index = 0; index < betweenRows.length; index += 1) {
+      const row = betweenRows[index];
+      const fromLabel = `Spiel ${index + 1}`;
+      const toLabel = `Spiel ${index + 2}`;
+
       writeText(
         doc,
         state,
-        `${row.label}: ${truncatePlain(row.from, 34)} -> ${truncatePlain(row.to, 34)} | ${formatDistanceLabel(row.distanceKm)} | ${formatMinutesLabel(row.durationMinutes)}`,
+        formatChainLeg(fromLabel, toLabel, row.distanceKm, row.durationMinutes),
         {
           fontSize: 8.8,
-          color: COLORS.text,
+          style: "bold",
+          color: COLORS.accent,
           lineHeight: 4.2,
           sectionOnNewPage: "Routenberechnung",
         },
       );
+      writeText(
+        doc,
+        state,
+        `${fromLabel}: ${truncatePlain(row.from, 44)} | ${toLabel}: ${truncatePlain(row.to, 44)}`,
+        {
+          fontSize: 8.2,
+          color: COLORS.text,
+          lineHeight: 3.9,
+          sectionOnNewPage: "Routenberechnung",
+        },
+      );
+      state.y += 0.4;
     }
   }
 
-  if (routeOverview) {
+  const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
+  if (directRows.length > 0) {
     state.y += 2;
       writeText(
         doc,
         state,
-        `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(toFiniteNumberOrNull(routeOverview.totalKm))} | Fahrzeit ca. ${formatMinutesLabel(toFiniteNumberOrNull(routeOverview.estimatedMinutes))}`,
+        `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(visibleTotals.totalKm)} | Fahrzeit ca. ${formatMinutesLabel(visibleTotals.totalMinutes)}`,
         {
           fontSize: 9,
           style: "bold",
