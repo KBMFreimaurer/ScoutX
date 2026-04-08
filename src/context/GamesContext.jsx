@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
-import { geocodeAddress, haversineDistance } from "../utils/geo";
+import { fetchDrivingRoute, geocodeAddress, haversineDistance } from "../utils/geo";
 import { fetchWeatherForGame } from "../utils/weather";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
@@ -91,48 +91,130 @@ function withNotes(games, notesById) {
   }));
 }
 
+function estimateMinutesFromDistance(distanceKm) {
+  if (!Number.isFinite(distanceKm)) {
+    return null;
+  }
+  return Math.max(1, Math.round((distanceKm / 50) * 60));
+}
+
+function toDateTimeSortValue(game) {
+  const dateMs = game?.dateObj instanceof Date ? game.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+  const timeText = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game?.time || "").trim()) ? String(game.time) : "99:99";
+  return `${String(dateMs).padStart(16, "0")}|${timeText}`;
+}
+
+async function applyExactStartRoute(games, startLocation) {
+  const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
+  if (!hasLocation || !Array.isArray(games) || games.length === 0) {
+    return games;
+  }
+
+  const sortedByDateTime = games
+    .map((game, index) => ({ game, index }))
+    .sort((left, right) => toDateTimeSortValue(left.game).localeCompare(toDateTimeSortValue(right.game)));
+
+  const firstGame = sortedByDateTime[0] || null;
+  if (!firstGame) {
+    return games;
+  }
+
+  if (!Number.isFinite(firstGame.game?.venueLat) || !Number.isFinite(firstGame.game?.venueLon)) {
+    return games;
+  }
+
+  const fromPoint = { lat: startLocation.lat, lon: startLocation.lon };
+  const toPoint = { lat: firstGame.game.venueLat, lon: firstGame.game.venueLon };
+  const route = await fetchDrivingRoute(fromPoint, toPoint).catch(() => null);
+
+  const exactDistanceKm = Number(route?.distanceKm);
+  if (!Number.isFinite(exactDistanceKm)) {
+    return games;
+  }
+
+  const exactMinutes = Number(route?.durationMinutes);
+
+  return games.map((game, index) => {
+    if (index !== firstGame.index) {
+      return game;
+    }
+
+    return {
+      ...game,
+      distanceKm: exactDistanceKm,
+      distanceSource: "route",
+      fromStartRouteDistanceKm: exactDistanceKm,
+      fromStartRouteMinutes: Number.isFinite(exactMinutes) ? Math.max(1, Math.round(exactMinutes)) : estimateMinutesFromDistance(exactDistanceKm),
+    };
+  });
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const limit = Math.max(1, Number(concurrency) || 1);
+  const results = new Array(safeItems.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < safeItems.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(safeItems[index], index);
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(limit, safeItems.length) }, () => worker());
+  await Promise.all(workers);
+
+  return results;
+}
+
 async function enrichGames(games, startLocation) {
   const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
 
-  const enriched = await Promise.all(
-    games.map(async (game) => {
-      try {
-        const geo = await geocodeAddress(game.venue || "").catch(() => null);
-        const venueLat = Number(geo?.lat);
-        const venueLon = Number(geo?.lon);
+  const enrichedGames = await mapWithConcurrency(games, 5, async (game) => {
+    try {
+      const geo = await geocodeAddress(game.venue || "").catch(() => null);
+      const venueLat = Number(geo?.lat);
+      const venueLon = Number(geo?.lon);
 
-        const distanceKm =
-          hasLocation && Number.isFinite(venueLat) && Number.isFinite(venueLon)
-            ? haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon)
-            : null;
+      const distanceKm =
+        hasLocation && Number.isFinite(venueLat) && Number.isFinite(venueLon)
+          ? haversineDistance(startLocation.lat, startLocation.lon, venueLat, venueLon)
+          : null;
 
-        const weatherDate = resolveGameWeatherDate(game);
+      const weatherDate = resolveGameWeatherDate(game);
 
-        const weather =
-          Number.isFinite(venueLat) && Number.isFinite(venueLon) && weatherDate
-            ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: weatherDate, time: game.time }).catch(() => null)
-            : null;
+      const weather =
+        Number.isFinite(venueLat) && Number.isFinite(venueLon) && weatherDate
+          ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: weatherDate, time: game.time }).catch(() => null)
+          : null;
 
-        return {
-          ...game,
-          venueLat: Number.isFinite(venueLat) ? venueLat : null,
-          venueLon: Number.isFinite(venueLon) ? venueLon : null,
-          distanceKm,
-          weather,
-        };
-      } catch {
-        return {
-          ...game,
-          venueLat: null,
-          venueLon: null,
-          distanceKm: null,
-          weather: null,
-        };
-      }
-    }),
-  );
+      return {
+        ...game,
+        venueLat: Number.isFinite(venueLat) ? venueLat : null,
+        venueLon: Number.isFinite(venueLon) ? venueLon : null,
+        distanceKm,
+        distanceSource: Number.isFinite(distanceKm) ? "haversine" : null,
+        weather,
+      };
+    } catch {
+      return {
+        ...game,
+        venueLat: null,
+        venueLon: null,
+        distanceKm: null,
+        distanceSource: null,
+        weather: null,
+      };
+    }
+  });
 
-  return enriched;
+  if (!hasLocation) {
+    return enrichedGames;
+  }
+
+  return applyExactStartRoute(enrichedGames, startLocation);
 }
 
 export function GamesProvider({ children }) {
@@ -154,6 +236,7 @@ export function GamesProvider({ children }) {
 
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(false);
+  const [enrichingGames, setEnrichingGames] = useState(false);
   const [dataSourceUsed, setDataSourceUsed] = useState("mock");
   const [gameNotes, setGameNotes] = useState(() => {
     if (typeof window === "undefined") {
@@ -201,6 +284,7 @@ export function GamesProvider({ children }) {
 
   const resetGames = useCallback(() => {
     setGames([]);
+    setEnrichingGames(false);
     setDataSourceUsed("mock");
   }, []);
 
@@ -247,6 +331,7 @@ export function GamesProvider({ children }) {
 
     setErr("");
     setLoadingGames(true);
+    setEnrichingGames(false);
     setTeamValidation(null);
 
     const runId = buildRunRef.current + 1;
@@ -276,6 +361,12 @@ export function GamesProvider({ children }) {
       setTeamValidation(meta?.teamFilter || null);
       navigate("/games");
 
+      if (initialGames.length === 0) {
+        return;
+      }
+
+      setEnrichingGames(true);
+
       void enrichGames(initialGames, startLocation)
         .then((enrichedGames) => {
           if (buildRunRef.current !== runId) {
@@ -285,8 +376,14 @@ export function GamesProvider({ children }) {
         })
         .catch(() => {
           // Keep initial games if enrichment fails.
+        })
+        .finally(() => {
+          if (buildRunRef.current === runId) {
+            setEnrichingGames(false);
+          }
         });
     } catch (error) {
+      setEnrichingGames(false);
       setErr(`Spieldaten konnten nicht geladen werden: ${error.message}`);
     } finally {
       if (buildRunRef.current === runId) {
@@ -312,6 +409,7 @@ export function GamesProvider({ children }) {
       games,
       gameNotes,
       loadingGames,
+      enrichingGames,
       dataSourceUsed,
       prioritized,
       setGames,
@@ -321,7 +419,7 @@ export function GamesProvider({ children }) {
       onBuildAndGo,
       onSetGameNote,
     }),
-    [games, gameNotes, loadingGames, dataSourceUsed, prioritized, resetGames, onBackSetup, onBuildAndGo, onSetGameNote],
+    [games, gameNotes, loadingGames, enrichingGames, dataSourceUsed, prioritized, resetGames, onBackSetup, onBuildAndGo, onSetGameNote],
   );
 
   return <GamesContext.Provider value={value}>{children}</GamesContext.Provider>;

@@ -69,7 +69,7 @@ function RouteFallback() {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { width, isMobile, games, plan, err, loadingGames, clearErr, onResetSoft } = useScoutX();
+  const { width, isMobile, games, plan, err, loadingGames, enrichingGames, clearErr, onResetSoft } = useScoutX();
 
   const currentStep = useMemo(() => {
     if (location.pathname.startsWith("/games")) {
@@ -100,6 +100,8 @@ function AppLayout() {
     ? err
     : loadingGames
       ? "Spiele werden geladen."
+      : enrichingGames
+        ? "Entfernungen und Wetter werden aktualisiert."
       : "";
 
   return (
