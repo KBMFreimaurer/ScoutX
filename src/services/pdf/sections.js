@@ -723,8 +723,11 @@ export function drawHeaderFooter(doc, state, cfg, createdAt) {
     doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
     const footerLeft = `${toSafeString(cfg?.kreisLabel) || "-"} · ${
       toSafeString(cfg?.jugendLabel) || "-"
-    } · Export ${createdAt} · Build ${buildId}`;
+    } · Export ${createdAt}`;
     doc.text(sanitizePdfText(footerLeft), MARGIN_X, 291.3);
+    if (buildId && buildId !== "unknown") {
+      doc.text(`Build ${buildId}`, PAGE_WIDTH / 2, 291.3, { align: "center" });
+    }
     doc.text(`Seite ${page}/${pageCount}`, PAGE_WIDTH - MARGIN_X, 291.3, { align: "right" });
   }
 }
@@ -849,14 +852,21 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
   state.y += 6;
 
   drawSectionTitle(doc, state, `Spielübersicht (${games.length} Spiele)`, "Spielübersicht");
+  writeText(doc, state, "Alle angesetzten Spiele mit Datum, Anstoßzeit, Spielort und Direktlink.", {
+    fontSize: 8.6,
+    color: COLORS.muted,
+    lineHeight: 4.2,
+    sectionOnNewPage: "Spielübersicht",
+  });
+  state.y += 1;
 
   const headers = [
     { key: "nr", label: "Nr.", width: 10 },
     { key: "date", label: "Datum", width: 24 },
     { key: "time", label: "Anstoß", width: 15 },
-    { key: "match", label: "Begegnung", width: 58 },
-    { key: "venue", label: "Spielort", width: 64 },
-    { key: "link", label: "Link", width: 15 },
+    { key: "match", label: "Spielpaarung", width: 58 },
+    { key: "venue", label: "Spielort", width: 63 },
+    { key: "link", label: "fussball.de", width: 16 },
   ];
   const tableX = MARGIN_X;
   let rowIndex = 0;
@@ -1019,24 +1029,129 @@ export function computeVisibleChainTotals(directRows, betweenRows) {
 }
 
 function formatChainLeg(fromLabel, toLabel, distanceKm, durationMinutes) {
-  return `VON (${fromLabel}) NACH (${toLabel}) = ${formatDistanceLabel(distanceKm)} (${formatMinutesLabel(durationMinutes)})`;
+  return `Von ${fromLabel} nach ${toLabel}: ${formatDistanceLabel(distanceKm)} · ${formatMinutesLabel(durationMinutes)}`;
+}
+
+function drawRouteInfoCard(doc, state, row, sectionOnNewPage = "Routenberechnung") {
+  const cardX = MARGIN_X;
+  const cardW = PAGE_WIDTH - MARGIN_X * 2;
+  const venueLines = doc
+    .splitTextToSize(`Ort: ${toSafeString(row?.venue) || "unbekannt"}`, cardW - 8)
+    .slice(0, 2);
+  const hasLink = Boolean(row?.matchUrl);
+  const hasWarning = !row?.routeEligible;
+  const cardHeight = 18 + venueLines.length * 3.8 + (hasLink ? 4.2 : 0) + (hasWarning ? 4.2 : 0);
+
+  ensureSpace(doc, state, cardHeight + 1.5, sectionOnNewPage);
+
+  doc.setFillColor(COLORS.cardBg[0], COLORS.cardBg[1], COLORS.cardBg[2]);
+  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+  doc.roundedRect(cardX, state.y, cardW, cardHeight, 1.8, 1.8, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.4);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  doc.text(`Spiel ${row.index}`, cardX + 3, state.y + 4.8);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.2);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+  doc.text(sanitizePdfText(truncatePlain(row.match, 86)), cardX + 18, state.y + 4.8);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.2);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  doc.text(sanitizePdfText(`${row.date} · ${row.time}`), cardX + 18, state.y + 8.8);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.7);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  if (row.routeEligible) {
+    doc.text(
+      sanitizePdfText(`Startpunkt → Spiel ${row.index}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`),
+      cardX + 3,
+      state.y + 13.2,
+    );
+  } else {
+    doc.text("Startpunkt → Spiel nicht berechnet (Adresse ungenau)", cardX + 3, state.y + 13.2);
+  }
+
+  let contentY = state.y + 16.9;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.1);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  for (const line of venueLines) {
+    doc.text(sanitizePdfText(line), cardX + 3, contentY);
+    contentY += 3.8;
+  }
+
+  if (hasWarning) {
+    doc.setTextColor(166, 97, 26);
+    doc.text("Hinweis: Für diesen Spielort liegt keine belastbare Straßenadresse vor.", cardX + 3, contentY);
+    contentY += 4.2;
+  }
+
+  if (hasLink) {
+    writePdfLink(doc, cardX + 3, contentY, "Zum Spiel auf fussball.de", row.matchUrl);
+  }
+
+  state.y += cardHeight + 2;
+}
+
+function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenberechnung") {
+  const rowHeight = 11.8;
+  const rowX = MARGIN_X;
+  const rowW = PAGE_WIDTH - MARGIN_X * 2;
+  ensureSpace(doc, state, rowHeight + 1.2, sectionOnNewPage);
+
+  if (index % 2 === 1) {
+    doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+    doc.rect(rowX, state.y, rowW, rowHeight, "F");
+  }
+
+  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+  doc.rect(rowX, state.y, rowW, rowHeight, "S");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.6);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+  doc.text(sanitizePdfText(row.title), rowX + 2.4, state.y + 4.6);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.1);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  const subLine = `${truncatePlain(row.from, 46)} → ${truncatePlain(row.to, 46)}`;
+  doc.text(sanitizePdfText(subLine), rowX + 2.4, state.y + 8.6);
+
+  state.y += rowHeight;
 }
 
 export function drawRouteCalculationPage(doc, state, routeOverview, startLocationLabel = "Startort", games = [], directRoutes = []) {
   addPage(state, doc, "Routenberechnung");
   drawSectionTitle(doc, state, "Routenberechnung", "Routenberechnung");
 
-  writeText(doc, state, `Startpunkt: ${toSafeString(startLocationLabel) || "Startort"}`, {
-    fontSize: 9.4,
+  const safeStartLabel = toSafeString(startLocationLabel) || "Startort";
+  writeText(doc, state, `Startpunkt: ${safeStartLabel}`, {
+    fontSize: 9.2,
     style: "bold",
     color: COLORS.text,
     lineHeight: 4.4,
     sectionOnNewPage: "Routenberechnung",
   });
+  writeText(doc, state, "Strecken werden nur bei belastbarer Adresse ausgewiesen.", {
+    fontSize: 8.4,
+    color: COLORS.muted,
+    lineHeight: 4.1,
+    sectionOnNewPage: "Routenberechnung",
+  });
+  state.y += 1;
 
   const directRows = buildDirectRouteRows(routeOverview, games, directRoutes, 5);
+  const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
+  const missingDirectCount = directRows.filter((row) => !row.routeEligible || row.distanceKm === null).length;
 
-  writeText(doc, state, "Direkt vom Startpunkt zu Spiel 1-5", {
+  writeText(doc, state, "1) Direkte Anfahrt vom Startpunkt", {
     fontSize: 9.2,
     style: "bold",
     color: COLORS.accent,
@@ -1053,36 +1168,12 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
     });
   } else {
     for (const row of directRows) {
-      writeText(
-        doc,
-        state,
-        `Spiel ${row.index}: ${row.match} | ${row.date} ${row.time} | ${formatDistanceLabel(row.distanceKm)} | ${formatMinutesLabel(row.durationMinutes)}`,
-        {
-          fontSize: 8.8,
-          color: COLORS.text,
-          lineHeight: 4.2,
-          sectionOnNewPage: "Routenberechnung",
-        },
-      );
-      writeText(doc, state, `Ort: ${row.venue}`, {
-        fontSize: 8.1,
-        color: COLORS.muted,
-        lineHeight: 3.9,
-        sectionOnNewPage: "Routenberechnung",
-      });
-      if (row.matchUrl) {
-        ensureSpace(doc, state, 4.1, "Routenberechnung");
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8.1);
-        writePdfLink(doc, MARGIN_X, state.y, "Link: Zum Spiel auf fussball.de", row.matchUrl);
-        state.y += 3.9;
-      }
-      state.y += 0.5;
+      drawRouteInfoCard(doc, state, row, "Routenberechnung");
     }
   }
 
-  state.y += 1.5;
-  writeText(doc, state, "Zwischen den Spielen (in Reihenfolge)", {
+  state.y += 0.5;
+  writeText(doc, state, "2) Kette zwischen den Spielen", {
     fontSize: 9.2,
     style: "bold",
     color: COLORS.accent,
@@ -1090,31 +1181,24 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
     sectionOnNewPage: "Routenberechnung",
   });
 
-  const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  const chainRows = [];
   if (directRows.length > 0) {
-    const first = directRows[0];
-    writeText(
-      doc,
-      state,
-      formatChainLeg("Startpunkt", "Spiel 1", first.distanceKm, first.durationMinutes),
-      {
-        fontSize: 8.8,
-        style: "bold",
-        color: COLORS.accent,
-        lineHeight: 4.2,
-        sectionOnNewPage: "Routenberechnung",
-      },
-    );
-    writeText(doc, state, `Spiel 1: ${truncatePlain(first.match, 44)} | Ort: ${truncatePlain(first.venue, 44)}`, {
-      fontSize: 8.2,
-      color: COLORS.text,
-      lineHeight: 3.9,
-      sectionOnNewPage: "Routenberechnung",
+    chainRows.push({
+      from: safeStartLabel,
+      to: directRows[0].match,
+      title: formatChainLeg("Startpunkt", "Spiel 1", directRows[0].distanceKm, directRows[0].durationMinutes),
     });
-    state.y += 0.4;
+  }
+  for (let index = 0; index < betweenRows.length; index += 1) {
+    const row = betweenRows[index];
+    chainRows.push({
+      from: row.from,
+      to: row.to,
+      title: formatChainLeg(`Spiel ${index + 1}`, `Spiel ${index + 2}`, row.distanceKm, row.durationMinutes),
+    });
   }
 
-  if (betweenRows.length === 0) {
+  if (chainRows.length === 0) {
     writeText(doc, state, "Keine Zwischenstrecken verfügbar.", {
       fontSize: 8.8,
       color: COLORS.muted,
@@ -1122,52 +1206,44 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       sectionOnNewPage: "Routenberechnung",
     });
   } else {
-    for (let index = 0; index < betweenRows.length; index += 1) {
-      const row = betweenRows[index];
-      const fromLabel = `Spiel ${index + 1}`;
-      const toLabel = `Spiel ${index + 2}`;
-
-      writeText(
-        doc,
-        state,
-        formatChainLeg(fromLabel, toLabel, row.distanceKm, row.durationMinutes),
-        {
-          fontSize: 8.8,
-          style: "bold",
-          color: COLORS.accent,
-          lineHeight: 4.2,
-          sectionOnNewPage: "Routenberechnung",
-        },
-      );
-      writeText(
-        doc,
-        state,
-        `${fromLabel}: ${truncatePlain(row.from, 44)} | ${toLabel}: ${truncatePlain(row.to, 44)}`,
-        {
-          fontSize: 8.2,
-          color: COLORS.text,
-          lineHeight: 3.9,
-          sectionOnNewPage: "Routenberechnung",
-        },
-      );
-      state.y += 0.4;
+    for (let index = 0; index < chainRows.length; index += 1) {
+      drawRouteChainRow(doc, state, chainRows[index], index, "Routenberechnung");
     }
   }
 
-  const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
   if (directRows.length > 0) {
     state.y += 2;
-      writeText(
-        doc,
-        state,
-        `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(visibleTotals.totalKm)} | Fahrzeit ca. ${formatMinutesLabel(visibleTotals.totalMinutes)}`,
-        {
-          fontSize: 9,
-          style: "bold",
+    writeText(doc, state, "3) Zusammenfassung", {
+      fontSize: 9.1,
+      style: "bold",
+      color: COLORS.accent,
+      lineHeight: 4.3,
+      sectionOnNewPage: "Routenberechnung",
+    });
+    writeText(
+      doc,
+      state,
+      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(visibleTotals.totalKm)} · Fahrzeit ca. ${formatMinutesLabel(visibleTotals.totalMinutes)}`,
+      {
+        fontSize: 9,
+        style: "bold",
         color: COLORS.text,
         lineHeight: 4.4,
         sectionOnNewPage: "Routenberechnung",
       },
     );
+    if (missingDirectCount > 0 || visibleTotals.totalKm === null) {
+      writeText(
+        doc,
+        state,
+        "Hinweis: Einzelne Distanzen konnten nicht berechnet werden, weil keine präzisen Spielort-Adressen vorliegen.",
+        {
+          fontSize: 8.2,
+          color: COLORS.muted,
+          lineHeight: 4.1,
+          sectionOnNewPage: "Routenberechnung",
+        },
+      );
+    }
   }
 }
