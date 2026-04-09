@@ -13,6 +13,7 @@ describe("adapter games lib", () => {
             time: "11:00",
             kreisId: "duesseldorf",
             jugendId: "d-jugend",
+            matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
           },
           { home: "", away: "Team C", date: "2026-04-10" },
         ],
@@ -24,6 +25,7 @@ describe("adapter games lib", () => {
     expect(games[0].home).toBe("Team A");
     expect(games[0].away).toBe("Team B");
     expect(games[0].source).toBe("test");
+    expect(games[0].matchUrl).toBe("https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ");
   });
 
   it("filters by selection payload", () => {

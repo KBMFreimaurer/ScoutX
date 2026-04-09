@@ -1,5 +1,6 @@
 import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
+import { resolveGameMatchUrl } from "../utils/gameLinks";
 
 function weatherLabel(weather) {
   if (!weather) {
@@ -35,6 +36,7 @@ export function GameCards({ games, notes = {}, onSetNote, expandedNoteId = null,
     <div className="game-cards" style={{ marginBottom: 16 }}>
       {games.map((game) => {
         const noteOpen = expandedNoteId === game.id;
+        const gameUrl = resolveGameMatchUrl(game);
 
         return (
           <div
@@ -95,23 +97,47 @@ export function GameCards({ games, notes = {}, onSetNote, expandedNoteId = null,
             </div>
 
             <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                onClick={() => onToggleNote?.(game.id)}
-                aria-expanded={noteOpen}
-                style={{
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,0.03)",
-                  color: C.gray,
-                  cursor: "pointer",
-                  padding: "6px 10px",
-                  minHeight: 34,
-                  fontSize: 12,
-                }}
-              >
-                Notiz {noteOpen ? "schließen" : "öffnen"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => onToggleNote?.(game.id)}
+                  aria-expanded={noteOpen}
+                  style={{
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    background: "rgba(255,255,255,0.03)",
+                    color: C.gray,
+                    cursor: "pointer",
+                    padding: "6px 10px",
+                    minHeight: 34,
+                    fontSize: 12,
+                  }}
+                >
+                  Notiz {noteOpen ? "schließen" : "öffnen"}
+                </button>
+                {gameUrl ? (
+                  <a
+                    href={gameUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Zum Spiel für ${game.home} vs ${game.away}`}
+                    style={{
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.03)",
+                      color: C.green,
+                      textDecoration: "underline",
+                      padding: "6px 10px",
+                      minHeight: 34,
+                      fontSize: 12,
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    Zum Spiel
+                  </a>
+                ) : null}
+              </div>
             </div>
 
             {noteOpen ? (

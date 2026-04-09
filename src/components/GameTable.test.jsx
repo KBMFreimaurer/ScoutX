@@ -67,6 +67,7 @@ describe("GameTable", () => {
           temperatureC: 11.2,
           precipitationProbability: 65,
         },
+        matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
       },
     ];
 
@@ -83,6 +84,10 @@ describe("GameTable", () => {
     expect(screen.getByText("★")).toBeInTheDocument();
     expect(screen.getByText("12 km")).toBeInTheDocument();
     expect(screen.getByText(/11°C · 65%/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Zum Spiel für Team A vs Team B/i })).toHaveAttribute(
+      "href",
+      "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Notiz" }));
     expect(onToggleNote).toHaveBeenCalledWith("game-1");

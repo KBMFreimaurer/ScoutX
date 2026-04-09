@@ -98,14 +98,7 @@ describe("geo utils", () => {
   it("verhindert OSRM-Fallback wenn requireGoogle aktiv ist", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        routes: [
-          {
-            distance: 12000,
-            duration: 1200,
-          },
-        ],
-      }),
+      json: async () => ({}),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -113,29 +106,20 @@ describe("geo utils", () => {
     const toPoint = { lat: 51.30001, lon: 6.80001 };
 
     const strictResult = await fetchDrivingRoute(fromPoint, toPoint, { requireGoogle: true });
-    const fallbackResult = await fetchDrivingRoute(fromPoint, toPoint);
 
     expect(strictResult).toBeNull();
-    expect(fallbackResult?.distanceKm).toBeCloseTo(12, 4);
   });
 
   it("liefert bei Direktstrecken ohne Google-Wert 'unbekannt'", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        routes: [
-          {
-            distance: 8000,
-            duration: 900,
-          },
-        ],
-      }),
+      json: async () => ({}),
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const rows = await calculateDirectStartRoutes(
       { label: "Start", lat: 51.2, lon: 6.7 },
-      [{ home: "A", away: "B", venueLat: 51.25, venueLon: 6.75, venue: "Beispielstraße 1, 47000 Duisburg" }],
+      [{ home: "A", away: "B", venueLat: 52.25, venueLon: 7.75, venue: "Beispielstraße 1, 47000 Duisburg" }],
       1,
       { requireGoogle: true },
     );

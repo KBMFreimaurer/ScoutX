@@ -180,6 +180,7 @@ function normalizeGame(raw, index, options = {}) {
 
   return {
     id: raw.id ?? `adapter-${index}`,
+    matchUrl: String(raw.matchUrl ?? raw.match_url ?? raw.sourceUrl ?? raw.source_url ?? raw.url ?? raw.link ?? "").trim(),
     home,
     away,
     date,

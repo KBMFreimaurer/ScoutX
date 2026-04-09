@@ -393,6 +393,7 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
 
       return {
         id: matchId,
+        matchUrl: candidate.matchUrl || "",
         home: parsed.home || candidate.home,
         away: parsed.away || candidate.away,
         date,

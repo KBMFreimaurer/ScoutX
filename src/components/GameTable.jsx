@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
+import { resolveGameMatchUrl } from "../utils/gameLinks";
 
 function formatKickoff(time) {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? time : "offen";
@@ -101,33 +102,49 @@ export function GameTable({
           overflow: "hidden",
         }}
       >
-        {games.map((game, index) => (
-          <div
-            key={game.id}
-            className="row-item"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 16px",
-              borderBottom: index < games.length - 1 ? `1px solid ${C.border}` : "none",
-              fontSize: 13,
-              transition: "background 0.15s ease",
-              background: "transparent",
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-            }}
-          >
-            <span style={{ width: 20, textAlign: "center", color: C.grayDark, fontSize: 11, flexShrink: 0, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>{index + 1}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <strong style={{ color: C.white }}>{game.home}</strong>
-              <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
-              <span style={{ color: C.offWhite }}>{game.away}</span>
-            </span>
-            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
-            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatKickoff(game.time)}</span>
-            <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatDistanceKm(game.distanceKm)}</span>
-          </div>
-        ))}
+        {games.map((game, index) => {
+          const gameUrl = resolveGameMatchUrl(game);
+          return (
+            <div
+              key={game.id}
+              className="row-item"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 16px",
+                borderBottom: index < games.length - 1 ? `1px solid ${C.border}` : "none",
+                fontSize: 13,
+                transition: "background 0.15s ease",
+                background: "transparent",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
+            >
+              <span style={{ width: 20, textAlign: "center", color: C.grayDark, fontSize: 11, flexShrink: 0, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>{index + 1}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <strong style={{ color: C.white }}>{game.home}</strong>
+                <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
+                <span style={{ color: C.offWhite }}>{game.away}</span>
+              </span>
+              <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
+              <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatKickoff(game.time)}</span>
+              <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatDistanceKm(game.distanceKm)}</span>
+              {gameUrl ? (
+                <a
+                  href={gameUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Zum Spiel für ${game.home} vs ${game.away}`}
+                  style={{ fontSize: 11, color: C.green, textDecoration: "underline", whiteSpace: "nowrap", marginLeft: 8 }}
+                >
+                  Link
+                </a>
+              ) : (
+                <span style={{ fontSize: 11, color: C.grayDark, whiteSpace: "nowrap", marginLeft: 8 }}>—</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -154,19 +171,21 @@ export function GameTable({
       >
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
-            <th scope="col" style={{ width: "30%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
-            <th scope="col" style={{ width: "14%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
-            <th scope="col" style={{ width: "10%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
-            <th scope="col" style={{ width: "18%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
-            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Entfernung</th>
-            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Wetter</th>
-            <th scope="col" style={{ width: "10%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
+            <th scope="col" style={{ width: "27%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
+            <th scope="col" style={{ width: "13%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
+            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
+            <th scope="col" style={{ width: "17%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
+            <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Entfernung</th>
+            <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Wetter</th>
+            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Link</th>
+            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
           </tr>
         </thead>
 
         <tbody>
           {sortedGames.map((game, index) => {
             const noteOpen = expandedNoteId === game.id;
+            const gameUrl = resolveGameMatchUrl(game);
             return (
               <Fragment key={game.id}>
                 <tr
@@ -191,6 +210,21 @@ export function GameTable({
                     {weatherLabel(game.weather)}
                   </td>
                   <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
+                    {gameUrl ? (
+                      <a
+                        href={gameUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Zum Spiel für ${game.home} vs ${game.away}`}
+                        style={{ color: C.green, textDecoration: "underline" }}
+                      >
+                        Zum Spiel
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
                     <button
                       type="button"
                       onClick={() => onToggleNote?.(game.id)}
@@ -211,7 +245,7 @@ export function GameTable({
                 </tr>
                 {noteOpen ? (
                   <tr key={`${game.id}-note`} style={{ borderBottom: index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                    <td colSpan={7} style={{ padding: "8px 12px" }}>
+                    <td colSpan={8} style={{ padding: "8px 12px" }}>
                       <textarea
                         aria-label={`Notiz für ${game.home} gegen ${game.away}`}
                         value={notes[game.id] || ""}

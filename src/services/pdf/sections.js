@@ -11,6 +11,7 @@ import {
   sortGamesByDateTime,
 } from "./layout";
 import { COLORS, normalizeLookup, sanitizePdfText, toSafeString, truncateText } from "./styles";
+import { resolveGameMatchUrl } from "../../utils/gameLinks";
 
 export function limitToSentences(text, maxSentences = 2) {
   const cleaned = toSafeString(text);
@@ -229,6 +230,21 @@ export function writeText(doc, state, text, opts = {}) {
     doc.text(line, MARGIN_X, state.y);
     state.y += lineHeight;
   }
+}
+
+function writePdfLink(doc, x, y, label, url, color = COLORS.accent) {
+  const safeLabel = sanitizePdfText(toSafeString(label));
+  if (!safeLabel) {
+    return;
+  }
+
+  doc.setTextColor(color[0], color[1], color[2]);
+  if (typeof doc.textWithLink === "function" && url) {
+    doc.textWithLink(safeLabel, x, y, { url });
+    return;
+  }
+
+  doc.text(safeLabel, x, y);
 }
 
 export function drawSectionTitle(doc, state, title, sectionOnNewPage = title) {
@@ -836,10 +852,11 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
 
   const headers = [
     { key: "nr", label: "Nr.", width: 10 },
-    { key: "date", label: "Datum", width: 26 },
-    { key: "time", label: "Anstoß", width: 16 },
-    { key: "match", label: "Begegnung", width: 62 },
-    { key: "venue", label: "Spielort", width: 72 },
+    { key: "date", label: "Datum", width: 24 },
+    { key: "time", label: "Anstoß", width: 15 },
+    { key: "match", label: "Begegnung", width: 58 },
+    { key: "venue", label: "Spielort", width: 64 },
+    { key: "link", label: "Link", width: 15 },
   ];
   const tableX = MARGIN_X;
   let rowIndex = 0;
@@ -854,7 +871,9 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
       time: kickoffText(game.time),
       match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
       venue: toSafeString(game.venue || "Sportanlage"),
+      link: resolveGameMatchUrl(game) ? "Zum Spiel" : "—",
     };
+    const matchUrl = resolveGameMatchUrl(game);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.3);
@@ -883,14 +902,19 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
 
     let cursorX = tableX + 1.6;
     for (let c = 0; c < headers.length; c += 1) {
+      const column = headers[c];
       const lines = lineCollections[c];
       let textY = state.y + 4.1;
       for (const line of lines) {
-        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-        doc.text(sanitizePdfText(line), cursorX, textY);
+        if (column.key === "link" && matchUrl) {
+          writePdfLink(doc, cursorX, textY, line, matchUrl);
+        } else {
+          doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+          doc.text(sanitizePdfText(line), cursorX, textY);
+        }
         textY += 3.8;
       }
-      cursorX += headers[c].width;
+      cursorX += column.width;
     }
 
     state.y += rowHeight;
@@ -925,6 +949,7 @@ function buildDirectRouteRows(routeOverview, games, directRoutes, maxGames = 5) 
       date: formatGameDate(game),
       time: kickoffText(game.time),
       venue,
+      matchUrl: resolveGameMatchUrl(game),
       distanceKm: resolvedDistance,
       durationMinutes: resolvedMinutes,
       routeEligible,
@@ -1045,6 +1070,13 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
         lineHeight: 3.9,
         sectionOnNewPage: "Routenberechnung",
       });
+      if (row.matchUrl) {
+        ensureSpace(doc, state, 4.1, "Routenberechnung");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.1);
+        writePdfLink(doc, MARGIN_X, state.y, "Link: Zum Spiel auf fussball.de", row.matchUrl);
+        state.y += 3.9;
+      }
       state.y += 0.5;
     }
   }

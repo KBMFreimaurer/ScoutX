@@ -341,6 +341,9 @@ function normalizeUploadedGame(rawGame, index, context) {
   }
 
   const venue = rawGame.venue ?? rawGame.spielort ?? rawGame.ort ?? rawGame.location ?? "Sportanlage";
+  const matchUrl = String(
+    rawGame.matchUrl ?? rawGame.match_url ?? rawGame.sourceUrl ?? rawGame.source_url ?? rawGame.url ?? rawGame.link ?? "",
+  ).trim();
   const jugendId =
     rawGame.jugendId ?? rawGame.jugend ?? rawGame.altersklasse ?? rawGame.ageGroup ?? context.jugendId ?? "";
   const kreisId = rawGame.kreisId ?? rawGame.kreis ?? rawGame.district ?? context.kreisId ?? "";
@@ -355,6 +358,7 @@ function normalizeUploadedGame(rawGame, index, context) {
       dateLabel: formatDate(date.value),
       time: time.value,
       venue: String(venue).trim(),
+      matchUrl,
       km: parseKm(rawGame.km ?? rawGame.distanz ?? rawGame.distance),
       priority: Number(rawGame.priority) || calcPriority(String(home)),
       turnier: toBoolean(rawGame.turnier) || context.turnier,
