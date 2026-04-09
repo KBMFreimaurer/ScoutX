@@ -1,69 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { STORAGE_KEYS } from "../config/storage";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
-import { normalizeAdapterEndpoint, normalizeTeamParameters, readStorage } from "./shared";
+import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
 const SetupContext = createContext(null);
-
-function sanitizeLocation(value) {
-  const lat = Number(value?.lat);
-  const lon = Number(value?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return null;
-  }
-
-  return {
-    lat,
-    lon,
-    label: String(value?.label || "").trim() || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
-  };
-}
-
-function sanitizeIsoDate(value, fallbackIso) {
-  const iso = String(value || "").trim();
-  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
-    return fallbackIso;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const parsed = new Date(year, month - 1, day);
-
-  if (
-    Number.isNaN(parsed.getTime()) ||
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    return fallbackIso;
-  }
-
-  return iso;
-}
 
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
-    const storedSetup = readStorage(STORAGE_KEYS.setup, {});
-    const storedLocation = sanitizeLocation(readStorage(STORAGE_KEYS.location, {}));
-    const storedFavorites = readStorage(STORAGE_KEYS.favorites, { teams: [] });
-    const storedKreisId = KREISE.some((item) => item.id === storedSetup?.kreisId) ? storedSetup.kreisId : "";
-    const storedJugendId = JUGEND_KLASSEN.some((item) => item.id === storedSetup?.jugendId) ? storedSetup.jugendId : "";
 
     return {
-      kreisId: storedKreisId,
-      jugendId: storedJugendId,
-      selTeams: normalizeTeamParameters(storedSetup?.selTeams),
-      fromDate: sanitizeIsoDate(storedSetup?.fromDate, todayIso),
-      focus: String(storedSetup?.focus || "").trim(),
-      adapterEndpoint: normalizeAdapterEndpoint(storedSetup?.adapterEndpoint, defaultAdapterEndpoint),
-      startLocation: storedLocation,
-      favorites: normalizeTeamParameters(storedFavorites?.teams),
+      kreisId: "",
+      jugendId: "",
+      selTeams: [],
+      fromDate: todayIso,
+      focus: "",
+      adapterEndpoint: normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
+      startLocation: null,
+      favorites: [],
       todayIso,
     };
   });
@@ -94,56 +50,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
   const canBuild = Boolean(kreisId && jugendId);
   const hasLocation = Boolean(startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon));
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEYS.setup,
-        JSON.stringify({
-          kreisId,
-          jugendId,
-          selTeams: activeTeams,
-          fromDate: sanitizeIsoDate(fromDate, setupDefaults.todayIso),
-          focus,
-          adapterEndpoint,
-        }),
-      );
-    } catch {
-      // Ignore localStorage write errors.
-    }
-  }, [kreisId, jugendId, activeTeams, fromDate, focus, adapterEndpoint, setupDefaults.todayIso]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      if (startLocation) {
-        window.localStorage.setItem(STORAGE_KEYS.location, JSON.stringify(startLocation));
-      } else {
-        window.localStorage.removeItem(STORAGE_KEYS.location);
-      }
-    } catch {
-      // Ignore localStorage write errors.
-    }
-  }, [startLocation]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(STORAGE_KEYS.favorites, JSON.stringify({ teams: favorites }));
-    } catch {
-      // Ignore localStorage write errors.
-    }
-  }, [favorites]);
 
   const clearErr = useCallback(() => setErr(""), []);
 
@@ -306,6 +212,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setAdapterToken("");
     setFromDate(setupDefaults.todayIso);
     setFocus("");
+    setStartLocation(null);
+    setLocationDraft("");
+    setLocationError("");
+    setResolvingLocation(false);
+    setFavoriteTeams([]);
+    setFavoriteDraft("");
     setErr("");
   }, [defaultAdapterEndpoint, setupDefaults.todayIso]);
 

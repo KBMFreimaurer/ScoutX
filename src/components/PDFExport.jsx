@@ -10,6 +10,8 @@ export function PDFExport({
   variant = "ghost",
   style = {},
   disabled = false,
+  onExportSuccess = null,
+  onExportError = null,
 }) {
   const isPrimary = variant === "primary";
 
@@ -21,8 +23,10 @@ export function PDFExport({
         if (!disabled) {
           void openScoutPdf(games, plan, cfg, null, syncContext).then((result) => {
             if (!result?.ok) {
-              alert(`PDF Export fehlgeschlagen: ${result?.error || "Unbekannter Fehler"}`);
+              onExportError?.(result?.error || "Unbekannter Fehler");
+              return;
             }
+            onExportSuccess?.(result);
           });
         }
       }}

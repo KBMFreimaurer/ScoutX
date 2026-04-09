@@ -11,7 +11,7 @@ createRoot(document.getElementById("root")).render(
         console.error("[ScoutX ErrorBoundary]", error, info);
       }}
     >
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <App />
       </BrowserRouter>
     </ErrorBoundary>

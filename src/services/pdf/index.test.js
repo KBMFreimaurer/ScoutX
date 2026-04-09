@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyAuthoritativeGameCorrections } from "./index";
+import {
+  applyAuthoritativeGameCorrections,
+  hasCompleteDirectRoutes,
+  hasCompleteRouteOverview,
+} from "./index";
 
 describe("pdf/index authoritative correction", () => {
   it("überschreibt Uhrzeit und Spielort anhand gleicher Spiel-ID", () => {
@@ -84,5 +88,23 @@ describe("pdf/index authoritative correction", () => {
     const result = applyAuthoritativeGameCorrections(games, authoritative);
     expect(result.correctedCount).toBe(0);
     expect(result.games[0]).toBe(games[0]);
+  });
+});
+
+describe("pdf/index route completeness", () => {
+  it("erkennt vollständige Route-Overview", () => {
+    const routeOverview = {
+      legs: [{}, {}, {}],
+    };
+
+    expect(hasCompleteRouteOverview(routeOverview, 2)).toBe(true);
+    expect(hasCompleteRouteOverview(routeOverview, 4)).toBe(false);
+  });
+
+  it("erkennt vollständige Direkt-Routen", () => {
+    const directRows = [{}, {}, {}];
+
+    expect(hasCompleteDirectRoutes(directRows, 3)).toBe(true);
+    expect(hasCompleteDirectRoutes(directRows, 5)).toBe(false);
   });
 });

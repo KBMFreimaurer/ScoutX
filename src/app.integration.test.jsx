@@ -13,7 +13,10 @@ describe("ScoutX Integration", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(
-      <MemoryRouter initialEntries={["/setup"]}>
+      <MemoryRouter
+        initialEntries={["/setup"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <App />
       </MemoryRouter>,
     );

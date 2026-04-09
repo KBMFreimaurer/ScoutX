@@ -8,6 +8,59 @@ import { useSetup } from "./SetupContext";
 
 const PlanContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 12000);
+
+function withTimeout(promise, timeoutMs, fallbackValue) {
+  const safeTimeout = Number(timeoutMs);
+  if (!Number.isFinite(safeTimeout) || safeTimeout <= 0) {
+    return Promise.resolve(promise).catch(() => fallbackValue);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = globalThis.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(fallbackValue);
+    }, safeTimeout);
+
+    Promise.resolve(promise)
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(fallbackValue);
+      });
+  });
+}
+
+function hasCompleteRouteOverview(routeOverview, expectedStopCount) {
+  if (!routeOverview || !Array.isArray(routeOverview.legs)) {
+    return false;
+  }
+  const expectedLegs = Math.max(1, Math.min(5, expectedStopCount) + 1);
+  return routeOverview.legs.length >= expectedLegs;
+}
+
+function hasCompleteDirectOptions(routeDirectOptions, expectedStopCount) {
+  if (!Array.isArray(routeDirectOptions)) {
+    return false;
+  }
+  const expectedRows = Math.max(0, Math.min(5, expectedStopCount));
+  return routeDirectOptions.length >= expectedRows;
+}
 
 function toSortableKickoff(value) {
   const text = String(value || "").trim();
@@ -160,6 +213,7 @@ export function PlanProvider({ children }) {
 
   useEffect(() => {
     let alive = true;
+    const expectedDirectCount = Math.min(5, routeGames.length);
 
     if (!setup.startLocation || routeGames.length === 0) {
       setRouteOverview(null);
@@ -179,8 +233,8 @@ export function PlanProvider({ children }) {
     setRouteCalculating(true);
 
     void Promise.all([
-      calculateRouteWithDriving(setup.startLocation, routeGames).catch(() => null),
-      calculateDirectStartRoutes(setup.startLocation, routeGames, 5).catch(() => []),
+      withTimeout(calculateRouteWithDriving(setup.startLocation, routeGames), ROUTE_TIMEOUT_MS, null),
+      withTimeout(calculateDirectStartRoutes(setup.startLocation, routeGames, expectedDirectCount), ROUTE_TIMEOUT_MS, []),
     ])
       .then(([routed, direct]) => {
         if (!alive) {
@@ -220,24 +274,41 @@ export function PlanProvider({ children }) {
       let resolvedRouteOverview = routeOverview || null;
       let resolvedDirectOptions = routeDirectOptions;
       if (setup.startLocation && routeGames.length > 0) {
-        setRouteCalculating(true);
+        const expectedDirectCount = Math.min(5, routeGames.length);
+        const hasRouteOverview = hasCompleteRouteOverview(resolvedRouteOverview, expectedDirectCount);
+        const hasDirectOptions = hasCompleteDirectOptions(resolvedDirectOptions, expectedDirectCount);
+
+        if (!hasRouteOverview || !hasDirectOptions) {
+          setRouteCalculating(true);
+        }
+
         try {
           if (!resolvedRouteOverview && !strictGoogleRouting) {
             resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
             setRouteOverview(resolvedRouteOverview);
           }
 
-          const [routed, direct] = await Promise.all([
-            calculateRouteWithDriving(setup.startLocation, routeGames).catch(() => null),
-            calculateDirectStartRoutes(setup.startLocation, routeGames, 5).catch(() => []),
-          ]);
+          const [routed, direct] = !hasRouteOverview || !hasDirectOptions
+            ? await Promise.all([
+                hasRouteOverview
+                  ? Promise.resolve(null)
+                  : withTimeout(calculateRouteWithDriving(setup.startLocation, routeGames), ROUTE_TIMEOUT_MS, null),
+                hasDirectOptions
+                  ? Promise.resolve(resolvedDirectOptions)
+                  : withTimeout(
+                      calculateDirectStartRoutes(setup.startLocation, routeGames, expectedDirectCount),
+                      ROUTE_TIMEOUT_MS,
+                      [],
+                    ),
+              ])
+            : [null, resolvedDirectOptions];
 
           if (routed) {
             resolvedRouteOverview = routed;
             setRouteOverview(routed);
           }
 
-          if (Array.isArray(direct)) {
+          if (Array.isArray(direct) && (!hasDirectOptions || direct.length >= expectedDirectCount)) {
             resolvedDirectOptions = direct;
             setRouteDirectOptions(direct);
           }
@@ -247,7 +318,9 @@ export function PlanProvider({ children }) {
             setRouteOverview(resolvedRouteOverview);
           }
         } finally {
-          setRouteCalculating(false);
+          if (!hasRouteOverview || !hasDirectOptions) {
+            setRouteCalculating(false);
+          }
         }
       }
 

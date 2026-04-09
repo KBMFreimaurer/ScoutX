@@ -1,16 +1,3 @@
-export function readStorage(key, fallback) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    const item = window.localStorage.getItem(key);
-    return item ? { ...fallback, ...JSON.parse(item) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function parseIsoDateStrict(isoDate) {
   const match = String(isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {

@@ -9,10 +9,63 @@ import {
 } from "./sections";
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
+const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_TIMEOUT_MS || 12000);
 const activeBlobUrls = new Set();
 let jsPdfCtorPromise = null;
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
+
+function withTimeout(promise, timeoutMs, fallbackValue) {
+  const safeTimeout = Number(timeoutMs);
+  if (!Number.isFinite(safeTimeout) || safeTimeout <= 0) {
+    return Promise.resolve(promise).catch(() => fallbackValue);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = globalThis.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(fallbackValue);
+    }, safeTimeout);
+
+    Promise.resolve(promise)
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(fallbackValue);
+      });
+  });
+}
+
+export function hasCompleteRouteOverview(routeOverview, expectedStopCount) {
+  if (!routeOverview || !Array.isArray(routeOverview.legs)) {
+    return false;
+  }
+  const expectedLegs = Math.max(1, Math.min(5, expectedStopCount) + 1);
+  return routeOverview.legs.length >= expectedLegs;
+}
+
+export function hasCompleteDirectRoutes(routeDirectOptions, expectedStopCount) {
+  if (!Array.isArray(routeDirectOptions)) {
+    return false;
+  }
+  const expectedRows = Math.max(0, Math.min(5, expectedStopCount));
+  return routeDirectOptions.length >= expectedRows;
+}
 
 function normalizeLookup(value) {
   return String(value || "")
@@ -263,7 +316,7 @@ function triggerDownload(url, fileName) {
   document.body.removeChild(link);
 }
 
-async function enrichPdfRouteData(cfg, games) {
+export async function enrichPdfRouteData(cfg, games) {
   const sortedGames = sortGamesByDateTime(Array.isArray(games) ? games : []);
   const startLocation = cfg?.startLocation;
   if (!startLocation || sortedGames.length === 0) {
@@ -273,19 +326,29 @@ async function enrichPdfRouteData(cfg, games) {
   let nextCfg = { ...(cfg || {}) };
   const directExpectedCount = Math.min(5, sortedGames.length);
   const routeGames = sortedGames.slice(0, directExpectedCount);
+  const hasOverview = hasCompleteRouteOverview(nextCfg?.routeOverview, directExpectedCount);
+  const hasDirectRoutes = hasCompleteDirectRoutes(nextCfg?.routeDirectOptions, directExpectedCount);
+
+  if (hasOverview && hasDirectRoutes) {
+    return nextCfg;
+  }
 
   const [refreshedDirectRows, refreshedOverview] = await Promise.all([
-    calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount).catch(() => []),
-    calculateRouteWithDriving(startLocation, routeGames).catch(() => null),
+    hasDirectRoutes
+      ? Promise.resolve(nextCfg?.routeDirectOptions || [])
+      : withTimeout(calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount), ROUTE_REFRESH_TIMEOUT_MS, []),
+    hasOverview
+      ? Promise.resolve(nextCfg?.routeOverview || null)
+      : withTimeout(calculateRouteWithDriving(startLocation, routeGames), ROUTE_REFRESH_TIMEOUT_MS, null),
   ]);
 
   nextCfg = {
     ...nextCfg,
-    routeDirectOptions: Array.isArray(refreshedDirectRows) ? refreshedDirectRows : [],
+    routeDirectOptions: Array.isArray(refreshedDirectRows) ? refreshedDirectRows : nextCfg?.routeDirectOptions || [],
     routeOverview:
       refreshedOverview && Array.isArray(refreshedOverview.legs) && refreshedOverview.legs.length > 0
         ? refreshedOverview
-        : null,
+        : nextCfg?.routeOverview || null,
   };
 
   return nextCfg;

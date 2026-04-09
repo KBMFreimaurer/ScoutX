@@ -10,7 +10,10 @@ import { STORAGE_KEYS } from "../config/storage";
 
 function renderSetupPage() {
   return render(
-    <MemoryRouter initialEntries={["/setup"]}>
+    <MemoryRouter
+      initialEntries={["/setup"]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <SetupProvider defaultAdapterEndpoint="/api/games">
         <GamesProvider>
           <PlanProvider>
@@ -66,7 +69,7 @@ describe("SetupPage", () => {
     expect(screen.getByRole("button", { name: /★ TSV Heimaterde/i })).toBeInTheDocument();
   });
 
-  it("stellt Setup-Defaults aus localStorage wieder her", () => {
+  it("ignoriert persistierte localStorage-Defaults und startet frisch", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -81,10 +84,9 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    expect(screen.getByLabelText(/Scouting ab/i)).toHaveValue("2026-05-12");
-    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("Innenverteidiger");
-    expect(screen.getByDisplayValue("TSV Heimaterde")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Adapter Endpoint/i)).toHaveValue("https://example.com/api/games");
-    expect(screen.getByRole("button", { name: /Spielplan generieren/i })).toBeEnabled();
+    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("");
+    expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Adapter Endpoint/i)).toHaveValue("/api/games");
+    expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
   });
 });

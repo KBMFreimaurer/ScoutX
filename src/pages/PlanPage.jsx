@@ -27,6 +27,7 @@ export function PlanPage() {
     routeOverview,
     routeCalculating,
     startLocation,
+    setErr,
     onBackGames,
     onResetSoft,
     onResetHard,
@@ -99,6 +100,12 @@ export function PlanPage() {
           variant="primary"
           label="PDF herunterladen"
           disabled={!String(plan || "").trim() || (Boolean(startLocation) && routeCalculating)}
+          onExportSuccess={() => {
+            setErr("");
+          }}
+          onExportError={(message) => {
+            setErr(`PDF konnte nicht erstellt werden: ${String(message || "Unbekannter Fehler")}`);
+          }}
         />
         <button
           type="button"
