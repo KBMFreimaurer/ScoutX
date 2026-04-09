@@ -275,8 +275,8 @@ async function enrichPdfRouteData(cfg, games) {
   const routeGames = sortedGames.slice(0, directExpectedCount);
 
   const [refreshedDirectRows, refreshedOverview] = await Promise.all([
-    calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount, { requireGoogle: true }).catch(() => []),
-    calculateRouteWithDriving(startLocation, routeGames, { requireGoogle: true }).catch(() => null),
+    calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount).catch(() => []),
+    calculateRouteWithDriving(startLocation, routeGames).catch(() => null),
   ]);
 
   nextCfg = {
