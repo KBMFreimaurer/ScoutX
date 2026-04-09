@@ -1,6 +1,9 @@
 const GEO_CACHE_KEY = "scoutplan.geo.cache.v1";
 const ROUTE_CACHE_KEY = "scoutplan.route.cache.v1";
 const REQUEST_INTERVAL_MS = 1000;
+const REQUEST_TIMEOUT_MS = Math.max(2000, Number(import.meta?.env?.VITE_GEO_REQUEST_TIMEOUT_MS || 12000));
+const GEO_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_GEO_CACHE_MAX_ENTRIES || 500));
+const ROUTE_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_ROUTE_CACHE_MAX_ENTRIES || 500));
 const ROUTING_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
 const PHOTON_BASE_URL = "https://photon.komoot.io/api/";
 const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
@@ -54,6 +57,38 @@ function now() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const safeTimeout = Math.max(1000, Number(timeoutMs) || REQUEST_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), safeTimeout);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+function pruneCacheObject(cacheObj, maxEntries) {
+  const entries = Object.entries(cacheObj || {});
+  const limit = Math.max(1, Number(maxEntries) || 1);
+  if (entries.length <= limit) {
+    return cacheObj || {};
+  }
+  return Object.fromEntries(entries.slice(entries.length - limit));
+}
+
+function pruneMap(map, maxEntries) {
+  const limit = Math.max(1, Number(maxEntries) || 1);
+  while (map.size > limit) {
+    const firstKey = map.keys().next().value;
+    if (firstKey === undefined) {
+      break;
+    }
+    map.delete(firstKey);
+  }
 }
 
 function hasGoogleMapsApiKey() {
@@ -142,7 +177,10 @@ function writeSessionCache(cacheObj) {
   }
 
   try {
-    window.sessionStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cacheObj));
+    window.sessionStorage.setItem(
+      GEO_CACHE_KEY,
+      JSON.stringify(pruneCacheObject(cacheObj, GEO_CACHE_MAX_ENTRIES)),
+    );
   } catch {
     // Ignore storage quota errors.
   }
@@ -171,7 +209,10 @@ function writeRouteCache(cacheObj) {
   }
 
   try {
-    window.sessionStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(cacheObj));
+    window.sessionStorage.setItem(
+      ROUTE_CACHE_KEY,
+      JSON.stringify(pruneCacheObject(cacheObj, ROUTE_CACHE_MAX_ENTRIES)),
+    );
   } catch {
     // Ignore storage quota errors.
   }
@@ -204,6 +245,7 @@ function setCachedGeocode(address, value) {
   }
 
   memoryCache.set(key, value);
+  pruneMap(memoryCache, GEO_CACHE_MAX_ENTRIES);
   const cacheObj = readSessionCache();
   cacheObj[key] = value;
   writeSessionCache(cacheObj);
@@ -249,6 +291,7 @@ function setCachedRoute(fromPoint, toPoint, routeValue, provider = getRouteProvi
   }
 
   routeCache.set(key, routeValue);
+  pruneMap(routeCache, ROUTE_CACHE_MAX_ENTRIES);
   const cacheObj = readRouteCache();
   cacheObj[key] = routeValue;
   writeRouteCache(cacheObj);
@@ -317,7 +360,7 @@ async function requestNominatim(query) {
   endpoint.searchParams.set("addressdetails", "1");
   endpoint.searchParams.set("q", query);
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
       "Accept-Language": "de",
@@ -343,7 +386,7 @@ async function requestGoogleGeocode(query) {
   endpoint.searchParams.set("region", "de");
   endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
     },
@@ -383,7 +426,7 @@ async function requestGoogleReverseGeocode(lat, lon) {
   endpoint.searchParams.set("region", "de");
   endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
     },
@@ -412,7 +455,7 @@ async function requestPhoton(query) {
   endpoint.searchParams.set("limit", "1");
   endpoint.searchParams.set("lang", "de");
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
     },
@@ -484,7 +527,7 @@ export async function reverseGeocode(lat, lon) {
     endpoint.searchParams.set("lat", String(lat));
     endpoint.searchParams.set("lon", String(lon));
 
-    const response = await fetch(endpoint.toString(), {
+    const response = await fetchWithTimeout(endpoint.toString(), {
       headers: {
         Accept: "application/json",
         "Accept-Language": "de",
@@ -563,7 +606,7 @@ async function requestGoogleDrivingRoute(fromPoint, toPoint) {
   endpoint.searchParams.set("alternatives", "false");
   endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
     },
@@ -596,7 +639,7 @@ async function requestOsrmDrivingRoute(fromLat, fromLon, toLat, toLon) {
   endpoint.searchParams.set("steps", "false");
   endpoint.searchParams.set("annotations", "false");
 
-  const response = await fetch(endpoint.toString(), {
+  const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
       Accept: "application/json",
     },

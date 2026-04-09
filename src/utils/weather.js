@@ -1,4 +1,26 @@
 const WEATHER_CACHE_KEY = "scoutplan.weather.cache.v1";
+const WEATHER_REQUEST_TIMEOUT_MS = Math.max(2000, Number(import.meta?.env?.VITE_WEATHER_TIMEOUT_MS || 10000));
+const WEATHER_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_WEATHER_CACHE_MAX_ENTRIES || 500));
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = WEATHER_REQUEST_TIMEOUT_MS) {
+  const safeTimeout = Math.max(1000, Number(timeoutMs) || WEATHER_REQUEST_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), safeTimeout);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+function pruneCache(cache) {
+  const entries = Object.entries(cache || {});
+  if (entries.length <= WEATHER_CACHE_MAX_ENTRIES) {
+    return cache || {};
+  }
+  return Object.fromEntries(entries.slice(entries.length - WEATHER_CACHE_MAX_ENTRIES));
+}
 
 function readWeatherCache() {
   if (typeof window === "undefined") {
@@ -21,7 +43,7 @@ function writeWeatherCache(cache) {
     return;
   }
   try {
-    window.sessionStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(cache));
+    window.sessionStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(pruneCache(cache)));
   } catch {
     // Ignore storage quota errors.
   }
@@ -75,7 +97,7 @@ export async function fetchWeatherForGame({ lat, lon, date, time }) {
   endpoint.searchParams.set("end_date", dateOnly);
   endpoint.searchParams.set("timezone", "auto");
 
-  const response = await fetch(endpoint.toString());
+  const response = await fetchWithTimeout(endpoint.toString());
   if (!response.ok) {
     throw new Error(`Wetter HTTP ${response.status}`);
   }
