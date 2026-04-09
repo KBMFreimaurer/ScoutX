@@ -932,7 +932,7 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
   }
 }
 
-function buildDirectRouteRows(routeOverview, games, directRoutes, maxGames = 5) {
+function buildDirectRouteRows(games, directRoutes, maxGames = 5) {
   const selectedGames = sortGamesByDateTime(Array.isArray(games) ? games : []).slice(0, maxGames);
   const provided = Array.isArray(directRoutes) ? directRoutes : [];
 
@@ -1146,7 +1146,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
   });
   state.y += 1;
 
-  const directRows = buildDirectRouteRows(routeOverview, games, directRoutes, 5);
+  const directRows = buildDirectRouteRows(games, directRoutes, 5);
   const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
   const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
   const missingDirectCount = directRows.filter((row) => !row.routeEligible || row.distanceKm === null).length;
