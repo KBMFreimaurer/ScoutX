@@ -211,11 +211,13 @@ export function PlanProvider({ children }) {
       });
   }, [gamesCtx.games]);
 
+  const routePreviewGames = useMemo(() => routeGames.slice(0, 5), [routeGames]);
+
   useEffect(() => {
     let alive = true;
-    const expectedDirectCount = Math.min(5, routeGames.length);
+    const expectedDirectCount = routePreviewGames.length;
 
-    if (!setup.startLocation || routeGames.length === 0) {
+    if (!setup.startLocation || routePreviewGames.length === 0) {
       setRouteOverview(null);
       setRouteDirectOptions([]);
       setRouteCalculating(false);
@@ -227,14 +229,18 @@ export function PlanProvider({ children }) {
     if (strictGoogleRouting) {
       setRouteOverview(null);
     } else {
-      const fallback = calculateRoute(setup.startLocation, routeGames);
+      const fallback = calculateRoute(setup.startLocation, routePreviewGames);
       setRouteOverview(fallback);
     }
     setRouteCalculating(true);
 
     void Promise.all([
-      withTimeout(calculateRouteWithDriving(setup.startLocation, routeGames), ROUTE_TIMEOUT_MS, null),
-      withTimeout(calculateDirectStartRoutes(setup.startLocation, routeGames, expectedDirectCount), ROUTE_TIMEOUT_MS, []),
+      withTimeout(calculateRouteWithDriving(setup.startLocation, routePreviewGames), ROUTE_TIMEOUT_MS, null),
+      withTimeout(
+        calculateDirectStartRoutes(setup.startLocation, routePreviewGames, expectedDirectCount),
+        ROUTE_TIMEOUT_MS,
+        [],
+      ),
     ])
       .then(([routed, direct]) => {
         if (!alive) {
@@ -256,7 +262,7 @@ export function PlanProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [setup.startLocation, routeGames, strictGoogleRouting]);
+  }, [setup.startLocation, routePreviewGames, strictGoogleRouting]);
 
   useEffect(() => {
     setPlan("");
@@ -273,8 +279,8 @@ export function PlanProvider({ children }) {
     try {
       let resolvedRouteOverview = routeOverview || null;
       let resolvedDirectOptions = routeDirectOptions;
-      if (setup.startLocation && routeGames.length > 0) {
-        const expectedDirectCount = Math.min(5, routeGames.length);
+      if (setup.startLocation && routePreviewGames.length > 0) {
+        const expectedDirectCount = routePreviewGames.length;
         const hasRouteOverview = hasCompleteRouteOverview(resolvedRouteOverview, expectedDirectCount);
         const hasDirectOptions = hasCompleteDirectOptions(resolvedDirectOptions, expectedDirectCount);
 
@@ -284,7 +290,7 @@ export function PlanProvider({ children }) {
 
         try {
           if (!resolvedRouteOverview && !strictGoogleRouting) {
-            resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
+            resolvedRouteOverview = calculateRoute(setup.startLocation, routePreviewGames);
             setRouteOverview(resolvedRouteOverview);
           }
 
@@ -292,11 +298,15 @@ export function PlanProvider({ children }) {
             ? await Promise.all([
                 hasRouteOverview
                   ? Promise.resolve(null)
-                  : withTimeout(calculateRouteWithDriving(setup.startLocation, routeGames), ROUTE_TIMEOUT_MS, null),
+                  : withTimeout(
+                      calculateRouteWithDriving(setup.startLocation, routePreviewGames),
+                      ROUTE_TIMEOUT_MS,
+                      null,
+                    ),
                 hasDirectOptions
                   ? Promise.resolve(resolvedDirectOptions)
                   : withTimeout(
-                      calculateDirectStartRoutes(setup.startLocation, routeGames, expectedDirectCount),
+                      calculateDirectStartRoutes(setup.startLocation, routePreviewGames, expectedDirectCount),
                       ROUTE_TIMEOUT_MS,
                       [],
                     ),
@@ -314,7 +324,7 @@ export function PlanProvider({ children }) {
           }
         } catch {
           if (!resolvedRouteOverview && !strictGoogleRouting) {
-            resolvedRouteOverview = calculateRoute(setup.startLocation, routeGames);
+            resolvedRouteOverview = calculateRoute(setup.startLocation, routePreviewGames);
             setRouteOverview(resolvedRouteOverview);
           }
         } finally {
@@ -364,7 +374,19 @@ export function PlanProvider({ children }) {
     } finally {
       setPdfExporting(false);
     }
-  }, [pdfExporting, plan, gamesCtx.games, cfg, pdfSyncContext, routeOverview, routeDirectOptions, routeGames, navigate, setup, strictGoogleRouting]);
+  }, [
+    pdfExporting,
+    plan,
+    gamesCtx.games,
+    cfg,
+    pdfSyncContext,
+    routeOverview,
+    routeDirectOptions,
+    routePreviewGames,
+    navigate,
+    setup,
+    strictGoogleRouting,
+  ]);
 
   const onBackGames = useCallback(() => {
     navigate("/games");
