@@ -5,3 +5,5 @@ dist
 adapter-service/data/games.store.json
 adapter-service/imports/*
 !adapter-service/imports/.gitkeep
+.env
+.env.local
