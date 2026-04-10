@@ -251,6 +251,20 @@ button,input,select{min-height:44px}
 @media(min-width:480px){.kreis-grid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:700px){.kreis-grid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}}
 
+/* Symmetrische letzte Reihe im Kreis-Grid (3er Raster) */
+@media(min-width:480px) and (max-width:699px){
+  .kreis-grid > :last-child:nth-child(3n+1){grid-column:2}
+  .kreis-grid > :last-child:nth-child(3n+2){grid-column:3}
+}
+
+@media(min-width:700px){
+  .kreis-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  .kreis-grid > :last-child:nth-child(3n+1){grid-column:2}
+  .kreis-grid > :last-child:nth-child(3n+2){grid-column:3}
+}
+
 .team-grid{display:grid;grid-template-columns:1fr;gap:6px}
 @media(min-width:480px){.team-grid{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:700px){.team-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
