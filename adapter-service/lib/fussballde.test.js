@@ -135,12 +135,14 @@ describe("fussballde helpers", () => {
   });
 
   it("does not pick unrelated nearby times for team-page kickoff", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const html = `
       <div class="match-meta"><span>Letztes Spiel: 15:00 | Meisterschaften</span></div>
       <a href="https://www.fussball.de/spiel/team-c-team-d/-/spiel/02TESTMATCHID000000VS5489BTV000000">Zum Spiel</a>
     `;
 
     expect(extractKickoffFromTeamPageHtml(html, "02TESTMATCHID000000VS5489BTV000000")).toBe("");
+    warnSpy.mockRestore();
   });
 
   it("warnt wenn kickoff auf Teamseite nicht ermittelt werden kann", () => {
