@@ -3,7 +3,6 @@ import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { useScoutX } from "../context/ScoutXContext";
 import { AgeGroupSelector } from "../components/AgeGroupSelector";
 import { DateFocusPanel } from "../components/DateFocusPanel";
-import { DataSourceConfig } from "../components/DataSourceConfig";
 import { KreisSelector } from "../components/KreisSelector";
 import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
@@ -23,7 +22,6 @@ export function SetupPage() {
     canBuild,
     loadingGames,
     err,
-    adapterToken,
     startLocation,
     locationDraft,
     locationError,
@@ -42,7 +40,6 @@ export function SetupPage() {
     onSetFromDate,
     onSetFocus,
     onBuildAndGo,
-    onAdapterTokenChange,
     onSetLocationDraft,
     onResolveLocation,
     onUseCurrentLocation,
@@ -235,12 +232,6 @@ export function SetupPage() {
             </div>
           </div>
 
-          <div className="setup-span-two">
-            <DataSourceConfig
-              adapterToken={adapterToken}
-              onAdapterTokenChange={onAdapterTokenChange}
-            />
-          </div>
         </div>
       </div>
 

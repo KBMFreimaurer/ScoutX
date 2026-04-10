@@ -3,7 +3,6 @@ import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { TopFive } from "../components/TopFive";
-import { DATA_SOURCE_LABELS } from "../services/dataProvider";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
@@ -19,15 +18,12 @@ export function GamesPage() {
     enrichingGames,
     prioritized,
     gameNotes,
-    dataSourceUsed,
     pdfExporting,
     onSetGameNote,
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
   const PAGE_SIZE = 20;
-
-  const dataSourceLabel = DATA_SOURCE_LABELS[dataSourceUsed] || DATA_SOURCE_LABELS.mock;
   const requestedTeamCount = Number(teamValidation?.requestedCount || 0);
   const matchedTeamCount = Number(teamValidation?.matchedTeamCount || 0);
   const matchedGameCount =
@@ -133,7 +129,7 @@ export function GamesPage() {
           </div>
 
           <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
-            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter · {dataSourceLabel}
+            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter
           </div>
 
           {showTeamHint ? (

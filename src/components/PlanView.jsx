@@ -13,6 +13,10 @@ function sortByDateAndKickoff(left, right) {
   return leftTime.localeCompare(rightTime);
 }
 
+function kickoffLabel(time) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? `${time} Uhr` : "Anstoß offen";
+}
+
 export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }) {
   const linkedReviewGames = [...games]
     .sort(sortByDateAndKickoff)
@@ -57,7 +61,7 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
             paddingTop: 14,
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 10,
           }}
         >
           <div
@@ -70,26 +74,65 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
               fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
-            Direktlinks zu den Spielen
+            Direktlinks zu den Spielen ({linkedReviewGames.length})
           </div>
           {linkedReviewGames.map(({ game, matchUrl }, index) => (
-            <a
+            <div
               key={`${game.id || game.home}-${game.away}-${index}`}
-              href={matchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Zum Spiel auf fussball.de für ${game.home} gegen ${game.away}`}
               style={{
-                color: C.green,
-                textDecoration: "underline",
-                fontSize: isMobile ? 12 : 13,
-                lineHeight: 1.5,
-                cursor: "pointer",
+                display: "flex",
+                alignItems: isMobile ? "flex-start" : "center",
+                justifyContent: "space-between",
+                flexDirection: isMobile ? "column" : "row",
+                gap: isMobile ? 6 : 10,
+                border: `1px solid ${C.greenBorder}`,
+                background: "rgba(0,200,83,0.04)",
+                borderRadius: 10,
+                padding: isMobile ? "9px 10px" : "10px 12px",
                 fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               }}
             >
-              {index + 1}. {game.home} vs. {game.away} auf fussball.de
-            </a>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: isMobile ? 12 : 13, color: C.offWhite, lineHeight: 1.4 }}>
+                  <span
+                    style={{
+                      color: C.green,
+                      fontWeight: 700,
+                      marginRight: 6,
+                    }}
+                  >
+                    {index + 1}.
+                  </span>
+                  <strong>{game.home}</strong>
+                  <span style={{ color: C.gray, margin: "0 4px" }}>vs</span>
+                  <span>{game.away}</span>
+                </div>
+                <div style={{ fontSize: 11, color: C.grayDark, marginTop: 2 }}>
+                  {game.dateLabel || "Datum offen"} · {kickoffLabel(game.time)}
+                </div>
+              </div>
+
+              <a
+                href={matchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Zum Spiel auf fussball.de für ${game.home} gegen ${game.away}`}
+                style={{
+                  color: C.green,
+                  textDecoration: "none",
+                  border: `1px solid ${C.greenBorder}`,
+                  background: C.greenDim,
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                fussball.de öffnen
+              </a>
+            </div>
           ))}
         </div>
       ) : null}
