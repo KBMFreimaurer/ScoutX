@@ -815,6 +815,11 @@ function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
   doc.setFillColor(237, 242, 247);
   doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
   doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, headerHeight, "FD");
+  let dividerX = tableX;
+  for (let index = 0; index < headers.length - 1; index += 1) {
+    dividerX += headers[index].width;
+    doc.line(dividerX, state.y, dividerX, state.y + headerHeight);
+  }
 
   let cursorX = tableX + 1.8;
   doc.setFont("helvetica", "bold");
@@ -826,6 +831,48 @@ function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
   }
 
   state.y += headerHeight;
+}
+
+function drawRouteSummaryGrid(doc, state, directRows, visibleTotals, sectionOnNewPage = "Routenberechnung") {
+  const totalCount = directRows.length;
+  const knownCount = directRows.filter((row) => Number.isFinite(row?.distanceKm)).length;
+  const openCount = Math.max(0, totalCount - knownCount);
+  const totalKmLabel = Number.isFinite(visibleTotals?.totalKm) ? `${Math.round(visibleTotals.totalKm)} km` : "unbekannt";
+  const tiles = [
+    { label: "Spiele in Route", value: String(totalCount) },
+    { label: "Strecken berechnet", value: String(knownCount) },
+    { label: "Strecken offen", value: String(openCount) },
+    { label: "Kette gesamt", value: totalKmLabel },
+  ];
+
+  const tileGap = 3.2;
+  const tileWidth = (PAGE_WIDTH - MARGIN_X * 2 - tileGap) / 2;
+  const tileHeight = 13.5;
+  const totalHeight = tileHeight * 2 + tileGap + 1;
+  ensureSpace(doc, state, totalHeight + 1.5, sectionOnNewPage);
+
+  for (let index = 0; index < tiles.length; index += 1) {
+    const row = Math.floor(index / 2);
+    const col = index % 2;
+    const x = MARGIN_X + col * (tileWidth + tileGap);
+    const y = state.y + row * (tileHeight + tileGap);
+
+    doc.setFillColor(COLORS.cardBg[0], COLORS.cardBg[1], COLORS.cardBg[2]);
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.roundedRect(x, y, tileWidth, tileHeight, 1.4, 1.4, "FD");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.7);
+    doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+    doc.text(sanitizePdfText(tiles[index].label), x + 2.3, y + 4.4);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.8);
+    doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+    doc.text(sanitizePdfText(tiles[index].value), x + 2.3, y + 10.1);
+  }
+
+  state.y += totalHeight + 1.2;
 }
 
 export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
@@ -909,6 +956,11 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
 
     doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
     doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+    let dividerX = tableX;
+    for (let dividerIndex = 0; dividerIndex < headers.length - 1; dividerIndex += 1) {
+      dividerX += headers[dividerIndex].width;
+      doc.line(dividerX, state.y, dividerX, state.y + rowHeight);
+    }
 
     let cursorX = tableX + 1.6;
     for (let c = 0; c < headers.length; c += 1) {
@@ -1171,6 +1223,7 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
   const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
   const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
   const missingDirectCount = directRows.filter((row) => !row.routeEligible || row.distanceKm === null).length;
+  drawRouteSummaryGrid(doc, state, directRows, visibleTotals, "Routenberechnung");
 
   writeText(doc, state, "1) Direkte Anfahrt vom Startpunkt", {
     fontSize: 9.2,
