@@ -10,6 +10,7 @@ import {
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
 const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_TIMEOUT_MS || 12000);
+const AUTHORITATIVE_SYNC_TIMEOUT_MS = Math.max(2000, Number(import.meta.env?.VITE_PDF_SYNC_TIMEOUT_MS || 8000));
 const activeBlobUrls = new Set();
 let jsPdfCtorPromise = null;
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -234,6 +235,7 @@ async function fetchAuthoritativeGames(syncContext) {
     adapterEndpoint,
     adapterToken,
     turnier: Boolean(syncContext?.turnier),
+    retryDelaysMs: [],
   });
 
   return Array.isArray(result?.games) ? result.games : [];
@@ -244,7 +246,11 @@ async function prepareGamesForPdf(games, syncContext) {
     return { games: Array.isArray(games) ? games : [], correctedCount: 0 };
   }
 
-  const authoritativeGames = await fetchAuthoritativeGames(syncContext);
+  const authoritativeGames = await withTimeout(
+    fetchAuthoritativeGames(syncContext),
+    AUTHORITATIVE_SYNC_TIMEOUT_MS,
+    [],
+  );
   return applyAuthoritativeGameCorrections(games, authoritativeGames);
 }
 

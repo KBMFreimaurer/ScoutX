@@ -283,20 +283,25 @@ function isRetryableProviderError(error) {
   return /timeout|network|failed|nicht erreichbar|http 5\d\d|econn|etimedout|fetch/.test(message);
 }
 
-async function runProviderWithRetry(providerName, providerFn, context) {
+async function runProviderWithRetry(providerName, providerFn, context, retryDelaysMs = PROVIDER_RETRY_DELAYS_MS) {
+  const safeRetryDelays = Array.isArray(retryDelaysMs)
+    ? retryDelaysMs
+        .map((delay) => Number(delay))
+        .filter((delay) => Number.isFinite(delay) && delay >= 0)
+    : PROVIDER_RETRY_DELAYS_MS;
   let lastError = null;
 
-  for (let attempt = 0; attempt <= PROVIDER_RETRY_DELAYS_MS.length; attempt += 1) {
+  for (let attempt = 0; attempt <= safeRetryDelays.length; attempt += 1) {
     try {
       return await providerFn(context);
     } catch (error) {
       lastError = error;
-      const canRetry = attempt < PROVIDER_RETRY_DELAYS_MS.length && isRetryableProviderError(error);
+      const canRetry = attempt < safeRetryDelays.length && isRetryableProviderError(error);
       if (!canRetry) {
         break;
       }
 
-      await sleep(SKIP_RETRY_WAIT ? 0 : PROVIDER_RETRY_DELAYS_MS[attempt]);
+      await sleep(SKIP_RETRY_WAIT ? 0 : safeRetryDelays[attempt]);
     }
   }
 
@@ -762,6 +767,7 @@ export async function fetchGamesWithProviders({
   adapterEndpoint,
   adapterToken,
   turnier,
+  retryDelaysMs,
 }) {
   const context = { kreisId, jugendId, fromDate, toDate, teams, uploadedGames, adapterEndpoint, adapterToken, turnier };
 
@@ -778,7 +784,7 @@ export async function fetchGamesWithProviders({
 
   for (const providerName of providerOrder) {
     try {
-      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context);
+      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, retryDelaysMs);
       const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
       const meta = Array.isArray(providerResult) ? {} : providerResult?.meta || {};
       if (games?.length) {

@@ -373,6 +373,31 @@ describe("data provider", () => {
     ).rejects.toThrow("Import enthält keine passenden Spiele");
   });
 
+  it("respects empty retryDelaysMs and performs single adapter attempt", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        toDate: "2026-04-07",
+        teams: ["Team A"],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+        retryDelaysMs: [],
+      }),
+    ).rejects.toThrow("Adapter HTTP 500");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("handles empty csv input gracefully", () => {
     const report = parseUploadedGamesReport("date,time,home,away", "games.csv", {
       kreisId: "duesseldorf",
