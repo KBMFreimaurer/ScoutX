@@ -69,6 +69,26 @@ describe("SetupPage", () => {
     expect(screen.getByRole("button", { name: /★ TSV Heimaterde/i })).toBeInTheDocument();
   });
 
+  it("zeigt Unterstufen-Auswahl fuer Jugendklassen ausser Bambini", () => {
+    renderSetupPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+    const d1Chip = screen.getByRole("button", { name: /D I auswählen/i });
+    fireEvent.click(d1Chip);
+
+    expect(d1Chip).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Unterstufen entfernen/i)).toBeInTheDocument();
+  });
+
+  it("zeigt bei Bambini keinen Unterstufen-Parameter", () => {
+    renderSetupPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /Bambini auswählen/i }));
+
+    expect(screen.getByText(/Für Bambini gibt es keine Unterstufen-Parameter/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
+  });
+
   it("ignoriert persistierte localStorage-Defaults und startet frisch", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,

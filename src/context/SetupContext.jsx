@@ -6,6 +6,54 @@ import { geocodeAddress, reverseGeocode } from "../utils/geo";
 import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
 const SetupContext = createContext(null);
+const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
+const ROMAN_TO_ARABIC = {
+  I: "1",
+  II: "2",
+  III: "3",
+  IV: "4",
+};
+
+function isBambiniJugend(jugend) {
+  return String(jugend?.id || "").trim().toLowerCase() === "bambini";
+}
+
+function buildJugendSubLevelOptions(jugend) {
+  if (!jugend || isBambiniJugend(jugend)) {
+    return [];
+  }
+
+  const prefix = String(jugend.kurz || "").trim().toUpperCase();
+  if (!prefix || prefix.length > 2) {
+    return [];
+  }
+
+  return ROMAN_SUBLEVELS.map((roman) => `${prefix} ${roman}`);
+}
+
+function buildJugendSubLevelHints(values) {
+  const hints = [];
+
+  for (const value of Array.isArray(values) ? values : []) {
+    const normalized = String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+    if (!normalized) {
+      continue;
+    }
+
+    hints.push(normalized);
+    const match = normalized.match(/^([A-Z]{1,2})\s+(I|II|III|IV)$/);
+    if (match) {
+      const prefix = match[1];
+      const roman = match[2];
+      const arabic = ROMAN_TO_ARABIC[roman];
+      if (arabic) {
+        hints.push(`${prefix}${arabic}`);
+      }
+    }
+  }
+
+  return normalizeTeamParameters(hints);
+}
 
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
@@ -17,6 +65,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       selTeams: [],
       fromDate: todayIso,
       focus: "",
+      jugendSubLevels: [],
       startLocation: null,
       favorites: [],
       todayIso,
@@ -33,6 +82,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
   const [focus, setFocus] = useState(setupDefaults.focus);
+  const [jugendSubLevels, setJugendSubLevels] = useState(() => normalizeTeamParameters(setupDefaults.jugendSubLevels));
   const adapterEndpoint = useMemo(
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
     [defaultAdapterEndpoint],
@@ -49,7 +99,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
-  const activeTeams = useMemo(() => normalizeTeamParameters(selectedTeams), [selectedTeams]);
+  const availableJugendSubLevels = useMemo(() => buildJugendSubLevelOptions(jugend), [jugend]);
+  const jugendSubLevelHints = useMemo(() => buildJugendSubLevelHints(jugendSubLevels), [jugendSubLevels]);
+  const activeTeams = useMemo(
+    () => normalizeTeamParameters([...selectedTeams, ...jugendSubLevelHints]),
+    [selectedTeams, jugendSubLevelHints],
+  );
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
   const canBuild = Boolean(kreisId && jugendId);
   const hasLocation = Boolean(startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon));
@@ -66,8 +121,40 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
 
   const onSelectJugend = useCallback((id) => {
     setJugendId(id);
+    setJugendSubLevels([]);
     setTeamValidation(null);
     setErr("");
+  }, []);
+
+  const onToggleJugendSubLevel = useCallback(
+    (value) => {
+      const subLevel = String(value || "").trim().toUpperCase();
+      if (!subLevel) {
+        return;
+      }
+
+      setJugendSubLevels((prev) => {
+        const exists = prev.includes(subLevel);
+        const next = exists ? prev.filter((item) => item !== subLevel) : [...prev, subLevel];
+        const orderMap = new Map(availableJugendSubLevels.map((item, index) => [item, index]));
+
+        return normalizeTeamParameters(next).sort((left, right) => {
+          const leftRank = Number.isFinite(orderMap.get(left)) ? orderMap.get(left) : Number.MAX_SAFE_INTEGER;
+          const rightRank = Number.isFinite(orderMap.get(right)) ? orderMap.get(right) : Number.MAX_SAFE_INTEGER;
+          if (leftRank !== rightRank) {
+            return leftRank - rightRank;
+          }
+          return left.localeCompare(right, "de");
+        });
+      });
+      setTeamValidation(null);
+    },
+    [availableJugendSubLevels],
+  );
+
+  const onClearJugendSubLevels = useCallback(() => {
+    setJugendSubLevels([]);
+    setTeamValidation(null);
   }, []);
 
   const onClearAllTeams = useCallback(() => {
@@ -211,6 +298,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
+    setJugendSubLevels([]);
     setAdapterToken(adapterTokenDefault);
     setFromDate(setupDefaults.todayIso);
     setFocus("");
@@ -237,6 +325,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamValidation,
       fromDate,
       focus,
+      jugendSubLevels,
+      availableJugendSubLevels,
       adapterEndpoint,
       adapterToken,
       startLocation,
@@ -253,6 +343,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       setTeamValidation,
       onSelectKreis,
       onSelectJugend,
+      onToggleJugendSubLevel,
+      onClearJugendSubLevels,
       onAddTeamField,
       onUpdateTeamField,
       onNormalizeTeamField,
@@ -285,6 +377,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamValidation,
       fromDate,
       focus,
+      jugendSubLevels,
+      availableJugendSubLevels,
       adapterEndpoint,
       adapterToken,
       startLocation,
@@ -299,6 +393,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       clearErr,
       onSelectKreis,
       onSelectJugend,
+      onToggleJugendSubLevel,
+      onClearJugendSubLevels,
       onAddTeamField,
       onUpdateTeamField,
       onNormalizeTeamField,

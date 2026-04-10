@@ -15,6 +15,9 @@ export function SetupPage() {
     jugendId,
     jugend,
     selectedTeams,
+    activeTeams,
+    jugendSubLevels,
+    availableJugendSubLevels,
     teamDraft,
     teamValidation,
     fromDate,
@@ -31,6 +34,8 @@ export function SetupPage() {
     favoriteDraft,
     onSelectKreis,
     onSelectJugend,
+    onToggleJugendSubLevel,
+    onClearJugendSubLevels,
     onAddTeamField,
     onUpdateTeamField,
     onNormalizeTeamField,
@@ -61,7 +66,16 @@ export function SetupPage() {
         <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
 
         <div className="setup-left-grid">
-          <AgeGroupSelector jugendKlassen={JUGEND_KLASSEN} jugendId={jugendId} onSelect={onSelectJugend} jugend={jugend} />
+          <AgeGroupSelector
+            jugendKlassen={JUGEND_KLASSEN}
+            jugendId={jugendId}
+            onSelect={onSelectJugend}
+            jugend={jugend}
+            availableSubLevels={availableJugendSubLevels}
+            selectedSubLevels={jugendSubLevels}
+            onToggleSubLevel={onToggleJugendSubLevel}
+            onClearSubLevels={onClearJugendSubLevels}
+          />
 
           <DateFocusPanel
             fromDate={fromDate}
@@ -254,7 +268,7 @@ export function SetupPage() {
         ) : (
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            Spielplan generieren — {selectedTeams.length || 0} Team-Parameter
+            Spielplan generieren — {activeTeams.length || 0} Team-Parameter
           </span>
         )}
       </PrimaryButton>
