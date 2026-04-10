@@ -290,6 +290,62 @@ describe("data provider", () => {
     expect(otherGame?.priority).toBeGreaterThan(0);
   });
 
+  it("faellt bei localhost-endpoint auf /api/games zurueck, wenn localhost nicht erreichbar ist", async () => {
+    const fetchMock = vi.fn(async (input) => {
+      const url = String(input);
+      if (url === "http://localhost:8787/api/games") {
+        throw new TypeError("Failed to fetch");
+      }
+
+      if (url === "/api/games") {
+        return {
+          ok: true,
+          json: async () => ({
+            games: [
+              {
+                date: "2026-05-01",
+                time: "12:30",
+                home: "Team X",
+                away: "Team Y",
+                venue: "Sportpark",
+                km: 14,
+                kreisId: "duesseldorf",
+                jugendId: "e-jugend",
+              },
+            ],
+          }),
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-07",
+      teams: ["Team X", "Team Y"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:8787/api/games",
+      turnier: false,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://localhost:8787/api/games",
+      "/api/games",
+    ]);
+  });
+
   it("returns a timeout error when adapter request aborts", async () => {
     const abortError = new Error("aborted");
     abortError.name = "AbortError";

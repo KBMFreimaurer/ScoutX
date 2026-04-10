@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getWeekRange } from "./shared";
+import { getWeekRange, normalizeAdapterEndpoint } from "./shared";
 
 describe("shared getWeekRange", () => {
   it("returns monday-to-sunday for valid date", () => {
@@ -12,5 +12,15 @@ describe("shared getWeekRange", () => {
   it("throws for invalid date input", () => {
     expect(() => getWeekRange("")).toThrow("Ungültiges Startdatum");
     expect(() => getWeekRange("2026-02-31")).toThrow("Ungültiges Startdatum");
+  });
+
+  it("nutzt fallback endpoint wenn kein endpoint gesetzt ist", () => {
+    expect(normalizeAdapterEndpoint("", "/api/games")).toBe("/api/games");
+  });
+
+  it("behaelt localhost-endpoint auf lokalem Host", () => {
+    expect(normalizeAdapterEndpoint("http://localhost:8787/api/games", "/api/games")).toBe(
+      "http://localhost:8787/api/games",
+    );
   });
 });

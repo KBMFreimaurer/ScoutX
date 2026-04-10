@@ -34,10 +34,11 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
   const [focus, setFocus] = useState(setupDefaults.focus);
   const adapterEndpoint = useMemo(
-    () => normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
+    () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
     [defaultAdapterEndpoint],
   );
-  const [adapterToken, setAdapterToken] = useState("");
+  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || "").trim();
+  const [adapterToken, setAdapterToken] = useState(adapterTokenDefault);
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
   const [locationError, setLocationError] = useState("");
@@ -210,7 +211,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
-    setAdapterToken("");
+    setAdapterToken(adapterTokenDefault);
     setFromDate(setupDefaults.todayIso);
     setFocus("");
     setStartLocation(null);
@@ -220,7 +221,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setFavoriteTeams([]);
     setFavoriteDraft("");
     setErr("");
-  }, [setupDefaults.todayIso]);
+  }, [adapterTokenDefault, setupDefaults.todayIso]);
 
   const value = useMemo(
     () => ({

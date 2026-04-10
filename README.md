@@ -30,6 +30,22 @@ Dadurch ist kein manueller Import vor jeder Planung nötig.
 
 Details: [adapter-service/README.md](./adapter-service/README.md)
 
+## Home-Server Zugriff (mehrere Geräte)
+
+Damit andere Geräte im LAN den Live-Adapter zuverlässig nutzen können:
+
+1. Frontend-Endpoint auf Reverse-Proxy lassen: `VITE_ADAPTER_ENDPOINT=/api/games`
+2. Nginx muss `/api/` auf den Adapter weiterleiten (siehe `nginx.conf`)
+3. Adapter auf allen Interfaces binden: `ADAPTER_HOST=0.0.0.0`
+4. Wenn Adapter-Auth aktiv ist (`ADAPTER_TOKEN` gesetzt), zusätzlich im Frontend setzen:
+   `VITE_ADAPTER_TOKEN=<token>`
+
+Schnellcheck vom zweiten Gerät:
+
+- Webapp: `http://<server-ip>:5580`
+- Adapter über Proxy: `http://<server-ip>:5580/api/games` (POST)
+- Health direkt (optional): `http://<server-ip>:8787/health`
+
 ## Docker Compose
 
 ```bash

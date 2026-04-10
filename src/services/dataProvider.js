@@ -136,6 +136,57 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
   }
 }
 
+function isLocalHost(hostname) {
+  const host = String(hostname || "").toLowerCase().trim();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
+}
+
+function tryParseAbsoluteUrl(urlText) {
+  try {
+    return new URL(String(urlText || ""));
+  } catch {
+    return null;
+  }
+}
+
+function appendUniqueEndpoint(candidates, endpoint) {
+  const value = String(endpoint || "").trim();
+  if (!value || candidates.includes(value)) {
+    return;
+  }
+  candidates.push(value);
+}
+
+function buildAdapterEndpointCandidates(adapterEndpoint) {
+  const primary = String(adapterEndpoint || "").trim();
+  const candidates = [];
+  appendUniqueEndpoint(candidates, primary);
+
+  if (!primary || typeof window === "undefined") {
+    return candidates;
+  }
+
+  const parsed = tryParseAbsoluteUrl(primary);
+  const appProtocol = String(window.location?.protocol || "http:");
+  const appHostname = String(window.location?.hostname || "");
+  const safeDefault = "/api/games";
+
+  if (parsed && isLocalHost(parsed.hostname)) {
+    appendUniqueEndpoint(candidates, safeDefault);
+  }
+
+  if (/^\/api\/games\/?$/i.test(primary) && appProtocol === "http:" && appHostname) {
+    appendUniqueEndpoint(candidates, `http://${appHostname}:8787/api/games`);
+  }
+
+  return candidates;
+}
+
+function isAdapterConnectivityError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("nicht erreichbar") || message.includes("timeout");
+}
+
 function addDays(isoDate, days) {
   const [year, month, day] = isoDate.split("-").map(Number);
   return new Date(year, month - 1, day + days);
@@ -680,29 +731,53 @@ async function fetchGamesAdapter(params) {
   }
 
   const weekRange = getWeekRange(params.fromDate);
-  const response = await fetchWithTimeout(
-    adapterEndpoint,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        kreisId: params.kreisId,
-        jugendId: params.jugendId,
-        fromDate: weekRange.fromDate,
-        toDate: weekRange.toDate,
-        teams: params.teams,
-        ensureWeekData: true,
-      }),
-    },
-    ADAPTER_TIMEOUT_MS,
-    "Adapter",
-  );
+  const endpointCandidates = buildAdapterEndpointCandidates(adapterEndpoint);
+  let payload = null;
+  let connectionError = null;
 
-  if (!response.ok) {
-    throw new Error(`Adapter HTTP ${response.status}`);
+  for (let index = 0; index < endpointCandidates.length; index += 1) {
+    const endpoint = endpointCandidates[index];
+
+    try {
+      const response = await fetchWithTimeout(
+        endpoint,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            kreisId: params.kreisId,
+            jugendId: params.jugendId,
+            fromDate: weekRange.fromDate,
+            toDate: weekRange.toDate,
+            teams: params.teams,
+            ensureWeekData: true,
+          }),
+        },
+        ADAPTER_TIMEOUT_MS,
+        "Adapter",
+      );
+
+      if (!response.ok) {
+        throw new Error(`Adapter HTTP ${response.status}`);
+      }
+
+      payload = await response.json();
+      connectionError = null;
+      break;
+    } catch (error) {
+      if (isAdapterConnectivityError(error) && index < endpointCandidates.length - 1) {
+        connectionError = error;
+        continue;
+      }
+      throw error;
+    }
   }
 
-  const payload = await response.json();
+  if (!payload) {
+    const candidateInfo = endpointCandidates.length > 1 ? ` (getestet: ${endpointCandidates.join(", ")})` : "";
+    throw new Error(`${connectionError?.message || "Adapter nicht erreichbar."}${candidateInfo}`);
+  }
+
   const rawGames = Array.isArray(payload) ? payload : payload.games ?? [];
   if (!rawGames.length) {
     throw new Error("Adapter lieferte keine Spiele.");
