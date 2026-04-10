@@ -17,6 +17,13 @@ const MAX_BODY_BYTES = (() => {
   }
   return Math.min(configured, 1024 * 1024);
 })();
+const MAX_TOKEN_BYTES = (() => {
+  const configured = Number(process.env.ADAPTER_MAX_TOKEN_BYTES || 4096);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return 4096;
+  }
+  return Math.min(configured, 64 * 1024);
+})();
 
 const SAMPLE_FILE =
   process.env.ADAPTER_DATA_FILE || fileURLToPath(new URL("./data/games.sample.json", import.meta.url));
@@ -106,20 +113,25 @@ function setCorsHeaders(res, origin) {
 function extractBearerToken(authorizationHeader) {
   const header = String(authorizationHeader || "");
   const match = header.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1] : "";
+  return match ? match[1].trim() : "";
 }
 
 function timingSafeTokenEquals(left, right) {
   const leftBuf = Buffer.from(String(left || ""), "utf8");
   const rightBuf = Buffer.from(String(right || ""), "utf8");
+  const maxLen = Math.max(leftBuf.length, rightBuf.length);
 
-  if (leftBuf.length !== rightBuf.length) {
-    const paddedRight = Buffer.alloc(leftBuf.length);
-    timingSafeEqual(leftBuf, paddedRight);
+  if (maxLen > MAX_TOKEN_BYTES) {
     return false;
   }
 
-  return timingSafeEqual(leftBuf, rightBuf);
+  const paddedLeft = Buffer.alloc(maxLen);
+  const paddedRight = Buffer.alloc(maxLen);
+  leftBuf.copy(paddedLeft);
+  rightBuf.copy(paddedRight);
+
+  const equal = timingSafeEqual(paddedLeft, paddedRight);
+  return equal && leftBuf.length === rightBuf.length;
 }
 
 function sendJson(res, statusCode, payload, origin) {
