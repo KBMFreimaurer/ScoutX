@@ -138,7 +138,7 @@ export function PlanPage() {
         </div>
       ) : null}
 
-      <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} />
+      <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} games={games} />
 
       {routeOverview && startLocation ? (
         <div
