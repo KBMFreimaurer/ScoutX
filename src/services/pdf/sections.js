@@ -1099,9 +1099,12 @@ function drawRouteInfoCard(doc, state, row, sectionOnNewPage = "Routenberechnung
 }
 
 function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenberechnung") {
-  const rowHeight = 11.8;
   const rowX = MARGIN_X;
   const rowW = PAGE_WIDTH - MARGIN_X * 2;
+  const leftTextWidth = rowW - 56;
+  const detailLines = doc.splitTextToSize(`${truncatePlain(row.from, 84)} → ${truncatePlain(row.to, 84)}`, leftTextWidth - 2).slice(0, 2);
+  const titleLines = doc.splitTextToSize(toSafeString(row.title), leftTextWidth - 2).slice(0, 2);
+  const rowHeight = Math.max(13, 4.8 + titleLines.length * 3.9 + detailLines.length * 3.7 + 1.6);
   ensureSpace(doc, state, rowHeight + 1.2, sectionOnNewPage);
 
   if (index % 2 === 1) {
@@ -1111,17 +1114,35 @@ function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenber
 
   doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
   doc.rect(rowX, state.y, rowW, rowHeight, "S");
+  doc.line(rowX + leftTextWidth, state.y, rowX + leftTextWidth, state.y + rowHeight);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.6);
+  doc.setFontSize(8.3);
   doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-  doc.text(sanitizePdfText(row.title), rowX + 2.4, state.y + 4.6);
+  let textY = state.y + 4.6;
+  for (const line of titleLines) {
+    doc.text(sanitizePdfText(line), rowX + 2.4, textY);
+    textY += 3.9;
+  }
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.1);
+  doc.setFontSize(7.9);
   doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  const subLine = `${truncatePlain(row.from, 46)} → ${truncatePlain(row.to, 46)}`;
-  doc.text(sanitizePdfText(subLine), rowX + 2.4, state.y + 8.6);
+  let detailY = state.y + 4.6 + titleLines.length * 3.9;
+  for (const line of detailLines) {
+    doc.text(sanitizePdfText(line), rowX + 2.4, detailY);
+    detailY += 3.7;
+  }
+
+  const metricX = rowX + leftTextWidth + 2.4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.4);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  doc.text(formatDistanceLabel(row.distanceKm), metricX, state.y + 5.5);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.9);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  doc.text(formatMinutesLabel(row.durationMinutes), metricX, state.y + 9.5);
 
   state.y += rowHeight;
 }
@@ -1187,6 +1208,8 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       from: safeStartLabel,
       to: directRows[0].match,
       title: formatChainLeg("Startpunkt", "Spiel 1", directRows[0].distanceKm, directRows[0].durationMinutes),
+      distanceKm: directRows[0].distanceKm,
+      durationMinutes: directRows[0].durationMinutes,
     });
   }
   for (let index = 0; index < betweenRows.length; index += 1) {
@@ -1195,6 +1218,8 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       from: row.from,
       to: row.to,
       title: formatChainLeg(`Spiel ${index + 1}`, `Spiel ${index + 2}`, row.distanceKm, row.durationMinutes),
+      distanceKm: row.distanceKm,
+      durationMinutes: row.durationMinutes,
     });
   }
 
