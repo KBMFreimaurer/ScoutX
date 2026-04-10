@@ -86,7 +86,6 @@ describe("SetupPage", () => {
 
     expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("");
     expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/Adapter Endpoint/i)).toHaveValue("/api/games");
     expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
   });
 });

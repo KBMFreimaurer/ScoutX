@@ -17,7 +17,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       selTeams: [],
       fromDate: todayIso,
       focus: "",
-      adapterEndpoint: normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
       startLocation: null,
       favorites: [],
       todayIso,
@@ -34,7 +33,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
   const [focus, setFocus] = useState(setupDefaults.focus);
-  const [adapterEndpoint, setAdapterEndpoint] = useState(setupDefaults.adapterEndpoint);
+  const adapterEndpoint = useMemo(
+    () => normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint),
+    [defaultAdapterEndpoint],
+  );
   const [adapterToken, setAdapterToken] = useState("");
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
@@ -208,7 +210,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
-    setAdapterEndpoint(normalizeAdapterEndpoint(defaultAdapterEndpoint, defaultAdapterEndpoint));
     setAdapterToken("");
     setFromDate(setupDefaults.todayIso);
     setFocus("");
@@ -219,7 +220,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setFavoriteTeams([]);
     setFavoriteDraft("");
     setErr("");
-  }, [defaultAdapterEndpoint, setupDefaults.todayIso]);
+  }, [setupDefaults.todayIso]);
 
   const value = useMemo(
     () => ({
@@ -259,7 +260,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onClearAllTeams,
       onSetFromDate: setFromDate,
       onSetFocus: setFocus,
-      onAdapterEndpointChange: setAdapterEndpoint,
       onAdapterTokenChange: setAdapterToken,
       onSetLocationDraft: setLocationDraft,
       onResolveLocation,

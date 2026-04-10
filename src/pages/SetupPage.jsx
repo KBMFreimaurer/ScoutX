@@ -23,7 +23,6 @@ export function SetupPage() {
     canBuild,
     loadingGames,
     err,
-    adapterEndpoint,
     adapterToken,
     startLocation,
     locationDraft,
@@ -43,7 +42,6 @@ export function SetupPage() {
     onSetFromDate,
     onSetFocus,
     onBuildAndGo,
-    onAdapterEndpointChange,
     onAdapterTokenChange,
     onSetLocationDraft,
     onResolveLocation,
@@ -239,9 +237,7 @@ export function SetupPage() {
 
           <div className="setup-span-two">
             <DataSourceConfig
-              adapterEndpoint={adapterEndpoint}
               adapterToken={adapterToken}
-              onAdapterEndpointChange={onAdapterEndpointChange}
               onAdapterTokenChange={onAdapterTokenChange}
             />
           </div>
