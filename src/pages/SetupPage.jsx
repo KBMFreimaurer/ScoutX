@@ -215,7 +215,9 @@ export function SetupPage() {
                     type="text"
                     value={scoutName}
                     onChange={(e) => onSetScoutName(e.target.value)}
-                    placeholder="Dein Name"
+                    placeholder="Vor- und Nachname"
+                    autoComplete="name"
+                    inputMode="text"
                     maxLength={80}
                   />
                 </div>
