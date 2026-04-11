@@ -23,6 +23,7 @@ export function GamesPage() {
     onTogglePlannedGame,
     onSelectAllPlannedGames,
     onClearPlannedGames,
+    onSelectPlannedGamesByTeams,
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
@@ -37,6 +38,21 @@ export function GamesPage() {
   const shouldPaginate = games.length > 100;
   const [sortMode, setSortMode] = useState("date");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const [selectedTeamsAfterBuild, setSelectedTeamsAfterBuild] = useState([]);
+  const availableTeamsAfterBuild = useMemo(() => {
+    const unique = new Set();
+    for (const game of games) {
+      const home = String(game?.home || "").trim();
+      const away = String(game?.away || "").trim();
+      if (home) {
+        unique.add(home);
+      }
+      if (away) {
+        unique.add(away);
+      }
+    }
+    return [...unique].sort((a, b) => a.localeCompare(b, "de"));
+  }, [games]);
   const firstGameRoute = useMemo(() => {
     const withExactStartRoute = [...games]
       .filter((game) => Number.isFinite(game?.fromStartRouteDistanceKm))
@@ -89,6 +105,10 @@ export function GamesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
+  }, [games.length]);
+
+  useEffect(() => {
+    setSelectedTeamsAfterBuild([]);
   }, [games.length]);
 
   const visibleGames = useMemo(() => {
@@ -287,6 +307,94 @@ export function GamesPage() {
               Auswahl leeren
             </button>
           </div>
+        </div>
+      </div>
+
+      <div
+        className="fu2"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: `1px solid ${C.border}`,
+          borderRadius: 14,
+          padding: 14,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.45 }}>
+          <div style={{ color: C.offWhite, fontWeight: 700, marginBottom: 2 }}>Mannschaften nach Spielplan auswählen</div>
+          Nach dem Generieren kannst du hier Teams wählen. Mit <strong>Passende Spiele markieren</strong> werden nur
+          deren Spiele für Plan/PDF markiert.
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+          {availableTeamsAfterBuild.slice(0, 80).map((team) => {
+            const selected = selectedTeamsAfterBuild.includes(team);
+            return (
+              <button
+                key={team}
+                type="button"
+                onClick={() =>
+                  setSelectedTeamsAfterBuild((prev) =>
+                    prev.includes(team) ? prev.filter((item) => item !== team) : [...prev, team],
+                  )
+                }
+                aria-pressed={selected}
+                style={{
+                  border: `1px solid ${selected ? C.greenBorder : C.border}`,
+                  borderRadius: 999,
+                  background: selected ? C.greenDim : "rgba(255,255,255,0.03)",
+                  color: selected ? C.green : C.gray,
+                  cursor: "pointer",
+                  padding: "6px 10px",
+                  minHeight: 30,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {team}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => onSelectPlannedGamesByTeams(selectedTeamsAfterBuild)}
+            disabled={selectedTeamsAfterBuild.length === 0}
+            style={{
+              border: `1px solid ${selectedTeamsAfterBuild.length > 0 ? C.greenBorder : C.border}`,
+              borderRadius: 8,
+              background: selectedTeamsAfterBuild.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
+              color: selectedTeamsAfterBuild.length > 0 ? C.green : C.grayDark,
+              cursor: selectedTeamsAfterBuild.length > 0 ? "pointer" : "not-allowed",
+              padding: "6px 10px",
+              minHeight: 34,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            Passende Spiele markieren
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTeamsAfterBuild([])}
+            style={{
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.03)",
+              color: C.gray,
+              cursor: "pointer",
+              padding: "6px 10px",
+              minHeight: 34,
+              fontSize: 12,
+            }}
+          >
+            Team-Auswahl leeren
+          </button>
+          <span style={{ fontSize: 12, color: C.grayDark }}>
+            Gewählt: <strong style={{ color: C.offWhite }}>{selectedTeamsAfterBuild.length}</strong> Teams
+          </span>
         </div>
       </div>
 

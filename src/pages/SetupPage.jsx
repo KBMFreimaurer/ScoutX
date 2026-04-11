@@ -208,8 +208,9 @@ export function SetupPage() {
               <SectionHeader>Fahrtkosten</SectionHeader>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
                 <div>
-                  <label style={lbl}>Scout-Name (für Abrechnung)</label>
+                  <label htmlFor="scout-name-input" style={lbl}>Scout-Name (für Abrechnung)</label>
                   <input
+                    id="scout-name-input"
                     style={inp}
                     type="text"
                     value={scoutName}
@@ -219,8 +220,9 @@ export function SetupPage() {
                   />
                 </div>
                 <div>
-                  <label style={lbl}>€ / km</label>
+                  <label htmlFor="km-pauschale-input" style={lbl}>€ / km</label>
                   <input
+                    id="km-pauschale-input"
                     style={inp}
                     type="number"
                     value={kmPauschale}

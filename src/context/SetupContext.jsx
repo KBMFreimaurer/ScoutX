@@ -431,7 +431,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,
-      onSetScoutName: (val) => setAbrechnungMeta({ scoutName: String(val || "").trim() }),
+      onSetScoutName: (val) => setAbrechnungMeta({ scoutName: String(val || "") }),
       onSetKmPauschale: (val) => {
         const n = Number(val);
         if (n > 0) {
