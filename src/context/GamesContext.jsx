@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
 import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
-import { fetchWeatherForGame } from "../utils/weather";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
 
@@ -37,10 +36,6 @@ function toIsoDate(value) {
   }
 
   return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
-}
-
-export function resolveGameWeatherDate(game) {
-  return toIsoDate(game?.date) ?? toIsoDate(game?.dateObj) ?? null;
 }
 
 function normalizeLookup(value) {
@@ -223,13 +218,6 @@ async function enrichGames(games, startLocation) {
         }
       }
 
-      const weatherDate = resolveGameWeatherDate(game);
-
-      const weather =
-        Number.isFinite(venueLat) && Number.isFinite(venueLon) && weatherDate
-          ? await fetchWeatherForGame({ lat: venueLat, lon: venueLon, date: weatherDate, time: game.time }).catch(() => null)
-          : null;
-
       return {
         ...game,
         venueLat: Number.isFinite(venueLat) ? venueLat : null,
@@ -238,7 +226,6 @@ async function enrichGames(games, startLocation) {
         distanceSource,
         fromStartRouteDistanceKm,
         fromStartRouteMinutes,
-        weather,
       };
     } catch {
       return {
@@ -249,7 +236,6 @@ async function enrichGames(games, startLocation) {
         distanceSource: null,
         fromStartRouteDistanceKm: null,
         fromStartRouteMinutes: null,
-        weather: null,
       };
     }
   });

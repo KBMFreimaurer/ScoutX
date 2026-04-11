@@ -115,7 +115,7 @@ function AppLayout() {
     : loadingGames
       ? "Spiele werden geladen."
       : enrichingGames
-        ? "Entfernungen und Wetter werden aktualisiert."
+        ? "Entfernungen werden aktualisiert."
         : "";
 
   return (

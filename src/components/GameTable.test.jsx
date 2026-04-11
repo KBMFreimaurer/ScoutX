@@ -46,7 +46,7 @@ describe("GameTable", () => {
     expect(within(firstDataRow).getByText("Team B")).toBeInTheDocument();
   });
 
-  it("zeigt Favoriten, Entfernung, Wetter und speichert Notizen", () => {
+  it("zeigt Favoriten, Entfernung und speichert Notizen", () => {
     const onToggleNote = vi.fn();
     const onSetNote = vi.fn();
 
@@ -62,11 +62,6 @@ describe("GameTable", () => {
         venue: "Platz A",
         isFavoriteGame: true,
         distanceKm: 12.4,
-        weather: {
-          type: "rain",
-          temperatureC: 11.2,
-          precipitationProbability: 65,
-        },
         matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
       },
     ];
@@ -83,7 +78,6 @@ describe("GameTable", () => {
 
     expect(screen.getByText("★")).toBeInTheDocument();
     expect(screen.getByText("12 km")).toBeInTheDocument();
-    expect(screen.getByText(/11°C · 65%/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Zum Spiel für Team A vs Team B/i })).toHaveAttribute(
       "href",
       "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",

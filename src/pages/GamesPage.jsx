@@ -222,7 +222,7 @@ export function GamesPage() {
                   "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               }}
             >
-              Entfernungen und Wetter werden gerade aktualisiert.
+              Entfernungen werden gerade aktualisiert.
             </div>
           ) : null}
         </div>

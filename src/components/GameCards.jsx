@@ -2,32 +2,6 @@ import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
 import { resolveGameMatchUrl } from "../utils/gameLinks";
 
-function weatherLabel(weather) {
-  if (!weather) {
-    return "—";
-  }
-
-  const temperature = Number.isFinite(weather.temperatureC) ? `${Math.round(weather.temperatureC)}°C` : "n/a";
-  const precipitation = Number.isFinite(weather.precipitationProbability) ? `${Math.round(weather.precipitationProbability)}%` : "n/a";
-  return `${temperature} · ${precipitation}`;
-}
-
-function weatherIcon(type) {
-  if (type === "rain") {
-    return "🌧";
-  }
-  if (type === "snow") {
-    return "❄";
-  }
-  if (type === "storm") {
-    return "⛈";
-  }
-  if (type === "clear") {
-    return "☀";
-  }
-  return "☁";
-}
-
 export function GameCards({
   games,
   notes = {},
@@ -123,10 +97,6 @@ export function GameCards({
               <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12h18"/><path d="M12 3v18"/></svg>
                 {formatDistanceKm(game.distanceKm)}
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span>{weatherIcon(game.weather?.type)}</span>
-                {weatherLabel(game.weather)}
               </span>
             </div>
 

@@ -602,21 +602,9 @@ export function drawScheduleTable(doc, state, games, reasonMap) {
   }
 }
 
-function weatherText(game) {
-  if (!game?.weather) {
-    return "Wetter: unbekannt";
-  }
-
-  const temperature = Number.isFinite(game.weather.temperatureC) ? `${Math.round(game.weather.temperatureC)}°C` : "n/a";
-  const precipitation = Number.isFinite(game.weather.precipitationProbability)
-    ? `${Math.round(game.weather.precipitationProbability)}%`
-    : "n/a";
-  return `Wetter: ${temperature} · Niederschlag ${precipitation}`;
-}
-
 export function drawGameDetails(doc, state, games) {
   addPage(state, doc, "Spiel-Details");
-  drawSectionTitle(doc, state, "Spiel-Details (Wetter & Notizen)", "Spiel-Details");
+  drawSectionTitle(doc, state, "Spiel-Details (Notizen)", "Spiel-Details");
 
   if (!Array.isArray(games) || games.length === 0) {
     writeText(doc, state, "Keine Spiele verfügbar.", { fontSize: 9.5, color: COLORS.muted });
@@ -637,12 +625,6 @@ export function drawGameDetails(doc, state, games) {
         sectionOnNewPage: "Spiel-Details",
       },
     );
-    writeText(doc, state, weatherText(game), {
-      fontSize: 8.7,
-      color: COLORS.muted,
-      lineHeight: 4.1,
-      sectionOnNewPage: "Spiel-Details",
-    });
     writeText(doc, state, `Notiz: ${toSafeString(game.note) || "—"}`, {
       fontSize: 8.7,
       color: COLORS.muted,

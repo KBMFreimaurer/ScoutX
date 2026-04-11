@@ -45,32 +45,6 @@ function sortByDateTime(left, right) {
   return leftTime.localeCompare(rightTime);
 }
 
-function weatherLabel(weather) {
-  if (!weather) {
-    return "—";
-  }
-
-  const temperature = Number.isFinite(weather.temperatureC) ? `${Math.round(weather.temperatureC)}°C` : "n/a";
-  const precipitation = Number.isFinite(weather.precipitationProbability) ? `${Math.round(weather.precipitationProbability)}%` : "n/a";
-  return `${temperature} · ${precipitation}`;
-}
-
-function weatherIcon(type) {
-  if (type === "rain") {
-    return "🌧";
-  }
-  if (type === "snow") {
-    return "❄";
-  }
-  if (type === "storm") {
-    return "⛈";
-  }
-  if (type === "clear") {
-    return "☀";
-  }
-  return "☁";
-}
-
 function sortGames(games, sortMode) {
   if (sortMode === "distance") {
     return [...games].sort(sortByDistance);
@@ -153,7 +127,7 @@ export function GameTable({
   }
 
   const sortedGames = sortGames(games, sortMode);
-  const noteColSpan = selectionEnabled ? 9 : 8;
+  const noteColSpan = selectionEnabled ? 8 : 7;
 
   return (
     <div
@@ -197,7 +171,6 @@ export function GameTable({
             <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
             <th scope="col" style={{ width: "17%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
             <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Entfernung</th>
-            <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Wetter</th>
             <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Link</th>
             <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
           </tr>
@@ -255,10 +228,6 @@ export function GameTable({
                   <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatKickoff(game.time)}</td>
                   <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.venue}</td>
                   <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatDistanceKm(game.distanceKm)}</td>
-                  <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
-                    <span style={{ marginRight: 4 }}>{weatherIcon(game.weather?.type)}</span>
-                    {weatherLabel(game.weather)}
-                  </td>
                   <td style={{ padding: "11px 8px", fontSize: 12, color: C.gray }}>
                     {gameUrl ? (
                       <a
