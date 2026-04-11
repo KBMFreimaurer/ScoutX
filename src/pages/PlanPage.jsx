@@ -13,6 +13,7 @@ import { formatDistanceKm } from "../utils/geo";
 
 export function PlanPage() {
   const {
+    games,
     plannedGames,
     plan,
     kreis,
@@ -36,7 +37,13 @@ export function PlanPage() {
     onResetSoft,
     onResetHard,
   } = useScoutX();
-  const activeGames = useMemo(() => (Array.isArray(plannedGames) ? plannedGames : []), [plannedGames]);
+  const hasManualSelection = Array.isArray(plannedGames) && plannedGames.length > 0;
+  const activeGames = useMemo(() => {
+    if (hasManualSelection) {
+      return plannedGames;
+    }
+    return Array.isArray(games) ? games : [];
+  }, [hasManualSelection, plannedGames, games]);
   const PAGE_SIZE = 20;
   const shouldPaginate = activeGames.length > 100;
   const totalPages = shouldPaginate ? Math.ceil(activeGames.length / PAGE_SIZE) : 1;
@@ -254,7 +261,8 @@ export function PlanPage() {
               fontWeight: 600,
             }}
           >
-            Ausgewählte {activeGames.length} Spiele · {jugend?.label} · {kreis?.label}
+            {hasManualSelection ? "Ausgewählte" : "Alle"} {activeGames.length} Spiele · {jugend?.label} ·{" "}
+            {kreis?.label}
           </div>
 
           <GameTable games={visibleGames} mode="plan" />
@@ -284,7 +292,7 @@ export function PlanPage() {
             fontSize: 13,
           }}
         >
-          Keine Spiele ausgewählt. Bitte auf der Spiele-Seite Besuche markieren.
+          Keine Spiele verfügbar.
         </div>
       )}
 

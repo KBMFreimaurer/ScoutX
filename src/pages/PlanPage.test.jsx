@@ -86,17 +86,7 @@ describe("PlanPage", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
-        plannedGames: [
-          {
-            id: "game-1",
-            home: "Team A",
-            away: "Team B",
-            priority: 5,
-            dateObj: new Date("2026-04-10T00:00:00"),
-            time: "14:00",
-            matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
-          },
-        ],
+        plannedGames: [],
         games: [
           {
             id: "game-1",
@@ -113,6 +103,7 @@ describe("PlanPage", () => {
 
     render(<PlanPage />);
 
+    expect(screen.getByText(/Alle 1 Spiele/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Zum Spiel auf fussball.de für Team A gegen Team B/i })).toHaveAttribute(
       "href",
       "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",

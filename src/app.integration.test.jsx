@@ -46,63 +46,58 @@ describe("ScoutX Integration", () => {
   it(
     "durchlaeuft Setup -> Games -> Plan mit schnellem PDF-Flow",
     async () => {
-    const fetchMock = vi.fn(async (input, init) => {
-      const url = String(input);
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = String(input);
 
-      if (url.includes("/api/games")) {
-        const payload = JSON.parse(String(init?.body || "{}"));
-        const requestedDate = String(payload.fromDate || "2026-04-01");
+        if (url.includes("/api/games")) {
+          const payload = JSON.parse(String(init?.body || "{}"));
+          const requestedDate = String(payload.fromDate || "2026-04-01");
 
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            games: [
-              {
-                date: requestedDate,
-                time: "14:00",
-                home: "Duisburger FV 08",
-                away: "Tuspo Saarn",
-                venue: "Sportanlage Mitte",
-                km: 8,
-                kreisId: String(payload.kreisId || "duisburg"),
-                jugendId: String(payload.jugendId || "d-jugend"),
-                priority: 4,
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              games: [
+                {
+                  date: requestedDate,
+                  time: "14:00",
+                  home: "Duisburger FV 08",
+                  away: "Tuspo Saarn",
+                  venue: "Sportanlage Mitte",
+                  km: 8,
+                  kreisId: String(payload.kreisId || "duisburg"),
+                  jugendId: String(payload.jugendId || "d-jugend"),
+                  priority: 4,
+                },
+              ],
+              teamFilter: {
+                requested: false,
+                requestedCount: 0,
+                matchedCount: 0,
+                matchedTeamCount: 0,
+                matchedTeams: [],
+                missingTeams: [],
+                binding: false,
+                fallbackToUnfiltered: false,
               },
-            ],
-            teamFilter: {
-              requested: false,
-              requestedCount: 0,
-              matchedCount: 0,
-              matchedTeamCount: 0,
-              matchedTeams: [],
-              missingTeams: [],
-              binding: false,
-              fallbackToUnfiltered: false,
-            },
-          }),
-        };
-      }
+            }),
+          };
+        }
 
-      throw new Error(`Unexpected fetch URL: ${url}`);
-    });
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      });
 
-    await renderSetupAndSubmit(fetchMock);
+      await renderSetupAndSubmit(fetchMock);
 
-    await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 5000 });
-    const visitCheckbox = screen.queryByLabelText(/Spiel besuchen:/i);
-    if (visitCheckbox) {
-      fireEvent.click(visitCheckbox);
-    } else {
-      fireEvent.click(screen.getByRole("button", { name: /Besuch markieren/i }));
-    }
-    fireEvent.click(screen.getByRole("button", { name: /Auswahl übernehmen/i }));
+      await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 5000 });
+      fireEvent.click(screen.getByRole("button", { name: /Auswahl übernehmen/i }));
 
-    await screen.findByText(/Manueller Scouting-Plan/i);
+      await screen.findByText(/Manueller Scouting-Plan/i);
+      await screen.findByText(/alle verfügbaren Spiele übernommen/i);
 
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
-    expect(openScoutPdf).not.toHaveBeenCalled();
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
+      expect(openScoutPdf).not.toHaveBeenCalled();
     },
     15000,
   );
