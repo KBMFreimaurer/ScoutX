@@ -89,6 +89,9 @@ export function GameTable({
   onSetNote,
   expandedNoteId = null,
   onToggleNote,
+  selectionEnabled = false,
+  selectedGameIds = {},
+  onToggleSelectedGame,
 }) {
   if (mode === "plan") {
     return (
@@ -150,6 +153,7 @@ export function GameTable({
   }
 
   const sortedGames = sortGames(games, sortMode);
+  const noteColSpan = selectionEnabled ? 9 : 8;
 
   return (
     <div
@@ -171,6 +175,23 @@ export function GameTable({
       >
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
+            {selectionEnabled ? (
+              <th
+                scope="col"
+                style={{
+                  width: "7%",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  fontSize: 10,
+                  color: C.grayDark,
+                  letterSpacing: "0.8px",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                Besuch
+              </th>
+            ) : null}
             <th scope="col" style={{ width: "27%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
             <th scope="col" style={{ width: "13%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
             <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
@@ -195,6 +216,17 @@ export function GameTable({
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                   }}
                 >
+                  {selectionEnabled ? (
+                    <td style={{ padding: "11px 12px", fontSize: 12, color: C.gray }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Spiel besuchen: ${game.home} gegen ${game.away}`}
+                        checked={Boolean(selectedGameIds?.[game.id])}
+                        onChange={() => onToggleSelectedGame?.(game.id)}
+                        style={{ accentColor: C.green, cursor: "pointer" }}
+                      />
+                    </td>
+                  ) : null}
                   <td style={{ padding: "11px 16px", fontSize: 13 }}>
                     {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
                     <strong style={{ color: C.white }}>{game.home}</strong>
@@ -245,7 +277,7 @@ export function GameTable({
                 </tr>
                 {noteOpen ? (
                   <tr key={`${game.id}-note`} style={{ borderBottom: index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                    <td colSpan={8} style={{ padding: "8px 12px" }}>
+                    <td colSpan={noteColSpan} style={{ padding: "8px 12px" }}>
                       <textarea
                         aria-label={`Notiz für ${game.home} gegen ${game.away}`}
                         value={notes[game.id] || ""}

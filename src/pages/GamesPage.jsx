@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
-import { TopFive } from "../components/TopFive";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
@@ -16,10 +15,14 @@ export function GamesPage() {
     startLocation,
     teamValidation,
     enrichingGames,
-    prioritized,
     gameNotes,
+    selectedGameIds,
+    selectedGameCount,
     pdfExporting,
     onSetGameNote,
+    onTogglePlannedGame,
+    onSelectAllPlannedGames,
+    onClearPlannedGames,
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
@@ -32,7 +35,7 @@ export function GamesPage() {
       : games.filter((game) => game.selectedTeamMatch).length;
   const showTeamHint = requestedTeamCount > 0;
   const shouldPaginate = games.length > 100;
-  const [sortMode, setSortMode] = useState("priority");
+  const [sortMode, setSortMode] = useState("date");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
   const firstGameRoute = useMemo(() => {
     const withExactStartRoute = [...games]
@@ -72,7 +75,14 @@ export function GamesPage() {
       });
     }
 
-    return [...games].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+    return [...games].sort((a, b) => {
+      const ad = a?.dateObj instanceof Date ? a.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+      const bd = b?.dateObj instanceof Date ? b.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+      if (ad !== bd) {
+        return ad - bd;
+      }
+      return String(a.time || "99:99").localeCompare(String(b.time || "99:99"));
+    });
   }, [games, sortMode]);
   const totalPages = shouldPaginate ? Math.ceil(sortedGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
@@ -218,7 +228,60 @@ export function GamesPage() {
         </div>
       </div>
 
-      <TopFive games={prioritized} />
+      <div
+        className="fu2"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: `1px solid ${C.border}`,
+          borderRadius: 14,
+          padding: 14,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: C.gray }}>
+            Manuelle Auswahl für Besuch/Abrechnung:{" "}
+            <span style={{ color: C.offWhite, fontWeight: 700 }}>
+              {selectedGameCount} von {games.length}
+            </span>{" "}
+            Spielen markiert
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={onSelectAllPlannedGames}
+              style={{
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.03)",
+                color: C.gray,
+                cursor: "pointer",
+                padding: "6px 10px",
+                minHeight: 34,
+                fontSize: 12,
+              }}
+            >
+              Alle markieren
+            </button>
+            <button
+              type="button"
+              onClick={onClearPlannedGames}
+              style={{
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.03)",
+                color: C.gray,
+                cursor: "pointer",
+                padding: "6px 10px",
+                minHeight: 34,
+                fontSize: 12,
+              }}
+            >
+              Auswahl leeren
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.gray }}>
@@ -236,7 +299,6 @@ export function GamesPage() {
               minHeight: 34,
             }}
           >
-            <option value="priority">Priorität</option>
             <option value="distance">Entfernung</option>
             <option value="date">Datum/Uhrzeit</option>
           </select>
@@ -250,6 +312,9 @@ export function GamesPage() {
         expandedNoteId={expandedNoteId}
         onToggleNote={(gameId) => setExpandedNoteId((current) => (current === gameId ? null : gameId))}
         onSetNote={onSetGameNote}
+        selectionEnabled
+        selectedGameIds={selectedGameIds}
+        onToggleSelectedGame={onTogglePlannedGame}
       />
       <GameCards
         games={visibleGames}
@@ -257,6 +322,9 @@ export function GamesPage() {
         expandedNoteId={expandedNoteId}
         onToggleNote={(gameId) => setExpandedNoteId((current) => (current === gameId ? null : gameId))}
         onSetNote={onSetGameNote}
+        selectionEnabled
+        selectedGameIds={selectedGameIds}
+        onToggleSelectedGame={onTogglePlannedGame}
       />
 
       {shouldPaginate ? (
@@ -292,7 +360,7 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
+      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting || selectedGameCount === 0} style={{ width: "100%" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
           <svg
             width="16"
@@ -305,7 +373,7 @@ export function GamesPage() {
           >
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
           </svg>
-          {pdfExporting ? "Scout-Plan wird erstellt..." : "Scout-Plan erstellen"}
+          {pdfExporting ? "Plan wird erstellt..." : "Auswahl übernehmen"}
         </span>
       </PrimaryButton>
     </div>

@@ -21,9 +21,16 @@ describe("ScoutX Integration", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /Kreis Duisburg auswählen/i }));
-    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Spielplan generieren/i }));
+    await screen.findByRole("heading", { name: /Scouting-Plan konfigurieren/i }, { timeout: 5000 });
+
+    const kreisButtons = await screen.findAllByRole("button", { name: /Kreis .* auswählen/i }, { timeout: 5000 });
+    fireEvent.click(kreisButtons[0]);
+
+    const jugendButtons = await screen.findAllByRole("button", { name: /Jugend auswählen/i }, { timeout: 5000 });
+    fireEvent.click(jugendButtons[0]);
+
+    const generateButton = await screen.findByRole("button", { name: /Spielplan generieren/i }, { timeout: 5000 });
+    fireEvent.click(generateButton);
   }
 
   beforeEach(() => {
@@ -36,7 +43,9 @@ describe("ScoutX Integration", () => {
     vi.restoreAllMocks();
   });
 
-  it("durchlaeuft Setup -> Games -> Plan mit schnellem PDF-Flow", async () => {
+  it(
+    "durchlaeuft Setup -> Games -> Plan mit schnellem PDF-Flow",
+    async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
 
@@ -56,8 +65,8 @@ describe("ScoutX Integration", () => {
                 away: "Tuspo Saarn",
                 venue: "Sportanlage Mitte",
                 km: 8,
-                kreisId: "duisburg",
-                jugendId: "d-jugend",
+                kreisId: String(payload.kreisId || "duisburg"),
+                jugendId: String(payload.jugendId || "d-jugend"),
                 priority: 4,
               },
             ],
@@ -80,16 +89,23 @@ describe("ScoutX Integration", () => {
 
     await renderSetupAndSubmit(fetchMock);
 
-    await screen.findByText(/Top-Empfehlungen/i);
-    await screen.findByRole("button", { name: /Scout-Plan erstellen/i });
-    fireEvent.click(screen.getByRole("button", { name: /Scout-Plan erstellen/i }));
+    await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 5000 });
+    const visitCheckbox = screen.queryByLabelText(/Spiel besuchen:/i);
+    if (visitCheckbox) {
+      fireEvent.click(visitCheckbox);
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: /Besuch markieren/i }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Auswahl übernehmen/i }));
 
-    await screen.findByText(/Validierung der Top-Spiele/i);
+    await screen.findByText(/Manueller Scouting-Plan/i);
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
     expect(openScoutPdf).not.toHaveBeenCalled();
-  });
+    },
+    15000,
+  );
 
   it("zeigt Adapter-Timeout im Setup als Fehlermeldung", async () => {
     const abortError = new Error("aborted");

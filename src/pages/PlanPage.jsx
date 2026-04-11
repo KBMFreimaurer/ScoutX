@@ -13,7 +13,7 @@ import { formatDistanceKm } from "../utils/geo";
 
 export function PlanPage() {
   const {
-    games,
+    plannedGames,
     plan,
     kreis,
     kreisId,
@@ -36,9 +36,10 @@ export function PlanPage() {
     onResetSoft,
     onResetHard,
   } = useScoutX();
+  const activeGames = useMemo(() => (Array.isArray(plannedGames) ? plannedGames : []), [plannedGames]);
   const PAGE_SIZE = 20;
-  const shouldPaginate = games.length > 100;
-  const totalPages = shouldPaginate ? Math.ceil(games.length / PAGE_SIZE) : 1;
+  const shouldPaginate = activeGames.length > 100;
+  const totalPages = shouldPaginate ? Math.ceil(activeGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
   const [kmOverrides, setKmOverrides] = useState({});
   const handleKmChange = (gameId, newKm) =>
@@ -54,15 +55,15 @@ export function PlanPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [games.length]);
+  }, [activeGames.length]);
 
   const visibleGames = useMemo(() => {
     if (!shouldPaginate) {
-      return games;
+      return activeGames;
     }
     const start = (currentPage - 1) * PAGE_SIZE;
-    return games.slice(start, start + PAGE_SIZE);
-  }, [games, currentPage, shouldPaginate]);
+    return activeGames.slice(start, start + PAGE_SIZE);
+  }, [activeGames, currentPage, shouldPaginate]);
 
   return (
     <div className="fu">
@@ -114,7 +115,7 @@ export function PlanPage() {
         </div>
 
         <PDFExport
-          games={games}
+          games={activeGames}
           plan={plan}
           cfg={{
             ...cfg,
@@ -138,7 +139,7 @@ export function PlanPage() {
           variant="primary"
           label="PDF herunterladen"
           confirmBeforeDownload
-          disabled={!String(plan || "").trim() || (Boolean(startLocation) && routeCalculating)}
+          disabled={!String(plan || "").trim() || activeGames.length === 0 || (Boolean(startLocation) && routeCalculating)}
           onExportSuccess={() => {
             setErr("");
           }}
@@ -148,8 +149,9 @@ export function PlanPage() {
         />
         <button
           type="button"
-          onClick={() => downloadCalendarIcs(games, cfg)}
+          onClick={() => downloadCalendarIcs(activeGames, cfg)}
           aria-label="In Kalender exportieren"
+          disabled={activeGames.length === 0}
           style={{
             fontSize: 12,
             padding: "9px 14px",
@@ -160,11 +162,12 @@ export function PlanPage() {
             fontFamily:
               "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             fontWeight: 600,
-            cursor: "pointer",
             minHeight: 44,
             display: "flex",
             alignItems: "center",
             gap: 6,
+            opacity: activeGames.length === 0 ? 0.5 : 1,
+            cursor: activeGames.length === 0 ? "not-allowed" : "pointer",
           }}
         >
           <svg
@@ -191,12 +194,17 @@ export function PlanPage() {
         </div>
       ) : null}
 
-      <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} games={games} />
+      <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} games={activeGames} />
 
-      {games.length > 0 ? (
+      {activeGames.length > 0 ? (
         <div style={{ marginTop: 28, marginBottom: 28 }} className="fu2">
           <SectionHeader>Fahrtkosten-Abrechnung</SectionHeader>
-          <FahrtkostenTabelle games={games} kmPauschale={kmPauschale} isMobile={isMobile} onKmChange={handleKmChange} />
+          <FahrtkostenTabelle
+            games={activeGames}
+            kmPauschale={kmPauschale}
+            isMobile={isMobile}
+            onKmChange={handleKmChange}
+          />
         </div>
       ) : null}
 
@@ -228,41 +236,57 @@ export function PlanPage() {
         </div>
       ) : null}
 
-      <div className="fu3" style={{ marginBottom: 16 }}>
+      {activeGames.length > 0 ? (
+        <div className="fu3" style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              padding: "10px 16px",
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: "14px 14px 0 0",
+              border: `1px solid ${C.border}`,
+              borderBottom: "none",
+              fontSize: 11,
+              color: C.gray,
+              letterSpacing: "0.5px",
+              textTransform: "uppercase",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              fontWeight: 600,
+            }}
+          >
+            Ausgewählte {activeGames.length} Spiele · {jugend?.label} · {kreis?.label}
+          </div>
+
+          <GameTable games={visibleGames} mode="plan" />
+
+          <div
+            className="game-cards"
+            style={{
+              background: C.surfaceSolid,
+              border: `1px solid ${C.border}`,
+              borderTop: "none",
+              borderRadius: "0 0 14px 14px",
+              padding: "10px",
+            }}
+          >
+            <GameCards games={visibleGames} />
+          </div>
+        </div>
+      ) : (
         <div
+          className="fu2"
           style={{
-            padding: "10px 16px",
-            background: "rgba(255,255,255,0.03)",
-            borderRadius: "14px 14px 0 0",
             border: `1px solid ${C.border}`,
-            borderBottom: "none",
-            fontSize: 11,
+            borderRadius: 14,
+            padding: 14,
+            marginBottom: 16,
             color: C.gray,
-            letterSpacing: "0.5px",
-            textTransform: "uppercase",
-            fontFamily:
-              "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-            fontWeight: 600,
+            fontSize: 13,
           }}
         >
-          Alle {games.length} Spiele · {jugend?.label} · {kreis?.label}
+          Keine Spiele ausgewählt. Bitte auf der Spiele-Seite Besuche markieren.
         </div>
-
-        <GameTable games={visibleGames} mode="plan" />
-
-        <div
-          className="game-cards"
-          style={{
-            background: C.surfaceSolid,
-            border: `1px solid ${C.border}`,
-            borderTop: "none",
-            borderRadius: "0 0 14px 14px",
-            padding: "10px",
-          }}
-        >
-          <GameCards games={visibleGames} />
-        </div>
-      </div>
+      )}
 
       {shouldPaginate ? (
         <div
