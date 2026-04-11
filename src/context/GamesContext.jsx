@@ -91,6 +91,22 @@ function withNotes(games, notesById) {
   }));
 }
 
+function ensureGameIds(games) {
+  return (Array.isArray(games) ? games : []).map((game, index) => {
+    const existing = String(game?.id || "").trim();
+    if (existing) {
+      return game;
+    }
+    const home = normalizeLookup(game?.home || `home-${index}`).replace(/\s+/g, "-");
+    const away = normalizeLookup(game?.away || `away-${index}`).replace(/\s+/g, "-");
+    const datePart = toIsoDate(game?.date) || toIsoDate(game?.dateObj) || "na";
+    return {
+      ...game,
+      id: `game-${index}-${home}-${away}-${datePart}`,
+    };
+  });
+}
+
 function estimateMinutesFromDistance(distanceKm) {
   if (!Number.isFinite(distanceKm)) {
     return null;
@@ -388,33 +404,6 @@ export function GamesProvider({ children }) {
     setSelectedGameIds({});
   }, []);
 
-  const onSelectPlannedGamesByTeams = useCallback(
-    (teamNames) => {
-      const wantedTeams = new Set(
-        (Array.isArray(teamNames) ? teamNames : [])
-          .map((value) => normalizeLookup(value))
-          .filter(Boolean),
-      );
-
-      if (wantedTeams.size === 0) {
-        setSelectedGameIds({});
-        return;
-      }
-
-      setSelectedGameIds(
-        games.reduce((acc, game) => {
-          const home = normalizeLookup(game?.home);
-          const away = normalizeLookup(game?.away);
-          if (wantedTeams.has(home) || wantedTeams.has(away)) {
-            acc[game.id] = true;
-          }
-          return acc;
-        }, {}),
-      );
-    },
-    [games],
-  );
-
   const onBuildAndGo = useCallback(async () => {
     if (!kreisId) {
       setErr("Bitte einen Kreis wählen.");
@@ -452,7 +441,7 @@ export function GamesProvider({ children }) {
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
       const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
-      const initialGames = withNotes(boostedGames, noteSnapshot);
+      const initialGames = ensureGameIds(withNotes(boostedGames, noteSnapshot));
       setGames(initialGames);
       setSelectedGameIds({});
       setDataSourceUsed(source);
@@ -470,7 +459,7 @@ export function GamesProvider({ children }) {
           if (buildRunRef.current !== runId) {
             return;
           }
-          setGames(withNotes(withFavoriteBoost(enrichedGames, favoritesRef.current), gameNotesRef.current));
+          setGames(ensureGameIds(withNotes(withFavoriteBoost(enrichedGames, favoritesRef.current), gameNotesRef.current)));
         })
         .catch(() => {
           // Keep initial games if enrichment fails.
@@ -522,7 +511,6 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
-      onSelectPlannedGamesByTeams,
     }),
     [
       games,
@@ -541,7 +529,6 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
-      onSelectPlannedGamesByTeams,
     ],
   );
 
