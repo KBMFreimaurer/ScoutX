@@ -28,7 +28,16 @@ function weatherIcon(type) {
   return "☁";
 }
 
-export function GameCards({ games, notes = {}, onSetNote, expandedNoteId = null, onToggleNote }) {
+export function GameCards({
+  games,
+  notes = {},
+  onSetNote,
+  expandedNoteId = null,
+  onToggleNote,
+  selectionEnabled = false,
+  selectedGameIds = {},
+  onToggleSelectedGame,
+}) {
   const formatKickoff = (time) =>
     /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? `${time} Uhr` : "Anstoß offen";
 
@@ -98,6 +107,26 @@ export function GameCards({ games, notes = {}, onSetNote, expandedNoteId = null,
 
             <div style={{ marginTop: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {selectionEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSelectedGame?.(game.id)}
+                    aria-pressed={selectedGameIds?.[game.id]}
+                    style={{
+                      border: `1px solid ${selectedGameIds?.[game.id] ? C.greenBorder : C.border}`,
+                      borderRadius: 8,
+                      background: selectedGameIds?.[game.id] ? C.greenDim : "rgba(255,255,255,0.03)",
+                      color: selectedGameIds?.[game.id] ? C.green : C.gray,
+                      cursor: "pointer",
+                      padding: "6px 10px",
+                      minHeight: 34,
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {selectedGameIds?.[game.id] ? "Besuch markiert" : "Besuch markieren"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onToggleNote?.(game.id)}

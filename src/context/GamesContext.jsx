@@ -285,6 +285,7 @@ export function GamesProvider({ children }) {
       return {};
     }
   });
+  const [selectedGameIds, setSelectedGameIds] = useState({});
   const buildRunRef = useRef(0);
   const favoritesRef = useRef(favorites);
   const gameNotesRef = useRef(gameNotes);
@@ -313,9 +314,15 @@ export function GamesProvider({ children }) {
     () => [...games].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0)).slice(0, 5),
     [games],
   );
+  const plannedGames = useMemo(
+    () => games.filter((game) => Boolean(selectedGameIds?.[game.id])),
+    [games, selectedGameIds],
+  );
+  const selectedGameCount = plannedGames.length;
 
   const resetGames = useCallback(() => {
     setGames([]);
+    setSelectedGameIds({});
     setEnrichingGames(false);
     setDataSourceUsed("mock");
   }, []);
@@ -348,6 +355,37 @@ export function GamesProvider({ children }) {
         };
       }),
     );
+  }, []);
+
+  const onTogglePlannedGame = useCallback((gameId) => {
+    const id = String(gameId || "").trim();
+    if (!id) {
+      return;
+    }
+    setSelectedGameIds((prev) => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        next[id] = true;
+      }
+      return next;
+    });
+  }, []);
+
+  const onSelectAllPlannedGames = useCallback(() => {
+    setSelectedGameIds(() =>
+      games.reduce((acc, game) => {
+        if (game?.id) {
+          acc[game.id] = true;
+        }
+        return acc;
+      }, {}),
+    );
+  }, [games]);
+
+  const onClearPlannedGames = useCallback(() => {
+    setSelectedGameIds({});
   }, []);
 
   const onBuildAndGo = useCallback(async () => {
@@ -389,6 +427,7 @@ export function GamesProvider({ children }) {
       const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
       const initialGames = withNotes(boostedGames, noteSnapshot);
       setGames(initialGames);
+      setSelectedGameIds({});
       setDataSourceUsed(source);
       setTeamValidation(meta?.teamFilter || null);
       navigate("/games");
@@ -439,7 +478,10 @@ export function GamesProvider({ children }) {
   const value = useMemo(
     () => ({
       games,
+      plannedGames,
       gameNotes,
+      selectedGameIds,
+      selectedGameCount,
       loadingGames,
       enrichingGames,
       dataSourceUsed,
@@ -450,8 +492,28 @@ export function GamesProvider({ children }) {
       onBackSetup,
       onBuildAndGo,
       onSetGameNote,
+      onTogglePlannedGame,
+      onSelectAllPlannedGames,
+      onClearPlannedGames,
     }),
-    [games, gameNotes, loadingGames, enrichingGames, dataSourceUsed, prioritized, resetGames, onBackSetup, onBuildAndGo, onSetGameNote],
+    [
+      games,
+      plannedGames,
+      gameNotes,
+      selectedGameIds,
+      selectedGameCount,
+      loadingGames,
+      enrichingGames,
+      dataSourceUsed,
+      prioritized,
+      resetGames,
+      onBackSetup,
+      onBuildAndGo,
+      onSetGameNote,
+      onTogglePlannedGame,
+      onSelectAllPlannedGames,
+      onClearPlannedGames,
+    ],
   );
 
   return <GamesContext.Provider value={value}>{children}</GamesContext.Provider>;

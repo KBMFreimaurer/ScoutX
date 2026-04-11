@@ -38,7 +38,7 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
         <span className="section-number">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8v4l3 3"/></svg>
         </span>
-        Scout-Analyse · {jugendLabel} · {kreisLabel}
+        Besuchsplan · {jugendLabel} · {kreisLabel}
       </div>
 
       <div

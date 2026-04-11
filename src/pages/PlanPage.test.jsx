@@ -12,6 +12,7 @@ const mockedUseScoutX = vi.mocked(useScoutX);
 function createBaseContext(overrides = {}) {
   return {
     games: [],
+    plannedGames: [],
     plan: "",
     kreis: { label: "Duisburg" },
     jugend: { label: "D-Jugend" },
@@ -85,6 +86,17 @@ describe("PlanPage", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
+        plannedGames: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            time: "14:00",
+            matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
+          },
+        ],
         games: [
           {
             id: "game-1",
