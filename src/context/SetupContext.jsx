@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
+import { STORAGE_KEYS } from "../config/storage";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
 import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
@@ -39,7 +40,11 @@ function humanizeGeolocationError(error) {
 }
 
 function isBambiniJugend(jugend) {
-  return String(jugend?.id || "").trim().toLowerCase() === "bambini";
+  return (
+    String(jugend?.id || "")
+      .trim()
+      .toLowerCase() === "bambini"
+  );
 }
 
 function buildJugendSubLevelOptions(jugend) {
@@ -47,7 +52,9 @@ function buildJugendSubLevelOptions(jugend) {
     return [];
   }
 
-  const prefix = String(jugend.kurz || "").trim().toUpperCase();
+  const prefix = String(jugend.kurz || "")
+    .trim()
+    .toUpperCase();
   if (!prefix || prefix.length > 2) {
     return [];
   }
@@ -59,7 +66,10 @@ function buildJugendSubLevelHints(values) {
   const hints = [];
 
   for (const value of Array.isArray(values) ? values : []) {
-    const normalized = String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const normalized = String(value || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
     if (!normalized) {
       continue;
     }
@@ -120,6 +130,33 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [favoriteTeams, setFavoriteTeams] = useState(() => normalizeTeamParameters(setupDefaults.favorites));
   const [favoriteDraft, setFavoriteDraft] = useState("");
   const [err, setErr] = useState("");
+  const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEYS.abrechnungMeta);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          scoutName: String(parsed?.scoutName || "").trim(),
+          kmPauschale: Number(parsed?.kmPauschale) > 0 ? Number(parsed.kmPauschale) : 0.3,
+        };
+      }
+    } catch {
+      // localStorage kann im Browser-Kontext blockiert sein.
+    }
+    return { scoutName: "", kmPauschale: 0.3 };
+  });
+
+  const setAbrechnungMeta = useCallback((partial) => {
+    setAbrechnungMetaRaw((prev) => {
+      const next = { ...prev, ...partial };
+      try {
+        window.localStorage.setItem(STORAGE_KEYS.abrechnungMeta, JSON.stringify(next));
+      } catch {
+        // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
+      }
+      return next;
+    });
+  }, []);
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
@@ -131,7 +168,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   );
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
   const canBuild = Boolean(kreisId && jugendId);
-  const hasLocation = Boolean(startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon));
+  const hasLocation = Boolean(
+    startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon),
+  );
 
   const clearErr = useCallback(() => setErr(""), []);
 
@@ -152,7 +191,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
 
   const onToggleJugendSubLevel = useCallback(
     (value) => {
-      const subLevel = String(value || "").trim().toUpperCase();
+      const subLevel = String(value || "")
+        .trim()
+        .toUpperCase();
       if (!subLevel) {
         return;
       }
@@ -332,6 +373,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setResolvingLocation(false);
     setFavoriteTeams([]);
     setFavoriteDraft("");
+    setAbrechnungMetaRaw({ scoutName: "", kmPauschale: 0.3 });
+    try {
+      window.localStorage.removeItem(STORAGE_KEYS.abrechnungMeta);
+    } catch {
+      // Falls localStorage blockiert ist, bleibt nur der In-Memory-Reset aktiv.
+    }
     setErr("");
   }, [adapterTokenDefault, setupDefaults.todayIso]);
 
@@ -358,6 +405,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       locationError,
       resolvingLocation,
       hasLocation,
+      scoutName: abrechnungMeta.scoutName,
+      kmPauschale: abrechnungMeta.kmPauschale,
       favorites,
       favoriteDraft,
       canBuild,
@@ -382,6 +431,13 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,
+      onSetScoutName: (val) => setAbrechnungMeta({ scoutName: String(val || "").trim() }),
+      onSetKmPauschale: (val) => {
+        const n = Number(val);
+        if (n > 0) {
+          setAbrechnungMeta({ kmPauschale: n });
+        }
+      },
       onSetFavoriteDraft: setFavoriteDraft,
       onAddFavoriteTeam,
       onRemoveFavoriteTeam,
@@ -410,6 +466,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       locationError,
       resolvingLocation,
       hasLocation,
+      abrechnungMeta,
       favorites,
       favoriteDraft,
       canBuild,
@@ -427,6 +484,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,
+      setAbrechnungMeta,
       onAddFavoriteTeam,
       onRemoveFavoriteTeam,
       onClearFavoriteTeams,

@@ -4,6 +4,8 @@ import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { PDFExport } from "../components/PDFExport";
 import { PlanView } from "../components/PlanView";
+import { FahrtkostenTabelle } from "../components/FahrtkostenTabelle";
+import { SectionHeader } from "../components/SectionHeader";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
@@ -27,6 +29,8 @@ export function PlanPage() {
     routeOverview,
     routeCalculating,
     startLocation,
+    scoutName,
+    kmPauschale,
     setErr,
     onBackGames,
     onResetSoft,
@@ -36,6 +40,17 @@ export function PlanPage() {
   const shouldPaginate = games.length > 100;
   const totalPages = shouldPaginate ? Math.ceil(games.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
+  const [kmOverrides, setKmOverrides] = useState({});
+  const handleKmChange = (gameId, newKm) =>
+    setKmOverrides((prev) => {
+      const next = { ...prev };
+      if (newKm === null) {
+        delete next[gameId];
+      } else {
+        next[gameId] = newKm;
+      }
+      return next;
+    });
 
   useEffect(() => {
     setCurrentPage(1);
@@ -53,14 +68,26 @@ export function PlanPage() {
     <div className="fu">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <GhostButton onClick={onBackGames}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
           Spiele
         </GhostButton>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 800,
               fontSize: isMobile ? 18 : 22,
               color: C.white,
@@ -73,7 +100,15 @@ export function PlanPage() {
             Scout-Plan · {jugend?.label}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.gray,
+              marginTop: 2,
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            }}
+          >
             {kreis?.label}
           </div>
         </div>
@@ -86,6 +121,9 @@ export function PlanPage() {
             routeOverview,
             startLocation,
             startLocationLabel: startLocation?.label || cfg?.startLocationLabel || "",
+            scoutName,
+            kmPauschale,
+            kmOverrides,
           }}
           syncContext={{
             source: dataSourceUsed,
@@ -119,7 +157,8 @@ export function PlanPage() {
             border: `1px solid ${C.border}`,
             background: "rgba(255,255,255,0.04)",
             color: C.gray,
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            fontFamily:
+              "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             fontWeight: 600,
             cursor: "pointer",
             minHeight: 44,
@@ -128,7 +167,20 @@ export function PlanPage() {
             gap: 6,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
           In Kalender exportieren
         </button>
       </div>
@@ -140,6 +192,13 @@ export function PlanPage() {
       ) : null}
 
       <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} games={games} />
+
+      {games.length > 0 ? (
+        <div style={{ marginTop: 28, marginBottom: 28 }} className="fu2">
+          <SectionHeader>Fahrtkosten-Abrechnung</SectionHeader>
+          <FahrtkostenTabelle games={games} kmPauschale={kmPauschale} isMobile={isMobile} onKmChange={handleKmChange} />
+        </div>
+      ) : null}
 
       {routeOverview && startLocation ? (
         <div
@@ -181,8 +240,9 @@ export function PlanPage() {
             color: C.gray,
             letterSpacing: "0.5px",
             textTransform: "uppercase",
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-          fontWeight: 600,
+            fontFamily:
+              "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            fontWeight: 600,
           }}
         >
           Alle {games.length} Spiele · {jugend?.label} · {kreis?.label}
@@ -205,7 +265,16 @@ export function PlanPage() {
       </div>
 
       {shouldPaginate ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 12,
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ fontSize: 12, color: C.gray }}>
             Seite {currentPage} von {totalPages} · {visibleGames.length} Spiele sichtbar
           </div>
@@ -230,11 +299,33 @@ export function PlanPage() {
 
       <div className="reset-row">
         <GhostButton onClick={onResetSoft} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
           Neuer Plan
         </GhostButton>
         <GhostButton onClick={onResetHard} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           Komplett neu
         </GhostButton>
       </div>

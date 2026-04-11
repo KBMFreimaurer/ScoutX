@@ -2,11 +2,7 @@ import { CONTENT_TOP, sortGamesByDateTime } from "./layout";
 import { fetchGamesWithProviders } from "../dataProvider";
 import { buildFileName } from "./styles";
 import { calculateDirectStartRoutes, calculateRouteWithDriving } from "../../utils/geo";
-import {
-  drawGamesOverviewPage,
-  drawHeaderFooter,
-  drawRouteCalculationPage,
-} from "./sections";
+import { drawGamesOverviewPage, drawFahrtkostenPage, drawHeaderFooter, drawRouteCalculationPage } from "./sections";
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
 const PREVIEW_URL_REVOKE_DELAY_MS = 10 * 60 * 1000;
@@ -205,7 +201,10 @@ export function applyAuthoritativeGameCorrections(games, authoritativeGames) {
     return changed ? patched : game;
   });
 
-  const correctedCount = correctedGames.reduce((count, game, index) => (game !== safeGames[index] ? count + 1 : count), 0);
+  const correctedCount = correctedGames.reduce(
+    (count, game, index) => (game !== safeGames[index] ? count + 1 : count),
+    0,
+  );
   return {
     games: correctedGames,
     correctedCount,
@@ -247,11 +246,7 @@ async function prepareGamesForPdf(games, syncContext) {
     return { games: Array.isArray(games) ? games : [], correctedCount: 0 };
   }
 
-  const authoritativeGames = await withTimeout(
-    fetchAuthoritativeGames(syncContext),
-    AUTHORITATIVE_SYNC_TIMEOUT_MS,
-    [],
-  );
+  const authoritativeGames = await withTimeout(fetchAuthoritativeGames(syncContext), AUTHORITATIVE_SYNC_TIMEOUT_MS, []);
   return applyAuthoritativeGameCorrections(games, authoritativeGames);
 }
 
@@ -285,6 +280,7 @@ export function buildPdf(JsPdfCtor, games, cfg) {
     normalizedGames,
     cfgWithBuild?.routeDirectOptions,
   );
+  drawFahrtkostenPage(doc, state, normalizedGames, cfgWithBuild);
   drawHeaderFooter(doc, state, cfgWithBuild, createdAt);
 
   return doc;
@@ -347,7 +343,11 @@ export async function enrichPdfRouteData(cfg, games) {
   const [refreshedDirectRows, refreshedOverview] = await Promise.all([
     hasDirectRoutes
       ? Promise.resolve(nextCfg?.routeDirectOptions || [])
-      : withTimeout(calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount), ROUTE_REFRESH_TIMEOUT_MS, []),
+      : withTimeout(
+          calculateDirectStartRoutes(startLocation, routeGames, directExpectedCount),
+          ROUTE_REFRESH_TIMEOUT_MS,
+          [],
+        ),
     hasOverview
       ? Promise.resolve(nextCfg?.routeOverview || null)
       : withTimeout(calculateRouteWithDriving(startLocation, routeGames), ROUTE_REFRESH_TIMEOUT_MS, null),

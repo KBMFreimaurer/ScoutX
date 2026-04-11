@@ -6,6 +6,7 @@ import { DateFocusPanel } from "../components/DateFocusPanel";
 import { KreisSelector } from "../components/KreisSelector";
 import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
+import { SectionHeader } from "../components/SectionHeader";
 import { C, card, inp, lbl, secH } from "../styles/theme";
 
 export function SetupPage() {
@@ -30,6 +31,8 @@ export function SetupPage() {
     locationError,
     resolvingLocation,
     hasLocation,
+    scoutName,
+    kmPauschale,
     onSelectKreis,
     onSelectJugend,
     onToggleJugendSubLevel,
@@ -47,6 +50,8 @@ export function SetupPage() {
     onResolveLocation,
     onUseCurrentLocation,
     onClearLocation,
+    onSetScoutName,
+    onSetKmPauschale,
   } = useScoutX();
   const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
   const summaryParts = [
@@ -197,6 +202,38 @@ export function SetupPage() {
                   </button>
                 ) : null}
               </div>
+            </div>
+
+            <div style={{ ...card, marginTop: 16 }}>
+              <SectionHeader>Fahrtkosten</SectionHeader>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
+                <div>
+                  <label style={lbl}>Scout-Name (für Abrechnung)</label>
+                  <input
+                    style={inp}
+                    type="text"
+                    value={scoutName}
+                    onChange={(e) => onSetScoutName(e.target.value)}
+                    placeholder="Dein Name"
+                    maxLength={80}
+                  />
+                </div>
+                <div>
+                  <label style={lbl}>€ / km</label>
+                  <input
+                    style={inp}
+                    type="number"
+                    value={kmPauschale}
+                    step="0.01"
+                    min="0.01"
+                    max="2.00"
+                    onChange={(e) => onSetKmPauschale(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: C.gray, marginTop: 8, marginBottom: 0 }}>
+                Kilometerpauschale für die automatische Fahrtkosten-Abrechnung im Scout-Plan.
+              </p>
             </div>
           </div>
         </div>

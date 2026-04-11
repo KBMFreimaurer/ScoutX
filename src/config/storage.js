@@ -3,4 +3,5 @@ export const STORAGE_KEYS = {
   location: "scoutplan.location.v1",
   favorites: "scoutplan.favorites.v1",
   notes: "scoutplan.notes.v1",
+  abrechnungMeta: "scoutplan.abrechnung.v1",
 };

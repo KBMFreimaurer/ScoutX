@@ -78,7 +78,9 @@ export function sanitizePlanText(rawPlan) {
 }
 
 export function extractReasonMap(planText) {
-  const lines = String(planText || "").split("\n").map((line) => line.trim());
+  const lines = String(planText || "")
+    .split("\n")
+    .map((line) => line.trim());
   const map = new Map();
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -189,7 +191,9 @@ export function parseRouteStops(planText, games) {
     const away = toSafeString(matchup[2]);
     const matchGame = findMatchingGame(games, home, away);
     const label = matchGame ? `${matchGame.home} vs ${matchGame.away}` : `${home} vs ${away}`;
-    const venue = matchGame ? toSafeString(matchGame.venue || "Sportanlage") : toSafeString(matchup[3] || "Sportanlage");
+    const venue = matchGame
+      ? toSafeString(matchGame.venue || "Sportanlage")
+      : toSafeString(matchup[3] || "Sportanlage");
 
     const key = `${time}|${normalizeLookup(label)}`;
     if (seen.has(key)) {
@@ -287,7 +291,8 @@ export function drawSummaryGrid(doc, state, games, topGames, routeStops) {
     .map((game) => parseMinutes(game.time))
     .filter((value) => Number.isFinite(value))
     .sort((a, b) => a - b);
-  const kickoffWindow = times.length > 0 ? `${formatMinutes(times[0])}–${formatMinutes(times[times.length - 1])}` : "--:--";
+  const kickoffWindow =
+    times.length > 0 ? `${formatMinutes(times[0])}–${formatMinutes(times[times.length - 1])}` : "--:--";
 
   const items = [
     { title: "Spiele gesamt", value: String(games.length) },
@@ -437,7 +442,11 @@ export function drawRouteTimeline(doc, state, stops) {
       const nextMinutes = parseMinutes(stops[i + 1].time);
       if (Number.isFinite(currentMinutes) && Number.isFinite(nextMinutes)) {
         const travelWindow = Math.max(0, nextMinutes - (currentMinutes + 45));
-        doc.text(sanitizePdfText(`Fahrtfenster bis nächster Stopp: ca. ${travelWindow} Minuten`), textX, state.y + 17.7);
+        doc.text(
+          sanitizePdfText(`Fahrtfenster bis nächster Stopp: ca. ${travelWindow} Minuten`),
+          textX,
+          state.y + 17.7,
+        );
       }
     }
 
@@ -468,16 +477,18 @@ export function drawRouteOverview(doc, state, routeOverview, startLocationLabel 
       state,
       `${toSafeString(leg?.from)} → ${toSafeString(leg?.to)} · ${distanceLabel}${minutesLabel ? ` · ${minutesLabel}` : ""}`,
       {
-      fontSize: 8.8,
-      color: COLORS.muted,
-      lineHeight: 4.2,
-      sectionOnNewPage: "Routenübersicht",
-    },
+        fontSize: 8.8,
+        color: COLORS.muted,
+        lineHeight: 4.2,
+        sectionOnNewPage: "Routenübersicht",
+      },
     );
   }
 
   const totalLabel = Number.isFinite(routeOverview.totalKm) ? `${Math.round(routeOverview.totalKm)} km` : "unbekannt";
-  const minutesLabel = Number.isFinite(routeOverview.estimatedMinutes) ? `${routeOverview.estimatedMinutes} Min` : "unbekannt";
+  const minutesLabel = Number.isFinite(routeOverview.estimatedMinutes)
+    ? `${routeOverview.estimatedMinutes} Min`
+    : "unbekannt";
   writeText(doc, state, `Gesamtstrecke: ${totalLabel} · Fahrzeit ca. ${minutesLabel}`, {
     fontSize: 9,
     style: "bold",
@@ -614,13 +625,18 @@ export function drawGameDetails(doc, state, games) {
 
   for (const game of games) {
     ensureSpace(doc, state, 20, "Spiel-Details");
-    writeText(doc, state, `${toSafeString(game.home)} vs ${toSafeString(game.away)} (${formatKickoffLabel(game.time)})`, {
-      fontSize: 9.2,
-      style: "bold",
-      color: COLORS.text,
-      lineHeight: 4.4,
-      sectionOnNewPage: "Spiel-Details",
-    });
+    writeText(
+      doc,
+      state,
+      `${toSafeString(game.home)} vs ${toSafeString(game.away)} (${formatKickoffLabel(game.time)})`,
+      {
+        fontSize: 9.2,
+        style: "bold",
+        color: COLORS.text,
+        lineHeight: 4.4,
+        sectionOnNewPage: "Spiel-Details",
+      },
+    );
     writeText(doc, state, weatherText(game), {
       fontSize: 8.7,
       color: COLORS.muted,
@@ -797,9 +813,10 @@ function isPreciseRouteVenueText(value) {
   }
 
   const hasPostalCode = /\b\d{5}\b/.test(text);
-  const hasStreetNumber = /(?:str(?:a(?:ss|ß)e)?\.?|weg|allee|gasse|ring|damm|ufer|kamp|pfad|chaussee|wall|promenade)[^,\n]*\d{1,4}[a-z]?/i.test(
-    text,
-  );
+  const hasStreetNumber =
+    /(?:str(?:a(?:ss|ß)e)?\.?|weg|allee|gasse|ring|damm|ufer|kamp|pfad|chaussee|wall|promenade)[^,\n]*\d{1,4}[a-z]?/i.test(
+      text,
+    );
 
   return hasPostalCode || hasStreetNumber;
 }
@@ -837,7 +854,9 @@ function drawRouteSummaryGrid(doc, state, directRows, visibleTotals, sectionOnNe
   const totalCount = directRows.length;
   const knownCount = directRows.filter((row) => Number.isFinite(row?.distanceKm)).length;
   const openCount = Math.max(0, totalCount - knownCount);
-  const totalKmLabel = Number.isFinite(visibleTotals?.totalKm) ? `${Math.round(visibleTotals.totalKm)} km` : "unbekannt";
+  const totalKmLabel = Number.isFinite(visibleTotals?.totalKm)
+    ? `${Math.round(visibleTotals.totalKm)} km`
+    : "unbekannt";
   const tiles = [
     { label: "Spiele in Route", value: String(totalCount) },
     { label: "Strecken berechnet", value: String(knownCount) },
@@ -995,7 +1014,7 @@ function buildDirectRouteRows(games, directRoutes, maxGames = 5) {
     const distanceKm = toFiniteNumberOrNull(providedRow.distanceKm);
     const durationMinutes = toFiniteNumberOrNull(providedRow.durationMinutes);
     const fallbackDistance = toFiniteNumberOrNull(game?.fromStartRouteDistanceKm ?? game?.distanceKm);
-    const resolvedDistance = routeEligible ? distanceKm ?? fallbackDistance ?? null : null;
+    const resolvedDistance = routeEligible ? (distanceKm ?? fallbackDistance ?? null) : null;
     const fallbackMinutes = toFiniteNumberOrNull(game?.fromStartRouteMinutes);
     const resolvedMinutes = routeEligible
       ? durationMinutes !== null
@@ -1087,9 +1106,7 @@ function formatChainLeg(fromLabel, toLabel, distanceKm, durationMinutes) {
 function drawRouteInfoCard(doc, state, row, sectionOnNewPage = "Routenberechnung") {
   const cardX = MARGIN_X;
   const cardW = PAGE_WIDTH - MARGIN_X * 2;
-  const venueLines = doc
-    .splitTextToSize(`Ort: ${toSafeString(row?.venue) || "unbekannt"}`, cardW - 8)
-    .slice(0, 2);
+  const venueLines = doc.splitTextToSize(`Ort: ${toSafeString(row?.venue) || "unbekannt"}`, cardW - 8).slice(0, 2);
   const hasLink = Boolean(row?.matchUrl);
   const hasWarning = !row?.routeEligible;
   const cardHeight = 18 + venueLines.length * 3.8 + (hasLink ? 4.2 : 0) + (hasWarning ? 4.2 : 0);
@@ -1120,7 +1137,9 @@ function drawRouteInfoCard(doc, state, row, sectionOnNewPage = "Routenberechnung
   doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
   if (row.routeEligible) {
     doc.text(
-      sanitizePdfText(`Startpunkt → Spiel ${row.index}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`),
+      sanitizePdfText(
+        `Startpunkt → Spiel ${row.index}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
+      ),
       cardX + 3,
       state.y + 13.2,
     );
@@ -1154,7 +1173,9 @@ function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenber
   const rowX = MARGIN_X;
   const rowW = PAGE_WIDTH - MARGIN_X * 2;
   const leftTextWidth = rowW - 56;
-  const detailLines = doc.splitTextToSize(`${truncatePlain(row.from, 84)} → ${truncatePlain(row.to, 84)}`, leftTextWidth - 2).slice(0, 2);
+  const detailLines = doc
+    .splitTextToSize(`${truncatePlain(row.from, 84)} → ${truncatePlain(row.to, 84)}`, leftTextWidth - 2)
+    .slice(0, 2);
   const titleLines = doc.splitTextToSize(toSafeString(row.title), leftTextWidth - 2).slice(0, 2);
   const rowHeight = Math.max(13, 4.8 + titleLines.length * 3.9 + detailLines.length * 3.7 + 1.6);
   ensureSpace(doc, state, rowHeight + 1.2, sectionOnNewPage);
@@ -1199,7 +1220,14 @@ function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenber
   state.y += rowHeight;
 }
 
-export function drawRouteCalculationPage(doc, state, routeOverview, startLocationLabel = "Startort", games = [], directRoutes = []) {
+export function drawRouteCalculationPage(
+  doc,
+  state,
+  routeOverview,
+  startLocationLabel = "Startort",
+  games = [],
+  directRoutes = [],
+) {
   addPage(state, doc, "Routenberechnung");
   drawSectionTitle(doc, state, "Routenberechnung", "Routenberechnung");
 
@@ -1324,4 +1352,140 @@ export function drawRouteCalculationPage(doc, state, routeOverview, startLocatio
       );
     }
   }
+}
+
+export function drawFahrtkostenPage(doc, state, games, cfg) {
+  const scoutName = String(cfg?.scoutName || "").trim();
+  const rate = Number(cfg?.kmPauschale) > 0 ? Number(cfg.kmPauschale) : 0.3;
+  const overrides = cfg?.kmOverrides ?? {};
+  const rows = (Array.isArray(games) ? games : []).filter(
+    (game) => Number.isFinite(game.distanceKm) && game.distanceKm > 0,
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  addPage(state, doc, "Fahrtkosten");
+  drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung", "Fahrtkosten");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  const meta = [
+    scoutName ? `Scout: ${scoutName}` : null,
+    `Datum: ${new Date().toLocaleDateString("de-DE")}`,
+    `Pauschale: ${rate.toFixed(2).replace(".", ",")} €/km`,
+  ]
+    .filter(Boolean)
+    .join("   ·   ");
+  doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
+  state.y += 6.5;
+
+  const cols = [8, 22, 18, 62, 28, 22, 22];
+  const headers = ["Nr.", "Datum", "Zeit", "Sichtung", "Spielort", "km (H+R)", "Betrag"];
+  const tableX = MARGIN_X;
+  const headerHeight = 6.2;
+
+  function drawTableHeader() {
+    ensureSpace(doc, state, headerHeight + 1, "Fahrtkosten", () => {
+      drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+      drawTableHeader();
+    });
+
+    doc.setFillColor(237, 242, 247);
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, headerHeight, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+    let cursorX = tableX + 1.8;
+    for (let index = 0; index < headers.length; index += 1) {
+      doc.text(headers[index], cursorX, state.y + 4.3);
+      cursorX += cols[index];
+    }
+
+    state.y += headerHeight;
+  }
+
+  drawTableHeader();
+
+  let totalHR = 0;
+  let totalEur = 0;
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const game = rows[index];
+    const einfach = Number.isFinite(overrides[game.id]) ? overrides[game.id] : game.distanceKm;
+    const hinRueck = einfach * 2;
+    const betrag = hinRueck * rate;
+    totalHR += hinRueck;
+    totalEur += betrag;
+
+    const dateStr =
+      game.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime())
+        ? game.dateObj.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })
+        : String(game.date || "");
+
+    const values = [
+      String(index + 1),
+      dateStr,
+      game.time || "–",
+      truncateText(`${String(game.home || "–")} – ${String(game.away || "–")}`, 34),
+      truncateText(String(game.venue || "–"), 16),
+      `${hinRueck.toFixed(1).replace(".", ",")} km`,
+      `${betrag.toFixed(2).replace(".", ",")} €`,
+    ];
+
+    const rowHeight = 5.2;
+    ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
+      drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+      drawTableHeader();
+    });
+
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.1);
+
+    let cursorX = tableX + 1.8;
+    for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
+      if (colIndex === values.length - 1) {
+        doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+      } else {
+        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+      }
+      doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
+      cursorX += cols[colIndex];
+    }
+
+    state.y += rowHeight;
+  }
+
+  const summaryHeight = 6;
+  ensureSpace(doc, state, summaryHeight + 10, "Fahrtkosten", () => {
+    drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+    drawTableHeader();
+  });
+
+  doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+  doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, summaryHeight, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.4);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+  doc.text("Gesamt", tableX + 1.8, state.y + 4.2);
+
+  const kmX = tableX + cols.slice(0, 5).reduce((sum, col) => sum + col, 0) + 1.8;
+  doc.text(`${totalHR.toFixed(1).replace(".", ",")} km`, kmX, state.y + 4.2);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[5], state.y + 4.2);
+  state.y += summaryHeight + 10;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  doc.text("Datum / Unterschrift: _________________________________", MARGIN_X, state.y);
 }
