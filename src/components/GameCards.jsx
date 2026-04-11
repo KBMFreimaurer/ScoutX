@@ -112,6 +112,7 @@ export function GameCards({
                     type="button"
                     onClick={() => onToggleSelectedGame?.(game.id)}
                     aria-pressed={selectedGameIds?.[game.id]}
+                    aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
                     style={{
                       border: `1px solid ${selectedGameIds?.[game.id] ? C.greenBorder : C.border}`,
                       borderRadius: 8,
@@ -124,7 +125,7 @@ export function GameCards({
                       fontWeight: 600,
                     }}
                   >
-                    {selectedGameIds?.[game.id] ? "Besuch markiert" : "Besuch markieren"}
+                    {selectedGameIds?.[game.id] ? "Für Besuch ausgewählt" : "Für Besuch auswählen"}
                   </button>
                 ) : null}
                 <button

@@ -89,8 +89,8 @@ describe("ScoutX Integration", () => {
 
       await renderSetupAndSubmit(fetchMock);
 
-      await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 12000 });
-      fireEvent.click(screen.getByRole("button", { name: /Auswahl übernehmen/i }));
+      await screen.findByRole("button", { name: /Plan öffnen/i }, { timeout: 12000 });
+      fireEvent.click(screen.getByRole("button", { name: /Plan öffnen/i }));
 
       await screen.findByText(/Manueller Scouting-Plan/i, { timeout: 12000 });
       await screen.findByText(/alle verfügbaren Spiele übernommen/i, { timeout: 12000 });
