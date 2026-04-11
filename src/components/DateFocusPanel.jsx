@@ -98,8 +98,10 @@ function formatDisplayDate(value, fallback = "Datum auswählen") {
 
 export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, jugendId }) {
   const calendarRef = useRef(null);
+  const calendarToggleRef = useRef(null);
   const today = useMemo(() => startOfDay(new Date()), []);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarPlacement, setCalendarPlacement] = useState("bottom");
   const selectedDate = useMemo(() => parseIsoDate(fromDate), [fromDate]);
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(selectedDate || today));
 
@@ -108,6 +110,38 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
       setVisibleMonth(startOfMonth(selectedDate || today));
     }
   }, [selectedDate, today, isCalendarOpen]);
+
+  useEffect(() => {
+    if (!isCalendarOpen) {
+      return undefined;
+    }
+
+    const updatePlacement = () => {
+      const rect = calendarToggleRef.current?.getBoundingClientRect();
+      if (!rect) {
+        setCalendarPlacement("bottom");
+        return;
+      }
+
+      const preferredCalendarHeight = 390;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < preferredCalendarHeight && spaceAbove > spaceBelow) {
+        setCalendarPlacement("top");
+      } else {
+        setCalendarPlacement("bottom");
+      }
+    };
+
+    updatePlacement();
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [isCalendarOpen]);
 
   useEffect(() => {
     if (!isCalendarOpen) {
@@ -150,14 +184,15 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
   };
 
   return (
-    <div style={{ ...card, overflow: "visible" }}>
+    <div style={{ ...card, overflow: "visible", zIndex: isCalendarOpen ? 120 : "auto" }}>
       <SectionHeader num="04">Zeitraum & Fokus</SectionHeader>
 
       <div className="date-focus-row">
-        <div ref={calendarRef} style={{ position: "relative" }}>
+        <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
           <label htmlFor="scouting-from-date" style={lbl}>Scouting ab</label>
           <button
             id="scouting-from-date"
+            ref={calendarToggleRef}
             type="button"
             aria-label="Scouting-Datum auswählen"
             aria-expanded={isCalendarOpen}
@@ -205,15 +240,18 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
               aria-label="Kalenderauswahl"
               style={{
                 position: "absolute",
-                top: "calc(100% + 10px)",
+                top: calendarPlacement === "bottom" ? "calc(100% + 10px)" : "auto",
+                bottom: calendarPlacement === "top" ? "calc(100% + 10px)" : "auto",
                 left: 0,
                 width: "min(420px, calc(100vw - 56px))",
+                maxHeight: "min(420px, calc(100vh - 120px))",
+                overflowY: "auto",
                 borderRadius: 14,
                 border: `1px solid ${C.border}`,
                 background: C.surfaceSolid,
                 boxShadow: "0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset",
                 padding: 14,
-                zIndex: 60,
+                zIndex: 140,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
