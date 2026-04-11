@@ -150,7 +150,7 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
   };
 
   return (
-    <div style={card}>
+    <div style={{ ...card, overflow: "visible" }}>
       <SectionHeader num="04">Zeitraum & Fokus</SectionHeader>
 
       <div className="date-focus-row">
