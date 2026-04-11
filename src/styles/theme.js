@@ -193,36 +193,111 @@ select option{background:#18181B;color:#e4e4e7}
   padding:28px 28px 40px;
 }
 
-.setup-headline{margin-bottom:24px}
-.setup-headline h1{
-  margin:0 0 6px;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
-  font-size:32px;
-  line-height:1.1;
-  font-weight:800;
-  letter-spacing:-0.5px;
-  color:${C.white};
+/* Setup header */
+.setup-exec-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:16px;
+  margin-bottom:22px;
 }
-.setup-headline p{
+.setup-exec-eyebrow{
+  display:inline-block;
+  margin:0 0 8px;
+  color:${C.green};
+  font-size:10px;
+  letter-spacing:0.22em;
+  text-transform:uppercase;
+  font-weight:700;
+}
+.setup-exec-title{
   margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size:48px;
+  line-height:0.98;
+  letter-spacing:-1.1px;
+  color:${C.offWhite};
+  max-width:680px;
+}
+.setup-exec-subline{
+  margin:12px 0 0;
   color:${C.gray};
-  font-size:14px;
-  line-height:1.5;
+  font-size:17px;
+  line-height:1.45;
+  max-width:700px;
+}
+.setup-exec-status{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 16px;
+  border-radius:12px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(62,74,62,0.15);
+  color:${C.grayLight};
+  font-size:11px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  font-weight:700;
+  white-space:nowrap;
+}
+.setup-exec-status-dot{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:${C.green};
+  box-shadow:0 0 12px ${C.greenGlow};
+  animation:pulseGlow 1.8s infinite ease-in-out;
 }
 
 /* Setup layout */
-.setup-layout{
+.setup-exec-grid{
   display:grid;
   grid-template-columns:minmax(0,1fr);
   gap:16px;
 }
-.setup-left-grid{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+.setup-exec-left,
+.setup-exec-right{
+  display:flex;
+  flex-direction:column;
   gap:16px;
 }
-.setup-span-two{grid-column:1/-1}
-.right-stack{display:flex;flex-direction:column;gap:16px}
+
+.setup-action-bar{
+  position:sticky;
+  bottom:12px;
+  z-index:10;
+  margin-top:6px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid rgba(62,74,62,0.15);
+  background:rgba(10,10,10,0.88);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.setup-action-meta{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  gap:2px;
+  color:${C.grayLight};
+  font-size:13px;
+  font-weight:600;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.setup-action-eyebrow{
+  color:${C.gray};
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.2em;
+  font-weight:700;
+}
 
 /* Hover states */
 .row-item{cursor:pointer}
@@ -328,7 +403,9 @@ button,input,select{min-height:44px}
 @media(max-width:1050px){
   .left-rail{display:none}
   .top-strip-title{font-size:16px}
-  .setup-layout{grid-template-columns:1fr}
+  .setup-exec-title{font-size:42px}
+  .setup-exec-head{align-items:flex-start;flex-direction:column}
+  .setup-exec-status{font-size:10px}
 }
 
 @media(max-width:640px){
@@ -336,8 +413,17 @@ button,input,select{min-height:44px}
   .top-strip-title{font-size:15px}
   .top-strip-actions{display:none}
   .workspace{padding:20px 16px 28px}
-  .setup-headline h1{font-size:26px}
-  .setup-left-grid{grid-template-columns:1fr}
+  .setup-exec-title{font-size:36px;line-height:1.03}
+  .setup-exec-subline{font-size:15px}
+  .setup-action-bar{position:static;flex-direction:column;align-items:stretch}
+  .setup-action-meta{font-size:12px;white-space:normal}
+}
+
+@media(min-width:980px){
+  .setup-exec-grid{
+    grid-template-columns:minmax(0,4fr) minmax(0,8fr);
+    align-items:start;
+  }
 }
 
 /* Glass surface for ambient light */
@@ -374,7 +460,8 @@ export const inp = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 10,
   color: C.offWhite,
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamily:
+    "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontSize: 13,
   outline: "none",
   minHeight: 44,
@@ -388,7 +475,8 @@ export const lbl = {
   letterSpacing: "0.3px",
   textTransform: "uppercase",
   marginBottom: 6,
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamily:
+    "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 600,
 };
 
@@ -398,7 +486,8 @@ export const secH = {
   letterSpacing: "0.2px",
   textTransform: "uppercase",
   marginBottom: 16,
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamily:
+    "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
   fontWeight: 700,
   display: "flex",
   alignItems: "center",

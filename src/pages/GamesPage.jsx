@@ -94,14 +94,26 @@ export function GamesPage() {
     <div className="fu">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <GhostButton onClick={onBackSetup}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Setup
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Konfiguration
         </GhostButton>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
               fontWeight: 800,
               fontSize: 22,
               color: C.white,
@@ -113,33 +125,60 @@ export function GamesPage() {
           >
             {jugend?.label} · {kreis?.label}
             {jugend?.turnier ? (
-              <span style={{
-                fontSize: 11,
-                color: C.warn,
-                marginLeft: 10,
-                fontWeight: 600,
-                padding: "2px 8px",
-                background: C.warnDim,
-                borderRadius: 4,
-                border: `1px solid rgba(251,191,36,0.15)`,
-              }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: C.warn,
+                  marginLeft: 10,
+                  fontWeight: 600,
+                  padding: "2px 8px",
+                  background: C.warnDim,
+                  borderRadius: 4,
+                  border: `1px solid rgba(251,191,36,0.15)`,
+                }}
+              >
                 TURNIER
               </span>
             ) : null}
           </div>
 
-          <div style={{ fontSize: 12, color: C.gray, marginTop: 2, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.gray,
+              marginTop: 2,
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            }}
+          >
             {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter
           </div>
 
           {showTeamHint ? (
-            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
-              Team-Hinweise: {matchedGameCount} passende Spiele · {matchedTeamCount}/{requestedTeamCount} Vereine erkannt
+            <div
+              style={{
+                fontSize: 11,
+                color: C.grayDark,
+                marginTop: 4,
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
+            >
+              Team-Hinweise: {matchedGameCount} passende Spiele · {matchedTeamCount}/{requestedTeamCount} Vereine
+              erkannt
             </div>
           ) : null}
 
           {startLocation?.label ? (
-            <div style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: C.grayDark,
+                marginTop: 4,
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
+            >
               Startort: {startLocation.label}
             </div>
           ) : null}
@@ -147,17 +186,31 @@ export function GamesPage() {
           {firstGameRoute ? (
             <div
               aria-live="polite"
-              style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+              style={{
+                fontSize: 11,
+                color: C.grayDark,
+                marginTop: 4,
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
             >
               Straßenroute Start → 1. Spiel: {formatDistanceKm(firstGameRoute.fromStartRouteDistanceKm)} ·{" "}
-              {Number.isFinite(firstGameRoute.fromStartRouteMinutes) ? `${firstGameRoute.fromStartRouteMinutes} Min` : "Zeit unbekannt"}
+              {Number.isFinite(firstGameRoute.fromStartRouteMinutes)
+                ? `${firstGameRoute.fromStartRouteMinutes} Min`
+                : "Zeit unbekannt"}
             </div>
           ) : null}
 
           {enrichingGames ? (
             <div
               aria-live="polite"
-              style={{ fontSize: 11, color: C.grayDark, marginTop: 4, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+              style={{
+                fontSize: 11,
+                color: C.grayDark,
+                marginTop: 4,
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
             >
               Entfernungen und Wetter werden gerade aktualisiert.
             </div>
@@ -207,7 +260,16 @@ export function GamesPage() {
       />
 
       {shouldPaginate ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 12,
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ fontSize: 12, color: C.gray }}>
             Seite {currentPage} von {totalPages} · {visibleGames.length} Spiele sichtbar
           </div>
@@ -232,7 +294,17 @@ export function GamesPage() {
 
       <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
           {pdfExporting ? "PDF wird erstellt..." : "Scout-Plan erstellen"}
         </span>
       </PrimaryButton>

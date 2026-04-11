@@ -54,18 +54,34 @@ export function SetupPage() {
     onRemoveFavoriteTeam,
     onClearFavoriteTeams,
   } = useScoutX();
+  const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
+  const summaryParts = [
+    selectedKreis?.label || "Kein Kreis",
+    jugend?.label || "Keine Altersklasse",
+    `${activeTeams.length || 0} Vereinsparameter`,
+    hasLocation ? "Startort gesetzt" : "Ohne Startort",
+  ];
+  const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
 
   return (
     <div className="fu">
-      <div className="setup-headline">
-        <h1>Scouting Setup</h1>
-        <p>Konfiguriere Region, Altersklasse und optionale Vereinsparameter für deinen Scout-Plan.</p>
-      </div>
+      <header className="setup-exec-head">
+        <div>
+          <span className="setup-exec-eyebrow">Systemkonfiguration</span>
+          <h1 className="setup-exec-title">Scouting-Plan konfigurieren</h1>
+          <p className="setup-exec-subline">
+            Definiere Kreis, Altersklasse und optionale Team-Parameter für eine saubere, schnelle Spielauswahl.
+          </p>
+        </div>
+        <div className="setup-exec-status" aria-live="polite">
+          <span className="setup-exec-status-dot" />
+          <span>{statusLabel}</span>
+        </div>
+      </header>
 
-      <div className="setup-layout">
-        <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
-
-        <div className="setup-left-grid">
+      <div className="setup-exec-grid">
+        <div className="setup-exec-left">
+          <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
           <AgeGroupSelector
             jugendKlassen={JUGEND_KLASSEN}
             jugendId={jugendId}
@@ -85,8 +101,10 @@ export function SetupPage() {
             jugend={jugend}
             jugendId={jugendId}
           />
+        </div>
 
-          <div className="setup-span-two">
+        <div className="setup-exec-right">
+          <div>
             <TeamPicker
               selectedTeams={selectedTeams}
               teamDraft={teamDraft}
@@ -100,7 +118,7 @@ export function SetupPage() {
             />
           </div>
 
-          <div className="setup-span-two">
+          <div>
             <div style={{ ...card, marginBottom: 16 }}>
               <div style={{ ...secH, marginBottom: 14 }}>
                 <span className="section-number">06</span>
@@ -245,33 +263,55 @@ export function SetupPage() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
 
-      <PrimaryButton
-        onClick={onBuildAndGo}
-        disabled={!canBuild || loadingGames}
-        style={{ width: "100%", fontSize: isMobile ? 13 : 14, marginTop: 16 }}
-      >
-        {loadingGames ? (
-          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-            <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
-            Spiele werden geladen...
-          </span>
-        ) : !canBuild ? (
-          !kreisId
-            ? "Kreis wählen"
-            : !jugendId
-              ? "Jugendklasse wählen"
-              : "Ungültige Auswahl"
-        ) : (
-          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            Spielplan generieren — {activeTeams.length || 0} Team-Parameter
-          </span>
-        )}
-      </PrimaryButton>
+      <div className="setup-action-bar">
+        <div className="setup-action-meta">
+          <span className="setup-action-eyebrow">Ausgewählte Konfiguration</span>
+          <span>{summaryParts.join(" / ")}</span>
+        </div>
+        <PrimaryButton
+          onClick={onBuildAndGo}
+          disabled={!canBuild || loadingGames}
+          style={{
+            width: isMobile ? "100%" : "auto",
+            minWidth: isMobile ? "100%" : 300,
+            fontSize: isMobile ? 13 : 14,
+          }}
+        >
+          {loadingGames ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+              <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+              Spiele werden geladen...
+            </span>
+          ) : !canBuild ? (
+            !kreisId ? (
+              "Kreis wählen"
+            ) : !jugendId ? (
+              "Jugendklasse wählen"
+            ) : (
+              "Ungültige Auswahl"
+            )
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+              Spielplan generieren — {activeTeams.length || 0} Team-Parameter
+            </span>
+          )}
+        </PrimaryButton>
+      </div>
 
       {err ? (
         <div

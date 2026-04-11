@@ -14,7 +14,7 @@ describe("StepNav", () => {
       />,
     );
 
-    expect(screen.getByText(/setup/i)).toBeInTheDocument();
+    expect(screen.getByText(/konfiguration/i)).toBeInTheDocument();
     expect(screen.getByText(/spiele/i)).toBeInTheDocument();
     expect(screen.getByText(/plan/i)).toBeInTheDocument();
   });
@@ -23,13 +23,7 @@ describe("StepNav", () => {
     const onStepChange = vi.fn();
 
     render(
-      <StepNav
-        currentStep="setup"
-        onStepChange={onStepChange}
-        canAccessGames
-        canAccessPlan={false}
-        isMobile={false}
-      />,
+      <StepNav currentStep="setup" onStepChange={onStepChange} canAccessGames canAccessPlan={false} isMobile={false} />,
     );
 
     fireEvent.click(screen.getByText(/spiele/i));
