@@ -388,6 +388,33 @@ export function GamesProvider({ children }) {
     setSelectedGameIds({});
   }, []);
 
+  const onSelectPlannedGamesByTeams = useCallback(
+    (teamNames) => {
+      const wantedTeams = new Set(
+        (Array.isArray(teamNames) ? teamNames : [])
+          .map((value) => normalizeLookup(value))
+          .filter(Boolean),
+      );
+
+      if (wantedTeams.size === 0) {
+        setSelectedGameIds({});
+        return;
+      }
+
+      setSelectedGameIds(
+        games.reduce((acc, game) => {
+          const home = normalizeLookup(game?.home);
+          const away = normalizeLookup(game?.away);
+          if (wantedTeams.has(home) || wantedTeams.has(away)) {
+            acc[game.id] = true;
+          }
+          return acc;
+        }, {}),
+      );
+    },
+    [games],
+  );
+
   const onBuildAndGo = useCallback(async () => {
     if (!kreisId) {
       setErr("Bitte einen Kreis wählen.");
@@ -495,6 +522,7 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
+      onSelectPlannedGamesByTeams,
     }),
     [
       games,
@@ -513,6 +541,7 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
+      onSelectPlannedGamesByTeams,
     ],
   );
 

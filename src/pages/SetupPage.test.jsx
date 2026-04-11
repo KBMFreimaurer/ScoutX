@@ -126,4 +126,13 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("dialog", { name: /Kalenderauswahl/i })).not.toBeInTheDocument();
     expect(dateToggle).toHaveTextContent(selectedDateText);
   });
+
+  it("erlaubt Leerzeichen im Scout-Namen", () => {
+    renderSetupPage();
+
+    const scoutNameInput = screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i);
+    fireEvent.change(scoutNameInput, { target: { value: "Ayoub El Idrissi" } });
+
+    expect(scoutNameInput).toHaveValue("Ayoub El Idrissi");
+  });
 });
