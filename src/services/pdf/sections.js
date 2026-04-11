@@ -714,7 +714,6 @@ export function drawCover(doc, state, cfg, createdAt, games, topGames, routeStop
 export function drawHeaderFooter(doc, state, cfg, createdAt) {
   const pageCount = doc.getNumberOfPages();
   const sectionByPage = state.sections;
-  const buildId = toSafeString(cfg?.pdfBuildId || "unknown");
 
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page);
@@ -741,9 +740,6 @@ export function drawHeaderFooter(doc, state, cfg, createdAt) {
       toSafeString(cfg?.jugendLabel) || "-"
     } · Export ${createdAt}`;
     doc.text(sanitizePdfText(footerLeft), MARGIN_X, 291.3);
-    if (buildId && buildId !== "unknown") {
-      doc.text(`Build ${buildId}`, PAGE_WIDTH / 2, 291.3, { align: "center" });
-    }
     doc.text(`Seite ${page}/${pageCount}`, PAGE_WIDTH - MARGIN_X, 291.3, { align: "right" });
   }
 }
@@ -850,53 +846,10 @@ function drawGamesTableHeader(doc, state, headers, sectionTitleOnBreak) {
   state.y += headerHeight;
 }
 
-function drawRouteSummaryGrid(doc, state, directRows, visibleTotals, sectionOnNewPage = "Routenberechnung") {
-  const totalCount = directRows.length;
-  const knownCount = directRows.filter((row) => Number.isFinite(row?.distanceKm)).length;
-  const openCount = Math.max(0, totalCount - knownCount);
-  const totalKmLabel = Number.isFinite(visibleTotals?.totalKm)
-    ? `${Math.round(visibleTotals.totalKm)} km`
-    : "unbekannt";
-  const tiles = [
-    { label: "Spiele in Route", value: String(totalCount) },
-    { label: "Strecken berechnet", value: String(knownCount) },
-    { label: "Strecken offen", value: String(openCount) },
-    { label: "Kette gesamt", value: totalKmLabel },
-  ];
-
-  const tileGap = 3.2;
-  const tileWidth = (PAGE_WIDTH - MARGIN_X * 2 - tileGap) / 2;
-  const tileHeight = 13.5;
-  const totalHeight = tileHeight * 2 + tileGap + 1;
-  ensureSpace(doc, state, totalHeight + 1.5, sectionOnNewPage);
-
-  for (let index = 0; index < tiles.length; index += 1) {
-    const row = Math.floor(index / 2);
-    const col = index % 2;
-    const x = MARGIN_X + col * (tileWidth + tileGap);
-    const y = state.y + row * (tileHeight + tileGap);
-
-    doc.setFillColor(COLORS.cardBg[0], COLORS.cardBg[1], COLORS.cardBg[2]);
-    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
-    doc.roundedRect(x, y, tileWidth, tileHeight, 1.4, 1.4, "FD");
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.7);
-    doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-    doc.text(sanitizePdfText(tiles[index].label), x + 2.3, y + 4.4);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.8);
-    doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-    doc.text(sanitizePdfText(tiles[index].value), x + 2.3, y + 10.1);
-  }
-
-  state.y += totalHeight + 1.2;
-}
-
 export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
-  const title = "ScoutX Scouting Report";
-  const subtitle = `${toSafeString(cfg?.kreisLabel) || "-"} · ${toSafeString(cfg?.jugendLabel) || "-"} (${toSafeString(cfg?.jugendAlter) || "-"} Jahre)`;
+  const title = "ScoutX Besuchsplan";
+  const subtitle = `${toSafeString(cfg?.kreisLabel) || "-"} · ${toSafeString(cfg?.jugendLabel) || "-"}`;
+  const sinceDate = toSafeString(cfg?.fromDate);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
@@ -913,12 +866,12 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
   doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  const meta = `Erstellt: ${createdAt} · ab ${toSafeString(cfg?.fromDate) || "-"}`;
+  const meta = `${games.length} Spiele · erstellt ${createdAt}${sinceDate ? ` · ab ${sinceDate}` : ""}`;
   doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
   state.y += 6;
 
-  drawSectionTitle(doc, state, `Spielübersicht (${games.length} Spiele)`, "Spielübersicht");
-  writeText(doc, state, "Alle angesetzten Spiele mit Datum, Anstoßzeit, Spielort und Direktlink.", {
+  drawSectionTitle(doc, state, "Spielübersicht", "Spielübersicht");
+  writeText(doc, state, "Kompakte Übersicht mit Datum, Uhrzeit, Spiel und Ort.", {
     fontSize: 8.6,
     color: COLORS.muted,
     lineHeight: 4.2,
@@ -927,12 +880,11 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
   state.y += 1;
 
   const headers = [
-    { key: "nr", label: "Nr.", width: 10 },
     { key: "date", label: "Datum", width: 24 },
-    { key: "time", label: "Anstoß", width: 15 },
-    { key: "match", label: "Spielpaarung", width: 58 },
-    { key: "venue", label: "Spielort", width: 63 },
-    { key: "link", label: "fussball.de", width: 16 },
+    { key: "time", label: "Zeit", width: 15 },
+    { key: "match", label: "Spiel", width: 63 },
+    { key: "venue", label: "Ort", width: 66 },
+    { key: "link", label: "Link", width: 18 },
   ];
   const tableX = MARGIN_X;
   let rowIndex = 0;
@@ -941,9 +893,12 @@ export function drawGamesOverviewPage(doc, state, cfg, createdAt, games) {
 
   for (let i = 0; i < games.length; i += 1) {
     const game = games[i];
+    const shortDate =
+      game?.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime())
+        ? game.dateObj.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })
+        : truncateText(formatGameDate(game), 10);
     const row = {
-      nr: String(i + 1),
-      date: formatGameDate(game),
+      date: shortDate,
       time: kickoffText(game.time),
       match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
       venue: toSafeString(game.venue || "Sportanlage"),
@@ -1099,127 +1054,6 @@ export function computeVisibleChainTotals(directRows, betweenRows) {
   };
 }
 
-function formatChainLeg(fromLabel, toLabel, distanceKm, durationMinutes) {
-  return `Von ${fromLabel} nach ${toLabel}: ${formatDistanceLabel(distanceKm)} · ${formatMinutesLabel(durationMinutes)}`;
-}
-
-function drawRouteInfoCard(doc, state, row, sectionOnNewPage = "Routenberechnung") {
-  const cardX = MARGIN_X;
-  const cardW = PAGE_WIDTH - MARGIN_X * 2;
-  const venueLines = doc.splitTextToSize(`Ort: ${toSafeString(row?.venue) || "unbekannt"}`, cardW - 8).slice(0, 2);
-  const hasLink = Boolean(row?.matchUrl);
-  const hasWarning = !row?.routeEligible;
-  const cardHeight = 18 + venueLines.length * 3.8 + (hasLink ? 4.2 : 0) + (hasWarning ? 4.2 : 0);
-
-  ensureSpace(doc, state, cardHeight + 1.5, sectionOnNewPage);
-
-  doc.setFillColor(COLORS.cardBg[0], COLORS.cardBg[1], COLORS.cardBg[2]);
-  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
-  doc.roundedRect(cardX, state.y, cardW, cardHeight, 1.8, 1.8, "FD");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.4);
-  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(`Spiel ${row.index}`, cardX + 3, state.y + 4.8);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.2);
-  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-  doc.text(sanitizePdfText(truncatePlain(row.match, 86)), cardX + 18, state.y + 4.8);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.2);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  doc.text(sanitizePdfText(`${row.date} · ${row.time}`), cardX + 18, state.y + 8.8);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.7);
-  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  if (row.routeEligible) {
-    doc.text(
-      sanitizePdfText(
-        `Startpunkt → Spiel ${row.index}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(row.durationMinutes)}`,
-      ),
-      cardX + 3,
-      state.y + 13.2,
-    );
-  } else {
-    doc.text("Startpunkt → Spiel nicht berechnet (Adresse ungenau)", cardX + 3, state.y + 13.2);
-  }
-
-  let contentY = state.y + 16.9;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.1);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  for (const line of venueLines) {
-    doc.text(sanitizePdfText(line), cardX + 3, contentY);
-    contentY += 3.8;
-  }
-
-  if (hasWarning) {
-    doc.setTextColor(166, 97, 26);
-    doc.text("Hinweis: Für diesen Spielort liegt keine belastbare Straßenadresse vor.", cardX + 3, contentY);
-    contentY += 4.2;
-  }
-
-  if (hasLink) {
-    writePdfLink(doc, cardX + 3, contentY, "Zum Spiel auf fussball.de", row.matchUrl);
-  }
-
-  state.y += cardHeight + 2;
-}
-
-function drawRouteChainRow(doc, state, row, index, sectionOnNewPage = "Routenberechnung") {
-  const rowX = MARGIN_X;
-  const rowW = PAGE_WIDTH - MARGIN_X * 2;
-  const leftTextWidth = rowW - 56;
-  const detailLines = doc
-    .splitTextToSize(`${truncatePlain(row.from, 84)} → ${truncatePlain(row.to, 84)}`, leftTextWidth - 2)
-    .slice(0, 2);
-  const titleLines = doc.splitTextToSize(toSafeString(row.title), leftTextWidth - 2).slice(0, 2);
-  const rowHeight = Math.max(13, 4.8 + titleLines.length * 3.9 + detailLines.length * 3.7 + 1.6);
-  ensureSpace(doc, state, rowHeight + 1.2, sectionOnNewPage);
-
-  if (index % 2 === 1) {
-    doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
-    doc.rect(rowX, state.y, rowW, rowHeight, "F");
-  }
-
-  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
-  doc.rect(rowX, state.y, rowW, rowHeight, "S");
-  doc.line(rowX + leftTextWidth, state.y, rowX + leftTextWidth, state.y + rowHeight);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.3);
-  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-  let textY = state.y + 4.6;
-  for (const line of titleLines) {
-    doc.text(sanitizePdfText(line), rowX + 2.4, textY);
-    textY += 3.9;
-  }
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.9);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  let detailY = state.y + 4.6 + titleLines.length * 3.9;
-  for (const line of detailLines) {
-    doc.text(sanitizePdfText(line), rowX + 2.4, detailY);
-    detailY += 3.7;
-  }
-
-  const metricX = rowX + leftTextWidth + 2.4;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.4);
-  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(formatDistanceLabel(row.distanceKm), metricX, state.y + 5.5);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.9);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  doc.text(formatMinutesLabel(row.durationMinutes), metricX, state.y + 9.5);
-
-  state.y += rowHeight;
-}
-
 export function drawRouteCalculationPage(
   doc,
   state,
@@ -1228,129 +1062,119 @@ export function drawRouteCalculationPage(
   games = [],
   directRoutes = [],
 ) {
-  addPage(state, doc, "Routenberechnung");
-  drawSectionTitle(doc, state, "Routenberechnung", "Routenberechnung");
-
   const safeStartLabel = toSafeString(startLocationLabel) || "Startort";
+  const directRows = buildDirectRouteRows(games, directRoutes, 5);
+  const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
+  const overviewKm = toFiniteNumberOrNull(routeOverview?.totalKm);
+  const overviewMinutes = toFiniteNumberOrNull(routeOverview?.estimatedMinutes);
+  const totalKm = overviewKm ?? visibleTotals.totalKm;
+  const totalMinutes = overviewMinutes ?? visibleTotals.totalMinutes;
+  const hasAnyRouteData =
+    directRows.some((row) => Number.isFinite(row?.distanceKm)) ||
+    betweenRows.some((row) => Number.isFinite(row?.distanceKm)) ||
+    Number.isFinite(totalKm);
+
+  if (!hasAnyRouteData) {
+    return;
+  }
+
+  addPage(state, doc, "Route");
+  drawSectionTitle(doc, state, "Route", "Route");
+
   writeText(doc, state, `Startpunkt: ${safeStartLabel}`, {
     fontSize: 9.2,
     style: "bold",
     color: COLORS.text,
     lineHeight: 4.4,
-    sectionOnNewPage: "Routenberechnung",
+    sectionOnNewPage: "Route",
   });
-  writeText(doc, state, "Strecken werden nur bei belastbarer Adresse ausgewiesen.", {
-    fontSize: 8.4,
-    color: COLORS.muted,
-    lineHeight: 4.1,
-    sectionOnNewPage: "Routenberechnung",
-  });
-  state.y += 1;
-
-  const directRows = buildDirectRouteRows(games, directRoutes, 5);
-  const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
-  const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
-  const missingDirectCount = directRows.filter((row) => !row.routeEligible || row.distanceKm === null).length;
-  drawRouteSummaryGrid(doc, state, directRows, visibleTotals, "Routenberechnung");
-
-  writeText(doc, state, "1) Direkte Anfahrt vom Startpunkt", {
-    fontSize: 9.2,
-    style: "bold",
-    color: COLORS.accent,
-    lineHeight: 4.3,
-    sectionOnNewPage: "Routenberechnung",
-  });
-
-  if (directRows.length === 0) {
-    writeText(doc, state, "Keine Spielrouten verfügbar.", {
+  writeText(
+    doc,
+    state,
+    `Gesamt: ${formatDistanceLabel(totalKm)} · ${formatMinutesLabel(totalMinutes)} (max. erste 5 Spiele)`,
+    {
       fontSize: 8.8,
-      color: COLORS.muted,
-      lineHeight: 4.1,
-      sectionOnNewPage: "Routenberechnung",
-    });
-  } else {
-    for (const row of directRows) {
-      drawRouteInfoCard(doc, state, row, "Routenberechnung");
-    }
-  }
-
-  state.y += 0.5;
-  writeText(doc, state, "2) Kette zwischen den Spielen", {
-    fontSize: 9.2,
-    style: "bold",
-    color: COLORS.accent,
-    lineHeight: 4.3,
-    sectionOnNewPage: "Routenberechnung",
-  });
-
-  const chainRows = [];
-  if (directRows.length > 0) {
-    chainRows.push({
-      from: safeStartLabel,
-      to: directRows[0].match,
-      title: formatChainLeg("Startpunkt", "Spiel 1", directRows[0].distanceKm, directRows[0].durationMinutes),
-      distanceKm: directRows[0].distanceKm,
-      durationMinutes: directRows[0].durationMinutes,
-    });
-  }
-  for (let index = 0; index < betweenRows.length; index += 1) {
-    const row = betweenRows[index];
-    chainRows.push({
-      from: row.from,
-      to: row.to,
-      title: formatChainLeg(`Spiel ${index + 1}`, `Spiel ${index + 2}`, row.distanceKm, row.durationMinutes),
-      distanceKm: row.distanceKm,
-      durationMinutes: row.durationMinutes,
-    });
-  }
-
-  if (chainRows.length === 0) {
-    writeText(doc, state, "Keine Zwischenstrecken verfügbar.", {
-      fontSize: 8.8,
-      color: COLORS.muted,
-      lineHeight: 4.1,
-      sectionOnNewPage: "Routenberechnung",
-    });
-  } else {
-    for (let index = 0; index < chainRows.length; index += 1) {
-      drawRouteChainRow(doc, state, chainRows[index], index, "Routenberechnung");
-    }
-  }
-
-  if (directRows.length > 0) {
-    state.y += 2;
-    writeText(doc, state, "3) Zusammenfassung", {
-      fontSize: 9.1,
       style: "bold",
       color: COLORS.accent,
-      lineHeight: 4.3,
-      sectionOnNewPage: "Routenberechnung",
+      lineHeight: 4.2,
+      sectionOnNewPage: "Route",
+    },
+  );
+  state.y += 1;
+
+  if (directRows.length > 0) {
+    writeText(doc, state, "Streckenfolge", {
+      fontSize: 9,
+      style: "bold",
+      color: COLORS.text,
+      lineHeight: 4.2,
+      sectionOnNewPage: "Route",
     });
+
+    const firstLeg = directRows[0];
     writeText(
       doc,
       state,
-      `Gesamtstrecke der geplanten Kette: ${formatDistanceLabel(visibleTotals.totalKm)} · Fahrzeit ca. ${formatMinutesLabel(visibleTotals.totalMinutes)}`,
+      `1. Start → Spiel 1 (${truncatePlain(firstLeg.match, 56)}): ${formatDistanceLabel(firstLeg.distanceKm)} · ${formatMinutesLabel(
+        firstLeg.durationMinutes,
+      )}`,
       {
-        fontSize: 9,
-        style: "bold",
+        fontSize: 8.4,
         color: COLORS.text,
-        lineHeight: 4.4,
-        sectionOnNewPage: "Routenberechnung",
+        lineHeight: 4,
+        sectionOnNewPage: "Route",
       },
     );
-    if (missingDirectCount > 0 || visibleTotals.totalKm === null) {
-      writeText(
-        doc,
-        state,
-        "Hinweis: Einzelne Distanzen konnten nicht berechnet werden, weil keine präzisen Spielort-Adressen vorliegen.",
-        {
-          fontSize: 8.2,
-          color: COLORS.muted,
-          lineHeight: 4.1,
-          sectionOnNewPage: "Routenberechnung",
-        },
-      );
+
+    if (betweenRows.length > 0) {
+      for (let index = 0; index < betweenRows.length; index += 1) {
+        const row = betweenRows[index];
+        writeText(
+          doc,
+          state,
+          `${index + 2}. Spiel ${index + 1} → Spiel ${index + 2}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(
+            row.durationMinutes,
+          )}`,
+          {
+            fontSize: 8.4,
+            color: COLORS.text,
+            lineHeight: 4,
+            sectionOnNewPage: "Route",
+          },
+        );
+      }
+    } else if (directRows.length > 1) {
+      for (let index = 1; index < directRows.length; index += 1) {
+        const row = directRows[index];
+        writeText(
+          doc,
+          state,
+          `${index + 1}. Start → Spiel ${index + 1} (${truncatePlain(row.match, 56)}): ${formatDistanceLabel(
+            row.distanceKm,
+          )} · ${formatMinutesLabel(row.durationMinutes)}`,
+          {
+            fontSize: 8.4,
+            color: COLORS.text,
+            lineHeight: 4,
+            sectionOnNewPage: "Route",
+          },
+        );
+      }
     }
+  }
+
+  const missingSegments =
+    directRows.filter((row) => row.routeEligible && row.distanceKm === null).length +
+    betweenRows.filter((row) => row.distanceKm === null).length;
+  if (missingSegments > 0) {
+    state.y += 1;
+    writeText(doc, state, "Hinweis: Einzelne Strecken konnten nicht eindeutig berechnet werden.", {
+      fontSize: 8.1,
+      color: COLORS.muted,
+      lineHeight: 4,
+      sectionOnNewPage: "Route",
+    });
   }
 }
 
@@ -1369,21 +1193,27 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   addPage(state, doc, "Fahrtkosten");
   drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung", "Fahrtkosten");
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  const meta = [
-    scoutName ? `Scout: ${scoutName}` : null,
-    `Datum: ${new Date().toLocaleDateString("de-DE")}`,
-    `Pauschale: ${rate.toFixed(2).replace(".", ",")} €/km`,
-  ]
-    .filter(Boolean)
-    .join("   ·   ");
-  doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
-  state.y += 6.5;
+  writeText(
+    doc,
+    state,
+    [
+      scoutName ? `Scout: ${scoutName}` : null,
+      `Pauschale: ${rate.toFixed(2).replace(".", ",")} €/km`,
+      `Datum: ${new Date().toLocaleDateString("de-DE")}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    {
+      fontSize: 8.8,
+      color: COLORS.muted,
+      lineHeight: 4.2,
+      sectionOnNewPage: "Fahrtkosten",
+    },
+  );
+  state.y += 1;
 
-  const cols = [8, 22, 18, 62, 28, 22, 22];
-  const headers = ["Nr.", "Datum", "Zeit", "Sichtung", "Spielort", "km (H+R)", "Betrag"];
+  const cols = [10, 24, 88, 28, 36];
+  const headers = ["Nr.", "Datum", "Spiel", "km (H+R)", "Betrag"];
   const tableX = MARGIN_X;
   const headerHeight = 6.2;
 
@@ -1430,14 +1260,13 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     const values = [
       String(index + 1),
       dateStr,
-      game.time || "–",
-      truncateText(`${String(game.home || "–")} – ${String(game.away || "–")}`, 34),
-      truncateText(String(game.venue || "–"), 16),
+      truncateText(`${String(game.home || "–")} – ${String(game.away || "–")}`, 52),
       `${hinRueck.toFixed(1).replace(".", ",")} km`,
       `${betrag.toFixed(2).replace(".", ",")} €`,
     ];
 
-    const rowHeight = 5.2;
+    const gameLines = doc.splitTextToSize(values[2], Math.max(8, cols[2] - 2)).slice(0, 2);
+    const rowHeight = Math.max(5.4, gameLines.length * 3.8 + 2.2);
     ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
       drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
       drawTableHeader();
@@ -1456,7 +1285,15 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
       } else {
         doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
       }
-      doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
+      if (colIndex === 2) {
+        let lineY = state.y + 3.8;
+        for (const line of gameLines) {
+          doc.text(sanitizePdfText(line), cursorX, lineY);
+          lineY += 3.8;
+        }
+      } else {
+        doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
+      }
       cursorX += cols[colIndex];
     }
 
@@ -1478,14 +1315,9 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
   doc.text("Gesamt", tableX + 1.8, state.y + 4.2);
 
-  const kmX = tableX + cols.slice(0, 5).reduce((sum, col) => sum + col, 0) + 1.8;
+  const kmX = tableX + cols.slice(0, 3).reduce((sum, col) => sum + col, 0) + 1.8;
   doc.text(`${totalHR.toFixed(1).replace(".", ",")} km`, kmX, state.y + 4.2);
   doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[5], state.y + 4.2);
-  state.y += summaryHeight + 10;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  doc.text("Datum / Unterschrift: _________________________________", MARGIN_X, state.y);
+  doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[3], state.y + 4.2);
+  state.y += summaryHeight + 6;
 }
