@@ -103,4 +103,27 @@ describe("SetupPage", () => {
     expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
   });
+
+  it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {
+    renderSetupPage();
+
+    const dateToggle = screen.getByRole("button", { name: /Scouting-Datum auswählen/i });
+    fireEvent.click(dateToggle);
+
+    expect(screen.getByRole("dialog", { name: /Kalenderauswahl/i })).toBeInTheDocument();
+
+    const dayButtons = screen.getAllByRole("button", { name: /Datum .* auswählen/i });
+    const enabledDay = dayButtons.find((button) => !button.hasAttribute("disabled"));
+    expect(enabledDay).toBeDefined();
+
+    const selectedLabel = String(enabledDay?.getAttribute("aria-label") || "");
+    const selectedDateText = selectedLabel.replace(/^Datum\s+/i, "").replace(/\s+auswählen$/i, "");
+
+    if (enabledDay) {
+      fireEvent.click(enabledDay);
+    }
+
+    expect(screen.queryByRole("dialog", { name: /Kalenderauswahl/i })).not.toBeInTheDocument();
+    expect(dateToggle).toHaveTextContent(selectedDateText);
+  });
 });
