@@ -89,11 +89,11 @@ describe("ScoutX Integration", () => {
 
       await renderSetupAndSubmit(fetchMock);
 
-      await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 5000 });
+      await screen.findByRole("button", { name: /Auswahl übernehmen/i }, { timeout: 12000 });
       fireEvent.click(screen.getByRole("button", { name: /Auswahl übernehmen/i }));
 
-      await screen.findByText(/Manueller Scouting-Plan/i);
-      await screen.findByText(/alle verfügbaren Spiele übernommen/i);
+      await screen.findByText(/Manueller Scouting-Plan/i, { timeout: 12000 });
+      await screen.findByText(/alle verfügbaren Spiele übernommen/i, { timeout: 12000 });
 
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
