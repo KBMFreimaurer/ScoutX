@@ -55,7 +55,20 @@ export function SetupPage() {
     `${activeTeams.length || 0} Vereinsparameter`,
     hasLocation ? "Startort gesetzt" : "Ohne Startort",
   ];
+  const teamParameterCount = activeTeams.length || 0;
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
+  const onConfirmUseCurrentLocation = () => {
+    const shouldProceed =
+      typeof window === "undefined" || typeof window.confirm !== "function"
+        ? true
+        : window.confirm("Soll der genaue Standort jetzt ermittelt werden?");
+
+    if (!shouldProceed) {
+      return;
+    }
+
+    onUseCurrentLocation();
+  };
 
   return (
     <div className="fu">
@@ -147,7 +160,7 @@ export function SetupPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={onUseCurrentLocation}
+                    onClick={onConfirmUseCurrentLocation}
                     disabled={resolvingLocation}
                     style={{
                       ...inp,
@@ -156,7 +169,7 @@ export function SetupPage() {
                       cursor: resolvingLocation ? "not-allowed" : "pointer",
                     }}
                   >
-                    Aktuellen Standort verwenden
+                    Genauen Standort ermitteln
                   </button>
                 </div>
                 <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
@@ -230,7 +243,9 @@ export function SetupPage() {
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
-              Spielplan generieren — {activeTeams.length || 0} Team-Parameter
+              {teamParameterCount > 0
+                ? `Spielplan generieren — ${teamParameterCount} Team-Parameter`
+                : "Spielplan generieren"}
             </span>
           )}
         </PrimaryButton>

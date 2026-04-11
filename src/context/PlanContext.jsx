@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { openScoutPdf } from "../services/pdf";
 import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
@@ -44,22 +43,6 @@ function withTimeout(promise, timeoutMs, fallbackValue) {
         resolve(fallbackValue);
       });
   });
-}
-
-function hasCompleteRouteOverview(routeOverview, expectedStopCount) {
-  if (!routeOverview || !Array.isArray(routeOverview.legs)) {
-    return false;
-  }
-  const expectedLegs = Math.max(1, Math.min(5, expectedStopCount) + 1);
-  return routeOverview.legs.length >= expectedLegs;
-}
-
-function hasCompleteDirectOptions(routeDirectOptions, expectedStopCount) {
-  if (!Array.isArray(routeDirectOptions)) {
-    return false;
-  }
-  const expectedRows = Math.max(0, Math.min(5, expectedStopCount));
-  return routeDirectOptions.length >= expectedRows;
 }
 
 function toSortableKickoff(value) {
@@ -176,29 +159,6 @@ export function PlanProvider({ children }) {
     [setup.kreis, setup.jugend, setup.fromDate, setup.focus, setup.startLocation],
   );
 
-  const pdfSyncContext = useMemo(
-    () => ({
-      source: gamesCtx.dataSourceUsed,
-      adapterEndpoint: setup.adapterEndpoint,
-      adapterToken: setup.adapterToken,
-      kreisId: setup.kreisId,
-      jugendId: setup.jugendId,
-      fromDate: setup.fromDate,
-      teams: setup.activeTeams,
-      turnier: Boolean(setup.jugend?.turnier),
-    }),
-    [
-      gamesCtx.dataSourceUsed,
-      setup.adapterEndpoint,
-      setup.adapterToken,
-      setup.kreisId,
-      setup.jugendId,
-      setup.fromDate,
-      setup.activeTeams,
-      setup.jugend,
-    ],
-  );
-
   const routeGames = useMemo(() => {
     return [...(Array.isArray(gamesCtx.games) ? gamesCtx.games : [])]
       .sort((a, b) => {
@@ -277,76 +237,7 @@ export function PlanProvider({ children }) {
     setPdfExporting(true);
 
     try {
-      let resolvedRouteOverview = routeOverview || null;
-      let resolvedDirectOptions = routeDirectOptions;
-      if (setup.startLocation && routePreviewGames.length > 0) {
-        const expectedDirectCount = routePreviewGames.length;
-        const hasRouteOverview = hasCompleteRouteOverview(resolvedRouteOverview, expectedDirectCount);
-        const hasDirectOptions = hasCompleteDirectOptions(resolvedDirectOptions, expectedDirectCount);
-
-        if (!hasRouteOverview || !hasDirectOptions) {
-          setRouteCalculating(true);
-        }
-
-        try {
-          if (!resolvedRouteOverview && !strictGoogleRouting) {
-            resolvedRouteOverview = calculateRoute(setup.startLocation, routePreviewGames);
-            setRouteOverview(resolvedRouteOverview);
-          }
-
-          const [routed, direct] = !hasRouteOverview || !hasDirectOptions
-            ? await Promise.all([
-                hasRouteOverview
-                  ? Promise.resolve(null)
-                  : withTimeout(
-                      calculateRouteWithDriving(setup.startLocation, routePreviewGames),
-                      ROUTE_TIMEOUT_MS,
-                      null,
-                    ),
-                hasDirectOptions
-                  ? Promise.resolve(resolvedDirectOptions)
-                  : withTimeout(
-                      calculateDirectStartRoutes(setup.startLocation, routePreviewGames, expectedDirectCount),
-                      ROUTE_TIMEOUT_MS,
-                      [],
-                    ),
-              ])
-            : [null, resolvedDirectOptions];
-
-          if (routed) {
-            resolvedRouteOverview = routed;
-            setRouteOverview(routed);
-          }
-
-          if (Array.isArray(direct) && (!hasDirectOptions || direct.length >= expectedDirectCount)) {
-            resolvedDirectOptions = direct;
-            setRouteDirectOptions(direct);
-          }
-        } catch {
-          if (!resolvedRouteOverview && !strictGoogleRouting) {
-            resolvedRouteOverview = calculateRoute(setup.startLocation, routePreviewGames);
-            setRouteOverview(resolvedRouteOverview);
-          }
-        } finally {
-          if (!hasRouteOverview || !hasDirectOptions) {
-            setRouteCalculating(false);
-          }
-        }
-      }
-
-      const pdfCfg = {
-        ...cfg,
-        startLocation: setup.startLocation || null,
-        routeOverview: resolvedRouteOverview || null,
-        routeDirectOptions: Array.isArray(resolvedDirectOptions) ? resolvedDirectOptions : [],
-      };
-
       if (String(plan || "").trim()) {
-        const result = await openScoutPdf(gamesCtx.games, plan, pdfCfg, null, pdfSyncContext);
-        if (result?.ok === false) {
-          setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
-          return;
-        }
         navigate("/plan");
         return;
       }
@@ -364,12 +255,6 @@ export function PlanProvider({ children }) {
       });
 
       setPlan(quickPlan);
-      const result = await openScoutPdf(gamesCtx.games, quickPlan, pdfCfg, null, pdfSyncContext);
-      if (result?.ok === false) {
-        setup.setErr(`PDF konnte nicht erstellt werden: ${result?.error || "Unbekannter Fehler"}`);
-        return;
-      }
-
       navigate("/plan");
     } finally {
       setPdfExporting(false);
@@ -378,14 +263,8 @@ export function PlanProvider({ children }) {
     pdfExporting,
     plan,
     gamesCtx.games,
-    cfg,
-    pdfSyncContext,
-    routeOverview,
-    routeDirectOptions,
-    routePreviewGames,
     navigate,
     setup,
-    strictGoogleRouting,
   ]);
 
   const onBackGames = useCallback(() => {

@@ -88,7 +88,7 @@ describe("ScoutX Integration", () => {
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
-    expect(openScoutPdf).toHaveBeenCalledTimes(1);
+    expect(openScoutPdf).not.toHaveBeenCalled();
   });
 
   it("zeigt Adapter-Timeout im Setup als Fehlermeldung", async () => {

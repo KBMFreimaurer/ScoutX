@@ -55,10 +55,9 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
                   lineHeight: 1.15,
                   color: selected ? C.white : C.offWhite,
                   maxWidth: "100%",
-                  whiteSpace: "normal",
-                  overflowWrap: "anywhere",
-                  wordBreak: "break-word",
-                  textWrap: "balance",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
                 {kreis.label}

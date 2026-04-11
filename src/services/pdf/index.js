@@ -9,6 +9,7 @@ import {
 } from "./sections";
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
+const PREVIEW_URL_REVOKE_DELAY_MS = 10 * 60 * 1000;
 const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_TIMEOUT_MS || 12000);
 const AUTHORITATIVE_SYNC_TIMEOUT_MS = Math.max(2000, Number(import.meta.env?.VITE_PDF_SYNC_TIMEOUT_MS || 8000));
 const activeBlobUrls = new Set();
@@ -302,14 +303,18 @@ export async function loadJsPdfCtor() {
   return jsPdfCtorPromise;
 }
 
-function trackBlobUrl(url) {
+function trackBlobUrl(url, delayMs = URL_REVOKE_DELAY_MS) {
   activeBlobUrls.add(url);
   window.setTimeout(() => {
-    if (activeBlobUrls.has(url)) {
-      URL.revokeObjectURL(url);
-      activeBlobUrls.delete(url);
-    }
-  }, URL_REVOKE_DELAY_MS);
+    revokeTrackedBlobUrl(url);
+  }, delayMs);
+}
+
+export function revokeTrackedBlobUrl(url) {
+  if (activeBlobUrls.has(url)) {
+    URL.revokeObjectURL(url);
+    activeBlobUrls.delete(url);
+  }
 }
 
 function triggerDownload(url, fileName) {
@@ -360,8 +365,9 @@ export async function enrichPdfRouteData(cfg, games) {
   return nextCfg;
 }
 
-export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncContext = null) {
+export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncContext = null, options = null) {
   try {
+    const previewMode = String(options?.mode || "").toLowerCase() === "preview";
     const prepared = await prepareGamesForPdf(games, syncContext);
     const JsPdfCtor = await loadJsPdfCtor();
     const routeEnrichedCfg = await enrichPdfRouteData(cfg, prepared.games);
@@ -370,7 +376,19 @@ export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncCo
     const blobUrl = URL.createObjectURL(blob);
     const fileName = buildFileName(routeEnrichedCfg);
 
-    trackBlobUrl(blobUrl);
+    trackBlobUrl(blobUrl, previewMode ? PREVIEW_URL_REVOKE_DELAY_MS : URL_REVOKE_DELAY_MS);
+
+    if (previewMode) {
+      return {
+        ok: true,
+        correctedCount: prepared.correctedCount,
+        previewUrl: blobUrl,
+        fileName,
+        download: () => triggerDownload(blobUrl, fileName),
+        revoke: () => revokeTrackedBlobUrl(blobUrl),
+      };
+    }
+
     triggerDownload(blobUrl, fileName);
 
     if (popupWindow && !popupWindow.closed) {

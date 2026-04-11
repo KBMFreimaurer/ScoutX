@@ -99,6 +99,7 @@ export function PlanPage() {
           }}
           variant="primary"
           label="PDF herunterladen"
+          confirmBeforeDownload
           disabled={!String(plan || "").trim() || (Boolean(startLocation) && routeCalculating)}
           onExportSuccess={() => {
             setErr("");

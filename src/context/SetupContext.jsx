@@ -14,6 +14,30 @@ const ROMAN_TO_ARABIC = {
   IV: "4",
 };
 
+function humanizeGeolocationError(error) {
+  const code = Number(error?.code);
+  const rawMessage = String(error?.message || "").trim();
+  const lower = rawMessage.toLowerCase();
+
+  if (code === 1 || /permission|denied|not have permission|forbidden/.test(lower)) {
+    return "Standortzugriff wurde blockiert. Bitte Standortfreigabe im Browser erlauben.";
+  }
+
+  if (code === 2 || /position unavailable|unavailable/.test(lower)) {
+    return "Standort konnte derzeit nicht bestimmt werden. Bitte erneut versuchen.";
+  }
+
+  if (code === 3 || /timeout|timed out/.test(lower)) {
+    return "Standortabfrage hat zu lange gedauert. Bitte erneut versuchen.";
+  }
+
+  if (/secure context|only secure origins|https/.test(lower)) {
+    return "Standortzugriff funktioniert nur über HTTPS oder localhost.";
+  }
+
+  return "Aktueller Standort konnte nicht verwendet werden.";
+}
+
 function isBambiniJugend(jugend) {
   return String(jugend?.id || "").trim().toLowerCase() === "bambini";
 }
@@ -259,7 +283,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       setStartLocation(location);
       setLocationDraft(location.label);
     } catch (error) {
-      setLocationError(error?.message || "Aktueller Standort konnte nicht verwendet werden.");
+      setLocationError(humanizeGeolocationError(error));
     } finally {
       setResolvingLocation(false);
     }
