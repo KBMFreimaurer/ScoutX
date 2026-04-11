@@ -8,6 +8,7 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
       <div className="kreis-grid">
         {kreise.map((kreis) => {
           const selected = kreisId === kreis.id;
+          const isLongLabel = String(kreis.label || "").length > 14;
           return (
             <button
               type="button"
@@ -28,7 +29,9 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
                 cursor: "pointer",
                 textAlign: "left",
                 transition: "all 0.2s ease",
-                minHeight: 64,
+                minHeight: isMobile ? 92 : 98,
+                minWidth: 0,
+                overflow: "hidden",
               }}
             >
               <span
@@ -44,7 +47,20 @@ export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
               >
                 {selected ? "AKTIV" : "KREIS"}
               </span>
-              <span style={{ display: "block", fontWeight: 700, fontSize: 17, lineHeight: 1.1, color: selected ? C.white : C.offWhite }}>
+              <span
+                style={{
+                  display: "block",
+                  fontWeight: 700,
+                  fontSize: isLongLabel ? (isMobile ? 15 : 16) : 17,
+                  lineHeight: 1.15,
+                  color: selected ? C.white : C.offWhite,
+                  maxWidth: "100%",
+                  whiteSpace: "normal",
+                  overflowWrap: "anywhere",
+                  wordBreak: "break-word",
+                  textWrap: "balance",
+                }}
+              >
                 {kreis.label}
               </span>
               <span style={{ fontSize: 11, color: C.gray, marginTop: 2, display: "block" }}>{kreis.kurz}</span>

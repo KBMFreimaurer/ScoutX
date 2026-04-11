@@ -30,8 +30,6 @@ export function SetupPage() {
     locationError,
     resolvingLocation,
     hasLocation,
-    favorites,
-    favoriteDraft,
     onSelectKreis,
     onSelectJugend,
     onToggleJugendSubLevel,
@@ -49,10 +47,6 @@ export function SetupPage() {
     onResolveLocation,
     onUseCurrentLocation,
     onClearLocation,
-    onSetFavoriteDraft,
-    onAddFavoriteTeam,
-    onRemoveFavoriteTeam,
-    onClearFavoriteTeams,
   } = useScoutX();
   const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
   const summaryParts = [
@@ -122,7 +116,7 @@ export function SetupPage() {
             <div style={{ ...card, marginBottom: 16 }}>
               <div style={{ ...secH, marginBottom: 14 }}>
                 <span className="section-number">06</span>
-                Startort & Favoriten
+                Startort
               </div>
 
               <div style={{ marginBottom: 10 }}>
@@ -189,77 +183,6 @@ export function SetupPage() {
                     Standort entfernen
                   </button>
                 ) : null}
-              </div>
-
-              <div>
-                <label htmlFor="favorite-team-input" style={lbl}>
-                  Beobachtete Teams (immer priorisieren)
-                </label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input
-                    id="favorite-team-input"
-                    className="scout-input"
-                    value={favoriteDraft}
-                    onChange={(event) => onSetFavoriteDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        onAddFavoriteTeam();
-                      }
-                    }}
-                    placeholder="Verein/Team eingeben"
-                    style={{ ...inp, flex: 1, minWidth: 220 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onAddFavoriteTeam()}
-                    style={{ ...inp, width: "auto", minWidth: 120, cursor: "pointer" }}
-                  >
-                    Favorit +
-                  </button>
-                </div>
-
-                {favorites.length ? (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {favorites.map((team, index) => (
-                        <button
-                          key={`${team}-${index}`}
-                          type="button"
-                          onClick={() => onRemoveFavoriteTeam(index)}
-                          style={{
-                            border: `1px solid ${C.greenBorder}`,
-                            background: C.greenDim,
-                            color: C.green,
-                            borderRadius: 999,
-                            padding: "5px 10px",
-                            fontSize: 12,
-                            cursor: "pointer",
-                          }}
-                        >
-                          ★ {team}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onClearFavoriteTeams}
-                      style={{
-                        marginTop: 8,
-                        border: "none",
-                        background: "transparent",
-                        color: C.gray,
-                        cursor: "pointer",
-                        padding: 0,
-                        fontSize: 12,
-                      }}
-                    >
-                      Alle Favoriten entfernen
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>Keine Favoriten gesetzt.</div>
-                )}
               </div>
             </div>
           </div>
