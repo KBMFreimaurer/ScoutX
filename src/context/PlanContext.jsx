@@ -50,7 +50,7 @@ function toSortableKickoff(value) {
   return KNOWN_TIME_RE.test(text) ? text : "99:99";
 }
 
-function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier }) {
+function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier, usedFallbackAll = false }) {
   const sortedGames = [...(Array.isArray(games) ? games : [])].sort((a, b) => {
     const dateDelta = a.dateObj - b.dateObj;
     if (dateDelta !== 0) {
@@ -64,7 +64,11 @@ function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier }) {
   lines.push("Auswahl durch Scout (keine automatische Empfehlung).");
   lines.push(`Wettbewerb: ${jugendLabel || "n/a"} · ${kreisLabel || "n/a"}`);
   lines.push(`Turniermodus: ${isTurnier ? "Ja" : "Nein"}`);
-  lines.push(`Ausgewählte Spiele: ${sortedGames.length}`);
+  if (usedFallbackAll) {
+    lines.push(`Keine manuelle Auswahl markiert · alle verfügbaren Spiele übernommen (${sortedGames.length}).`);
+  } else {
+    lines.push(`Ausgewählte Spiele: ${sortedGames.length}`);
+  }
   lines.push("");
   lines.push("Besuchsplan");
   lines.push("ROUTENPLAN");
@@ -80,7 +84,7 @@ function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier }) {
 
   lines.push("");
   lines.push("Hinweis:");
-  lines.push("Fahrtkosten-Abrechnung und PDF basieren auf dieser manuellen Auswahl.");
+  lines.push("Fahrtkosten-Abrechnung und PDF basieren auf den Spielen dieses Plans.");
 
   return cleanScoutPlanText(lines.join("\n"));
 }
@@ -109,8 +113,16 @@ export function PlanProvider({ children }) {
     [setup.kreis, setup.jugend, setup.fromDate, setup.focus, setup.startLocation],
   );
 
+  const effectivePlannedGames = useMemo(() => {
+    const selectedGames = Array.isArray(gamesCtx.plannedGames) ? gamesCtx.plannedGames : [];
+    if (selectedGames.length > 0) {
+      return selectedGames;
+    }
+    return Array.isArray(gamesCtx.games) ? gamesCtx.games : [];
+  }, [gamesCtx.plannedGames, gamesCtx.games]);
+
   const routeGames = useMemo(() => {
-    return [...(Array.isArray(gamesCtx.plannedGames) ? gamesCtx.plannedGames : [])]
+    return [...effectivePlannedGames]
       .sort((a, b) => {
         const ad = a?.dateObj instanceof Date ? a.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
         const bd = b?.dateObj instanceof Date ? b.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
@@ -119,7 +131,7 @@ export function PlanProvider({ children }) {
         }
         return toSortableKickoff(a.time).localeCompare(toSortableKickoff(b.time));
       });
-  }, [gamesCtx.plannedGames]);
+  }, [effectivePlannedGames]);
 
   const routePreviewGames = useMemo(() => routeGames.slice(0, 5), [routeGames]);
 
@@ -192,17 +204,21 @@ export function PlanProvider({ children }) {
         return;
       }
 
-      if (!Array.isArray(gamesCtx.plannedGames) || gamesCtx.plannedGames.length === 0) {
-        setup.setErr("Bitte mindestens ein Spiel auswählen, das du besuchen möchtest.");
+      if (!Array.isArray(effectivePlannedGames) || effectivePlannedGames.length === 0) {
+        setup.setErr("Keine Spiele für den Plan verfügbar.");
         navigate("/games");
         return;
       }
 
+      const selectedGames = Array.isArray(gamesCtx.plannedGames) ? gamesCtx.plannedGames : [];
+      const usedFallbackAll = selectedGames.length === 0;
+
       const manualPlan = buildManualScoutPlan({
-        games: gamesCtx.plannedGames,
+        games: effectivePlannedGames,
         jugendLabel: setup.jugend?.label,
         kreisLabel: setup.kreis?.label,
         isTurnier: Boolean(setup.jugend?.turnier),
+        usedFallbackAll,
       });
 
       setPlan(manualPlan);
@@ -214,6 +230,7 @@ export function PlanProvider({ children }) {
     pdfExporting,
     plan,
     gamesCtx.plannedGames,
+    effectivePlannedGames,
     navigate,
     setup,
   ]);

@@ -244,7 +244,7 @@ export function GamesPage() {
             <span style={{ color: C.offWhite, fontWeight: 700 }}>
               {selectedGameCount} von {games.length}
             </span>{" "}
-            Spielen markiert
+            Spielen markiert. Ohne Auswahl werden automatisch alle Spiele übernommen.
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -360,7 +360,7 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting || selectedGameCount === 0} style={{ width: "100%" }}>
+      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
           <svg
             width="16"
