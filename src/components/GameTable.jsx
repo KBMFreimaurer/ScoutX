@@ -220,26 +220,29 @@ export function GameTable({
                 >
                   {selectionEnabled ? (
                     <td style={{ padding: "11px 12px", fontSize: 12, color: C.gray }}>
-                      <button
-                        type="button"
-                        aria-pressed={Boolean(selectedGameIds?.[game.id])}
-                        aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
-                        onClick={() => onToggleSelectedGame?.(game.id)}
+                      <label
                         style={{
-                          border: `1px solid ${selectedGameIds?.[game.id] ? C.greenBorder : C.border}`,
-                          borderRadius: 8,
-                          background: selectedGameIds?.[game.id] ? C.greenDim : "rgba(255,255,255,0.03)",
-                          color: selectedGameIds?.[game.id] ? C.green : C.gray,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "flex-start",
+                          gap: 6,
                           cursor: "pointer",
-                          padding: "5px 8px",
-                          minHeight: 30,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          whiteSpace: "nowrap",
+                          userSelect: "none",
                         }}
                       >
-                        {selectedGameIds?.[game.id] ? "Ausgewählt" : "Auswählen"}
-                      </button>
+                        <input
+                          type="checkbox"
+                          aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
+                          checked={Boolean(selectedGameIds?.[game.id])}
+                          onChange={() => onToggleSelectedGame?.(game.id)}
+                          style={{
+                            width: 16,
+                            height: 16,
+                            accentColor: C.green,
+                            cursor: "pointer",
+                          }}
+                        />
+                      </label>
                     </td>
                   ) : null}
                   <td style={{ padding: "11px 16px", fontSize: 13 }}>

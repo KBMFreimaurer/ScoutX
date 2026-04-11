@@ -46,6 +46,7 @@ export function GameCards({
       {games.map((game) => {
         const noteOpen = expandedNoteId === game.id;
         const gameUrl = resolveGameMatchUrl(game);
+        const isSelected = Boolean(selectedGameIds?.[game.id]);
 
         return (
           <div
@@ -54,23 +55,47 @@ export function GameCards({
             style={{
               padding: "14px 16px",
               borderRadius: 12,
-              background: "rgba(255,255,255,0.03)",
-              border: `1px solid ${C.border}`,
+              background: isSelected ? "rgba(0,200,83,0.08)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${isSelected ? C.greenBorder : C.border}`,
               marginBottom: 8,
               transition: "all 0.15s ease",
             }}
           >
-            <div
-              style={{
-                fontWeight: 600,
-                color: C.white,
-                fontSize: 14,
-                marginBottom: 8,
-                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              }}
-            >
-              {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
-              {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+              {selectionEnabled ? (
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    marginTop: 1,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
+                    checked={Boolean(selectedGameIds?.[game.id])}
+                    onChange={() => onToggleSelectedGame?.(game.id)}
+                    style={{ width: 16, height: 16, accentColor: C.green, cursor: "pointer" }}
+                  />
+                </label>
+              ) : null}
+              <div
+                style={{
+                  fontWeight: 600,
+                  color: C.white,
+                  fontSize: 14,
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily:
+                    "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                }}
+              >
+                {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
+                {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
+              </div>
             </div>
 
             <div
@@ -107,27 +132,6 @@ export function GameCards({
 
             <div style={{ marginTop: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {selectionEnabled ? (
-                  <button
-                    type="button"
-                    onClick={() => onToggleSelectedGame?.(game.id)}
-                    aria-pressed={selectedGameIds?.[game.id]}
-                    aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
-                    style={{
-                      border: `1px solid ${selectedGameIds?.[game.id] ? C.greenBorder : C.border}`,
-                      borderRadius: 8,
-                      background: selectedGameIds?.[game.id] ? C.greenDim : "rgba(255,255,255,0.03)",
-                      color: selectedGameIds?.[game.id] ? C.green : C.gray,
-                      cursor: "pointer",
-                      padding: "6px 10px",
-                      minHeight: 34,
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {selectedGameIds?.[game.id] ? "Für Besuch ausgewählt" : "Für Besuch auswählen"}
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onClick={() => onToggleNote?.(game.id)}

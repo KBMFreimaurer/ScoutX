@@ -242,8 +242,8 @@ export function GamesPage() {
           <div style={{ fontSize: 12, color: C.gray, lineHeight: 1.45, maxWidth: 680 }}>
             <div style={{ color: C.offWhite, fontWeight: 700, marginBottom: 2 }}>Spiele auswählen</div>
             <div>
-              Desktop: links pro Zeile auf <strong>Auswählen</strong> klicken. Mobil: im Spiel auf{" "}
-              <strong>Für Besuch auswählen</strong> tippen.
+              Desktop: links neben dem Spiel die <strong>Checkbox</strong> anklicken. Mobil: im Spiel die{" "}
+              <strong>Checkbox</strong> aktivieren.
             </div>
             <div>
               Aktuell markiert:{" "}
