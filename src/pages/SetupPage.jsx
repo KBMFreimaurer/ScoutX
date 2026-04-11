@@ -82,7 +82,7 @@ export function SetupPage() {
           <span className="setup-exec-eyebrow">Systemkonfiguration</span>
           <h1 className="setup-exec-title">Scouting-Plan konfigurieren</h1>
           <p className="setup-exec-subline">
-            Definiere Kreis, Altersklasse und optionale Team-Parameter für eine saubere, schnelle Spielauswahl.
+            Definiere Kreis, Altersklasse und optional Mannschaften/Vereine für eine saubere, schnelle Spielauswahl.
           </p>
         </div>
         <div className="setup-exec-status" aria-live="polite">

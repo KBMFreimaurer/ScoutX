@@ -179,7 +179,7 @@ export function GameTable({
               <th
                 scope="col"
                 style={{
-                  width: "7%",
+                  width: "11%",
                   textAlign: "left",
                   padding: "10px 12px",
                   fontSize: 10,
@@ -189,7 +189,7 @@ export function GameTable({
                   fontWeight: 600,
                 }}
               >
-                Besuch
+                Auswahl
               </th>
             ) : null}
             <th scope="col" style={{ width: "27%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
@@ -213,18 +213,33 @@ export function GameTable({
                   className="row-item"
                   style={{
                     borderBottom: noteOpen ? "none" : index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none",
+                    background:
+                      selectionEnabled && Boolean(selectedGameIds?.[game.id]) ? "rgba(0,200,83,0.08)" : "transparent",
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
                   }}
                 >
                   {selectionEnabled ? (
                     <td style={{ padding: "11px 12px", fontSize: 12, color: C.gray }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Spiel besuchen: ${game.home} gegen ${game.away}`}
-                        checked={Boolean(selectedGameIds?.[game.id])}
-                        onChange={() => onToggleSelectedGame?.(game.id)}
-                        style={{ accentColor: C.green, cursor: "pointer" }}
-                      />
+                      <button
+                        type="button"
+                        aria-pressed={Boolean(selectedGameIds?.[game.id])}
+                        aria-label={`Spiel auswählen: ${game.home} gegen ${game.away}`}
+                        onClick={() => onToggleSelectedGame?.(game.id)}
+                        style={{
+                          border: `1px solid ${selectedGameIds?.[game.id] ? C.greenBorder : C.border}`,
+                          borderRadius: 8,
+                          background: selectedGameIds?.[game.id] ? C.greenDim : "rgba(255,255,255,0.03)",
+                          color: selectedGameIds?.[game.id] ? C.green : C.gray,
+                          cursor: "pointer",
+                          padding: "5px 8px",
+                          minHeight: 30,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {selectedGameIds?.[game.id] ? "Ausgewählt" : "Auswählen"}
+                      </button>
                     </td>
                   ) : null}
                   <td style={{ padding: "11px 16px", fontSize: 13 }}>

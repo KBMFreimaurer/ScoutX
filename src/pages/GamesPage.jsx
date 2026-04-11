@@ -239,12 +239,19 @@ export function GamesPage() {
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 12, color: C.gray }}>
-            Manuelle Auswahl für Besuch/Abrechnung:{" "}
-            <span style={{ color: C.offWhite, fontWeight: 700 }}>
-              {selectedGameCount} von {games.length}
-            </span>{" "}
-            Spielen markiert. Ohne Auswahl werden automatisch alle Spiele übernommen.
+          <div style={{ fontSize: 12, color: C.gray, lineHeight: 1.45, maxWidth: 680 }}>
+            <div style={{ color: C.offWhite, fontWeight: 700, marginBottom: 2 }}>Spiele auswählen</div>
+            <div>
+              Desktop: links pro Zeile auf <strong>Auswählen</strong> klicken. Mobil: im Spiel auf{" "}
+              <strong>Für Besuch auswählen</strong> tippen.
+            </div>
+            <div>
+              Aktuell markiert:{" "}
+              <span style={{ color: C.offWhite, fontWeight: 700 }}>
+                {selectedGameCount} von {games.length}
+              </span>
+              . Ohne Auswahl werden automatisch alle Spiele übernommen.
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -373,7 +380,7 @@ export function GamesPage() {
           >
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
           </svg>
-          {pdfExporting ? "Plan wird erstellt..." : "Auswahl übernehmen"}
+          {pdfExporting ? "Plan wird erstellt..." : "Plan öffnen"}
         </span>
       </PrimaryButton>
     </div>

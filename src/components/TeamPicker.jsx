@@ -26,7 +26,7 @@ export function TeamPicker({
   return (
     <div style={card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
-        <SectionHeader num="03">Vereins-Parameter (optional)</SectionHeader>
+        <SectionHeader num="03">Mannschaften auswählen (optional)</SectionHeader>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span
             style={{
@@ -65,7 +65,19 @@ export function TeamPicker({
         </div>
       </div>
 
-      <label htmlFor="team-draft-input" style={lbl}>Verein hinzufügen</label>
+      <p
+        style={{
+          marginTop: -2,
+          marginBottom: 12,
+          fontSize: 12,
+          color: C.gray,
+          lineHeight: 1.45,
+        }}
+      >
+        Hier trägst du Vereine/Mannschaften ein, die in der Spielliste hervorgehoben werden sollen.
+      </p>
+
+      <label htmlFor="team-draft-input" style={lbl}>Mannschaft/Verein hinzufügen</label>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <input
           id="team-draft-input"
