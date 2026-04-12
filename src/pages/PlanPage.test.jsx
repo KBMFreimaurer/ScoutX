@@ -109,4 +109,28 @@ describe("PlanPage", () => {
       "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
     );
   });
+
+  it("zeigt manuelle Arbeitszeiterfassung in der Fahrtkosten-Sektion", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            time: "14:00",
+            venue: "Sportplatz A",
+            distanceKm: 11.2,
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+
+    expect(screen.getByText(/Arbeitszeiterfassung \(manuell\)/i)).toBeInTheDocument();
+  });
 });

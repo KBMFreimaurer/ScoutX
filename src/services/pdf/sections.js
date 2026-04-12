@@ -11,6 +11,7 @@ import {
   sortGamesByDateTime,
 } from "./layout";
 import { COLORS, normalizeLookup, sanitizePdfText, toSafeString, truncateText } from "./styles";
+import { buildAttendanceRows, formatPresenceMinutes, normalizePresenceMinutes } from "../../utils/arbeitszeit";
 import { resolveGameMatchUrl } from "../../utils/gameLinks";
 import { buildFahrtkostenRows } from "../../utils/fahrtkosten";
 
@@ -1243,7 +1244,9 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   const scoutName = String(cfg?.scoutName || "").trim();
   const rate = Number(cfg?.kmPauschale) > 0 ? Number(cfg.kmPauschale) : 0.3;
   const overrides = cfg?.kmOverrides ?? {};
+  const presenceOverrides = cfg?.presenceOverrides ?? {};
   const fahrtkostenModel = buildFahrtkostenRows(games, cfg?.routeOverview);
+  const attendanceRows = buildAttendanceRows(games);
   const rows = fahrtkostenModel.rows;
   const isRouteMode = fahrtkostenModel.mode === "route";
   const startLocationLabel = toSafeString(cfg?.startLocationLabel || cfg?.startLocation?.label || "Startort") || "Startort";
@@ -1279,6 +1282,13 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     .filter((row) => Number.isFinite(row.distanceKm) || Number.isFinite(row.durationMinutes));
   const routeTotalKm = toFiniteNumberOrNull(cfg?.routeOverview?.totalKm);
   const routeTotalMinutes = toFiniteNumberOrNull(cfg?.routeOverview?.estimatedMinutes);
+  const presenceMinutesForGame = (gameId) => {
+    const id = String(gameId ?? "").trim();
+    if (!id) {
+      return null;
+    }
+    return normalizePresenceMinutes(presenceOverrides[id]);
+  };
 
   if (rows.length === 0) {
     return;
@@ -1512,4 +1522,134 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
   doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[3], state.y + 4.2);
   state.y += summaryHeight + 6;
+
+  if (attendanceRows.length === 0) {
+    return;
+  }
+
+  writeText(doc, state, "Arbeitszeiterfassung (manuell)", {
+    fontSize: 9,
+    style: "bold",
+    color: COLORS.text,
+    lineHeight: 4.2,
+    sectionOnNewPage: "Fahrtkosten",
+  });
+  writeText(
+    doc,
+    state,
+    "Hier kann die tatsächliche Vor-Ort-Dauer pro Spiel dokumentiert werden (z. B. früher gegangen oder länger geblieben).",
+    {
+      fontSize: 8.2,
+      color: COLORS.muted,
+      lineHeight: 4,
+      sectionOnNewPage: "Fahrtkosten",
+    },
+  );
+  state.y += 1;
+
+  const attendanceCols = [10, 24, 16, 98, 38];
+  const attendanceHeaders = ["Nr.", "Datum", "Zeit", "Spiel", "Vor Ort"];
+  const attendanceTableX = MARGIN_X;
+  const attendanceHeaderHeight = 6;
+
+  function drawAttendanceHeader() {
+    ensureSpace(doc, state, attendanceHeaderHeight + 1, "Fahrtkosten", () => {
+      drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+      drawAttendanceHeader();
+    });
+
+    doc.setFillColor(237, 242, 247);
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.rect(attendanceTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, attendanceHeaderHeight, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+
+    let cursorX = attendanceTableX + 1.8;
+    for (let index = 0; index < attendanceHeaders.length; index += 1) {
+      doc.text(attendanceHeaders[index], cursorX, state.y + 4.2);
+      cursorX += attendanceCols[index];
+    }
+
+    state.y += attendanceHeaderHeight;
+  }
+
+  drawAttendanceHeader();
+
+  let recordedGames = 0;
+  let totalPresenceMinutes = 0;
+
+  for (let index = 0; index < attendanceRows.length; index += 1) {
+    const row = attendanceRows[index];
+    const presenceMinutes = presenceMinutesForGame(row.id);
+    const presenceLabel = formatPresenceMinutes(presenceMinutes);
+    const values = [
+      String(index + 1),
+      row.dateLabel || "--",
+      row.timeLabel || "--:--",
+      truncatePlain(row.matchLabel || "-", 66),
+      presenceLabel,
+    ];
+
+    if (Number.isFinite(presenceMinutes)) {
+      recordedGames += 1;
+      totalPresenceMinutes += presenceMinutes;
+    }
+
+    const matchLines = doc.splitTextToSize(values[3], Math.max(8, attendanceCols[3] - 2)).slice(0, 2);
+    const rowHeight = Math.max(6, matchLines.length * 3.8 + 2.2);
+    ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
+      drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+      drawAttendanceHeader();
+    });
+
+    doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+    doc.rect(attendanceTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.1);
+
+    let cursorX = attendanceTableX + 1.8;
+    for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
+      const value = values[colIndex];
+      if (colIndex === values.length - 1 && !Number.isFinite(presenceMinutes)) {
+        doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+      } else if (colIndex === values.length - 1) {
+        doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+      } else {
+        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+      }
+
+      if (colIndex === 3) {
+        let lineY = state.y + 3.8;
+        for (const line of matchLines) {
+          doc.text(sanitizePdfText(line), cursorX, lineY);
+          lineY += 3.8;
+        }
+      } else {
+        doc.text(sanitizePdfText(value), cursorX, state.y + 3.8);
+      }
+      cursorX += attendanceCols[colIndex];
+    }
+
+    state.y += rowHeight;
+  }
+
+  state.y += 1.8;
+  writeText(doc, state, `Erfasst: ${recordedGames}/${attendanceRows.length} Spiele`, {
+    fontSize: 8.4,
+    color: COLORS.muted,
+    lineHeight: 4,
+    sectionOnNewPage: "Fahrtkosten",
+  });
+
+  const totalPresenceLabel = recordedGames > 0 ? formatPresenceMinutes(totalPresenceMinutes) : "nicht erfasst";
+  writeText(doc, state, `Gesamte Vor-Ort-Dauer: ${totalPresenceLabel}`, {
+    fontSize: 8.6,
+    style: "bold",
+    color: COLORS.text,
+    lineHeight: 4,
+    sectionOnNewPage: "Fahrtkosten",
+  });
 }

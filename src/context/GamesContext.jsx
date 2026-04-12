@@ -119,10 +119,6 @@ function ensureGameIds(games) {
 
     usedIds.add(nextId);
 
-    if (rawExistingId === nextId) {
-      return game;
-    }
-
     return {
       ...game,
       id: nextId,
@@ -388,7 +384,7 @@ export function GamesProvider({ children }) {
   }, []);
 
   const onTogglePlannedGame = useCallback((gameId) => {
-    const id = String(gameId || "").trim();
+    const id = String(gameId ?? "").trim();
     if (!id) {
       return;
     }
@@ -406,8 +402,9 @@ export function GamesProvider({ children }) {
   const onSelectAllPlannedGames = useCallback(() => {
     setSelectedGameIds(() =>
       games.reduce((acc, game) => {
-        if (game?.id) {
-          acc[game.id] = true;
+        const id = String(game?.id ?? "").trim();
+        if (id) {
+          acc[id] = true;
         }
         return acc;
       }, {}),

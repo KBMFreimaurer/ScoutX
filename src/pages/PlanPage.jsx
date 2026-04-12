@@ -6,8 +6,10 @@ import { PDFExport } from "../components/PDFExport";
 import { PlanView } from "../components/PlanView";
 import { FahrtkostenTabelle } from "../components/FahrtkostenTabelle";
 import { SectionHeader } from "../components/SectionHeader";
+import { STORAGE_KEYS } from "../config/storage";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
+import { normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
 
@@ -49,6 +51,34 @@ export function PlanPage() {
   const totalPages = shouldPaginate ? Math.ceil(activeGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
   const [kmOverrides, setKmOverrides] = useState({});
+  const [presenceMinutesByGame, setPresenceMinutesByGame] = useState(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEYS.presence);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+
+      return Object.entries(parsed).reduce((acc, [key, value]) => {
+        const id = String(key || "").trim();
+        const minutes = normalizePresenceMinutes(value);
+        if (id && Number.isFinite(minutes)) {
+          acc[id] = minutes;
+        }
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
+
   const handleKmChange = (gameId, newKm) =>
     setKmOverrides((prev) => {
       const next = { ...prev };
@@ -59,10 +89,67 @@ export function PlanPage() {
       }
       return next;
     });
+  const handlePresenceChange = (gameId, nextMinutes) => {
+    const id = String(gameId ?? "").trim();
+    if (!id) {
+      return;
+    }
+
+    const normalized = normalizePresenceMinutes(nextMinutes);
+    setPresenceMinutesByGame((prev) => {
+      const next = { ...prev };
+      if (Number.isFinite(normalized)) {
+        next[id] = normalized;
+      } else {
+        delete next[id];
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     setCurrentPage(1);
   }, [activeGames.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(STORAGE_KEYS.presence, JSON.stringify(presenceMinutesByGame));
+    } catch {
+      // Ignore sessionStorage write errors.
+    }
+  }, [presenceMinutesByGame]);
+
+  useEffect(() => {
+    const activeIds = new Set(
+      activeGames
+        .map((game) => String(game?.id ?? "").trim())
+        .filter(Boolean),
+    );
+
+    setPresenceMinutesByGame((prev) => {
+      const next = {};
+      let changed = false;
+
+      for (const [key, value] of Object.entries(prev)) {
+        const id = String(key || "").trim();
+        const minutes = normalizePresenceMinutes(value);
+        if (id && activeIds.has(id) && Number.isFinite(minutes)) {
+          next[id] = minutes;
+        } else {
+          changed = true;
+        }
+      }
+
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
+      return next;
+    });
+  }, [activeGames]);
 
   const visibleGames = useMemo(() => {
     if (!shouldPaginate) {
@@ -132,6 +219,7 @@ export function PlanPage() {
             scoutName,
             kmPauschale,
             kmOverrides,
+            presenceOverrides: presenceMinutesByGame,
           }}
           syncContext={{
             source: dataSourceUsed,
@@ -212,6 +300,8 @@ export function PlanPage() {
             kmPauschale={kmPauschale}
             isMobile={isMobile}
             onKmChange={handleKmChange}
+            presenceMinutesByGame={presenceMinutesByGame}
+            onPresenceChange={handlePresenceChange}
           />
         </div>
       ) : null}

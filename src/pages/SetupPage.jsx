@@ -321,7 +321,7 @@ export function SetupPage() {
               </div>
             </div>
 
-            <div style={{ ...card, marginTop: 16 }}>
+            <div id="fahrtkosten" style={{ ...card, marginTop: 16, scrollMarginTop: 96 }}>
               <SectionHeader>Fahrtkosten</SectionHeader>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
                 <div>
