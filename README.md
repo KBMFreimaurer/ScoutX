@@ -57,7 +57,8 @@ Für präzise Entfernungen (Startadresse -> Spiele -> Rückfahrt) inkl. Fahrtkos
 4. API-Key anlegen:
    `APIs & Services -> Credentials -> Create credentials -> API key`
 5. API-Key absichern:
-   Anwendungseinschränkung `HTTP referrers` (deine Domains/Hosts) und API-Einschränkung auf die beiden APIs oben.
+   Für die aktuelle clientseitige Integration muss der Key ohne Referrer-Zwang funktionieren
+   (`Application restrictions: None`) und per `API restrictions` auf `Geocoding API` + `Routes API (New)` begrenzt sein.
    Optional: `Directions API (Legacy)` nur dann aktivieren, wenn du den Legacy-Fallback zusätzlich nutzen willst.
 6. In `/.env.local` eintragen:
    `VITE_GOOGLE_MAPS_API_KEY=<DEIN_KEY>`
@@ -70,6 +71,15 @@ Hinweis:
 
 ## Docker Compose
 
+Für Server-Builds (Compose) den Key in die Server-`.env` legen:
+
+```bash
+VITE_GOOGLE_MAPS_API_KEY=<DEIN_KEY>
+VITE_GOOGLE_MAPS_STRICT=true
+```
+
+`docker-compose.yml` übergibt diese Variablen automatisch an Dev und Prod (inkl. Build-Args für Prod).
+
 ```bash
 # Frontend + Adapter (dev profile)
 docker compose --profile dev up --build
@@ -80,6 +90,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-12: Docker/Compose übergibt `VITE_GOOGLE_MAPS_API_KEY` jetzt auch für Server-Builds (Prod via Build-Args), ohne Key-Commit ins Repo.
 - 2026-04-12: Routing nutzt jetzt primär Google Routes API (v2), Legacy-Directions nur noch als Fallback; Geocoding-Fehler zeigen jetzt konkrete Google-Statusmeldungen (z. B. `REQUEST_DENIED`).
 - 2026-04-11: Google-Routing-Scaffolding ergänzt: sichtbarer API-Status im Setup, ENV-Vorlage bereinigt, Dokumentation für Key-Setup ergänzt.
 - 2026-04-11: Wetterermittlung wurde vollständig entfernt (Enrichment, UI und PDF-Details).

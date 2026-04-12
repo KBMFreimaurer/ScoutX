@@ -11,6 +11,8 @@ services:
       - ./vite.config.js:/app/vite.config.js
     environment:
       - OLLAMA_HOST=http://localhost:11434/
+      - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-}
+      - VITE_GOOGLE_MAPS_STRICT=${VITE_GOOGLE_MAPS_STRICT:-true}
     profiles:
       - dev
 
@@ -19,9 +21,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+        VITE_GOOGLE_MAPS_STRICT: ${VITE_GOOGLE_MAPS_STRICT:-true}
     network_mode: "host"
     environment:
       - OLLAMA_HOST=http://localhost:11434/
+      - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-}
+      - VITE_GOOGLE_MAPS_STRICT=${VITE_GOOGLE_MAPS_STRICT:-true}
     restart: always
     profiles:
       - prod
