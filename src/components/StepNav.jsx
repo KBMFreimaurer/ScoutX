@@ -5,6 +5,7 @@ const STEP_LABELS = {
   setup: "Konfiguration",
   games: "Spiele",
   plan: "Plan",
+  zeiten: "Zeiten",
 };
 
 const STEP_ICONS = {
@@ -52,13 +53,28 @@ const STEP_ICONS = {
       <polyline points="14 2 14 8 20 8" />
     </svg>
   ),
+  zeiten: (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
 };
 
-export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPlan, isMobile }) {
+export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPlan, canAccessTimes = true, isMobile }) {
   const canAccessStep = (step) => {
     if (step === "setup") return true;
     if (step === "games") return canAccessGames;
-    return canAccessPlan;
+    if (step === "plan") return canAccessPlan;
+    return canAccessTimes;
   };
 
   return (

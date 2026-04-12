@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
@@ -7,6 +8,7 @@ import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
 
 export function GamesPage() {
+  const navigate = useNavigate();
   const {
     games,
     jugend,
@@ -367,22 +369,41 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <GhostButton onClick={() => navigate("/zeiten")} style={{ minWidth: 210, justifyContent: "center", flex: "1 1 220px" }}>
           <svg
-            width="16"
-            height="16"
+            width="15"
+            height="15"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
-          {pdfExporting ? "Plan wird erstellt..." : "Plan öffnen"}
-        </span>
-      </PrimaryButton>
+          Arbeitszeit erfassen
+        </GhostButton>
+
+        <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ flex: "3 1 420px" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            {pdfExporting ? "Plan wird erstellt..." : "Plan öffnen"}
+          </span>
+        </PrimaryButton>
+      </div>
     </div>
   );
 }

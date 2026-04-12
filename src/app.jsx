@@ -7,10 +7,12 @@ import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
 import { SetupProvider } from "./context/SetupContext";
 import { GamesProvider } from "./context/GamesContext";
 import { PlanProvider } from "./context/PlanContext";
+import { TimeProvider } from "./context/TimeContext";
 
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ default: module.GamesPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
+const TimesPage = lazy(() => import("./pages/TimesPage").then((module) => ({ default: module.TimesPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
 
@@ -64,6 +66,21 @@ const RAIL_ICONS = {
       <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
   ),
+  zeiten: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
 };
 
 function RouteFallback() {
@@ -88,6 +105,10 @@ function AppLayout() {
   const { width, isMobile, games, plan, err, loadingGames, enrichingGames, clearErr, onResetSoft } = useScoutX();
 
   const currentStep = useMemo(() => {
+    if (location.pathname.startsWith("/zeiten")) {
+      return "zeiten";
+    }
+
     if (location.pathname.startsWith("/games")) {
       return "games";
     }
@@ -108,6 +129,7 @@ function AppLayout() {
     { id: "setup", label: "Konfiguration", onClick: () => navigate("/setup") },
     ...(games.length > 0 ? [{ id: "games", label: "Spiele", onClick: () => navigate("/games") }] : []),
     ...(plan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
+    { id: "zeiten", label: "Zeiten", onClick: () => navigate("/zeiten") },
   ];
 
   const liveStatus = err
@@ -180,6 +202,7 @@ function AppLayout() {
             currentStep={currentStep}
             canAccessGames={games.length > 0}
             canAccessPlan={Boolean(plan)}
+            canAccessTimes
             onStepChange={onStepChange}
             isMobile={isMobile}
           />
@@ -295,6 +318,7 @@ function AppLayout() {
                 path="/plan"
                 element={plan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
               />
+              <Route path="/zeiten" element={<TimesPage />} />
               <Route path="*" element={<Navigate to="/setup" replace />} />
             </Routes>
           </Suspense>
@@ -332,9 +356,11 @@ export default function App() {
       <SetupProvider defaultAdapterEndpoint={DEFAULT_ADAPTER_ENDPOINT}>
         <GamesProvider>
           <PlanProvider>
-            <ScoutXProvider>
-              <AppLayout />
-            </ScoutXProvider>
+            <TimeProvider>
+              <ScoutXProvider>
+                <AppLayout />
+              </ScoutXProvider>
+            </TimeProvider>
           </PlanProvider>
         </GamesProvider>
       </SetupProvider>

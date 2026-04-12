@@ -5,6 +5,7 @@ import { ScoutXProvider } from "../context/ScoutXContext";
 import { SetupProvider } from "../context/SetupContext";
 import { GamesProvider } from "../context/GamesContext";
 import { PlanProvider } from "../context/PlanContext";
+import { TimeProvider } from "../context/TimeContext";
 import { SetupPage } from "./SetupPage";
 import { STORAGE_KEYS } from "../config/storage";
 
@@ -17,9 +18,11 @@ function renderSetupPage() {
       <SetupProvider defaultAdapterEndpoint="/api/games">
         <GamesProvider>
           <PlanProvider>
-            <ScoutXProvider>
-              <SetupPage />
-            </ScoutXProvider>
+            <TimeProvider>
+              <ScoutXProvider>
+                <SetupPage />
+              </ScoutXProvider>
+            </TimeProvider>
           </PlanProvider>
         </GamesProvider>
       </SetupProvider>
