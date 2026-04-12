@@ -60,18 +60,19 @@ Für präzise Entfernungen (Startadresse -> Spiele -> Rückfahrt) inkl. Fahrtkos
    Für die aktuelle clientseitige Integration muss der Key ohne Referrer-Zwang funktionieren
    (`Application restrictions: None`) und per `API restrictions` auf `Geocoding API` + `Routes API (New)` begrenzt sein.
    Optional: `Directions API (Legacy)` nur dann aktivieren, wenn du den Legacy-Fallback zusätzlich nutzen willst.
-6. In `/.env.local` eintragen:
+6. Der API-Key ist im Projekt bereits hinterlegt.
+   Optional kannst du ihn per `/.env.local` überschreiben:
    `VITE_GOOGLE_MAPS_API_KEY=<DEIN_KEY>`
    `VITE_GOOGLE_MAPS_STRICT=true`
-7. Frontend neu starten (`npm run dev`).
+7. Frontend neu starten (`npm run dev`), falls du per ENV überschrieben hast.
 
 Hinweis:
-- In der Setup-UI (Startort-Block) wird der Status jetzt sichtbar angezeigt (`Google Maps aktiv` oder `API-Key fehlt`).
+- In der Setup-UI (Startort-Block) wird der Status sichtbar angezeigt (`Google Maps aktiv`, inkl. Key-Quelle).
 - Ohne Key nutzt ScoutX nur ungenaue Fallbacks (OSRM/Haversine).
 
 ## Docker Compose
 
-Für Server-Builds (Compose) den Key in die Server-`.env` legen:
+Für Server-Builds (Compose) kannst du den Key optional in die Server-`.env` legen (als Override):
 
 ```bash
 VITE_GOOGLE_MAPS_API_KEY=<DEIN_KEY>
@@ -90,7 +91,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
-- 2026-04-12: Docker/Compose übergibt `VITE_GOOGLE_MAPS_API_KEY` jetzt auch für Server-Builds (Prod via Build-Args), ohne Key-Commit ins Repo.
+- 2026-04-12: Google Maps API-Key ist direkt im Projekt hinterlegt; ENV/Compose bleibt als optionaler Override aktiv.
 - 2026-04-12: Routing nutzt jetzt primär Google Routes API (v2), Legacy-Directions nur noch als Fallback; Geocoding-Fehler zeigen jetzt konkrete Google-Statusmeldungen (z. B. `REQUEST_DENIED`).
 - 2026-04-11: Google-Routing-Scaffolding ergänzt: sichtbarer API-Status im Setup, ENV-Vorlage bereinigt, Dokumentation für Key-Setup ergänzt.
 - 2026-04-11: Wetterermittlung wurde vollständig entfernt (Enrichment, UI und PDF-Details).
