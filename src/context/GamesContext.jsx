@@ -87,17 +87,45 @@ function withNotes(games, notesById) {
 }
 
 function ensureGameIds(games) {
-  return (Array.isArray(games) ? games : []).map((game, index) => {
-    const existing = String(game?.id || "").trim();
-    if (existing) {
-      return game;
-    }
+  const safeGames = Array.isArray(games) ? games : [];
+  const usedIds = new Set();
+
+  return safeGames.map((game, index) => {
+    const rawExistingId = String(game?.id ?? "").trim();
     const home = normalizeLookup(game?.home || `home-${index}`).replace(/\s+/g, "-");
     const away = normalizeLookup(game?.away || `away-${index}`).replace(/\s+/g, "-");
     const datePart = toIsoDate(game?.date) || toIsoDate(game?.dateObj) || "na";
+    const timePart = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game?.time || "").trim())
+      ? String(game.time).replace(":", "")
+      : "na";
+    const venuePart = normalizeLookup(game?.venue || "").replace(/\s+/g, "-") || "venue";
+    const fallbackBaseId = `game-${home}-${away}-${datePart}-${timePart}-${index}`;
+
+    let nextId = rawExistingId || fallbackBaseId;
+    nextId = nextId.replace(/\s+/g, "-");
+
+    if (usedIds.has(nextId)) {
+      const deterministicSuffix = `${home}-${away}-${datePart}-${timePart}-${venuePart}`;
+      let uniqueCandidate = `${nextId}::${deterministicSuffix}`;
+      let collisionIndex = 2;
+
+      while (usedIds.has(uniqueCandidate)) {
+        uniqueCandidate = `${nextId}::${deterministicSuffix}-${collisionIndex}`;
+        collisionIndex += 1;
+      }
+
+      nextId = uniqueCandidate;
+    }
+
+    usedIds.add(nextId);
+
+    if (rawExistingId === nextId) {
+      return game;
+    }
+
     return {
       ...game,
-      id: `game-${index}-${home}-${away}-${datePart}`,
+      id: nextId,
     };
   });
 }
