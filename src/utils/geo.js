@@ -95,14 +95,19 @@ function hasGoogleMapsApiKey() {
   return GOOGLE_MAPS_API_KEY.length > 0;
 }
 
+function isGoogleStrictDisabled() {
+  return GOOGLE_STRICT_ENV === "false" || GOOGLE_STRICT_ENV === "0" || GOOGLE_STRICT_ENV === "off";
+}
+
+function isGoogleStrictRequestedByEnv() {
+  return !isGoogleStrictDisabled();
+}
+
 function shouldUseGoogleStrictMode() {
   if (!hasGoogleMapsApiKey()) {
     return false;
   }
-  if (GOOGLE_STRICT_ENV === "false" || GOOGLE_STRICT_ENV === "0" || GOOGLE_STRICT_ENV === "off") {
-    return false;
-  }
-  return true;
+  return isGoogleStrictRequestedByEnv();
 }
 
 export function isGoogleRoutingStrictMode() {
@@ -111,6 +116,21 @@ export function isGoogleRoutingStrictMode() {
 
 export function isGoogleRoutingConfigured() {
   return hasGoogleMapsApiKey();
+}
+
+export function getGoogleRoutingConfig() {
+  const strictRequested = isGoogleStrictRequestedByEnv();
+  const googleConfigured = hasGoogleMapsApiKey();
+  const strictActive = shouldUseGoogleStrictMode();
+
+  return {
+    googleConfigured,
+    strictRequested,
+    strictActive,
+    geocodeProvider: getGeocodeProvider(),
+    routeProvider: getRouteProvider(),
+    keyEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
+  };
 }
 
 function getGeocodeProvider() {
@@ -137,6 +157,44 @@ function toFiniteNumber(value) {
   }
 
   return null;
+}
+
+function toDateKey(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
+    const [day, month, year] = text.split(".").map(Number);
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function getGameDateKey(game) {
+  return toDateKey(game?.dateObj) || toDateKey(game?.date);
+}
+
+function shouldCloseRouteDay(currentDateKey, nextDateKey) {
+  if (!currentDateKey || !nextDateKey) {
+    return true;
+  }
+  return currentDateKey !== nextDateKey;
 }
 
 function normalizeAddressKey(address, provider = getGeocodeProvider()) {
@@ -946,6 +1004,7 @@ export function calculateRoute(startPoint, games) {
   };
 
   let previous = start;
+  let previousDateKey = "";
 
   for (let index = 0; index < stops.length; index += 1) {
     const game = stops[index];
@@ -954,20 +1013,28 @@ export function calculateRoute(startPoint, games) {
       lat: toFiniteNumber(game?.venueLat),
       lon: toFiniteNumber(game?.venueLon),
     };
+    const dateKey = getGameDateKey(game);
+    const sameDayAsPrevious = Boolean(previousDateKey) && Boolean(dateKey) && previousDateKey === dateKey;
+    const routeStart = sameDayAsPrevious ? previous : start;
 
     let distanceKm = null;
     let durationMinutes = null;
     let source = "haversine";
 
-    const exactFromStartDistance = index === 0 ? toFiniteNumber(game?.fromStartRouteDistanceKm) : null;
-    const exactFromStartMinutes = index === 0 ? toFiniteNumber(game?.fromStartRouteMinutes) : null;
+    const exactFromStartDistance = !sameDayAsPrevious ? toFiniteNumber(game?.fromStartRouteDistanceKm) : null;
+    const exactFromStartMinutes = !sameDayAsPrevious ? toFiniteNumber(game?.fromStartRouteMinutes) : null;
 
     if (Number.isFinite(exactFromStartDistance)) {
       distanceKm = exactFromStartDistance;
       durationMinutes = Number.isFinite(exactFromStartMinutes) ? Math.max(1, Math.round(exactFromStartMinutes)) : estimateMinutesFromDistance(distanceKm);
       source = "route";
-    } else if (Number.isFinite(previous.lat) && Number.isFinite(previous.lon) && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
-      distanceKm = haversineDistance(previous.lat, previous.lon, current.lat, current.lon);
+    } else if (
+      Number.isFinite(routeStart.lat) &&
+      Number.isFinite(routeStart.lon) &&
+      Number.isFinite(current.lat) &&
+      Number.isFinite(current.lon)
+    ) {
+      distanceKm = haversineDistance(routeStart.lat, routeStart.lon, current.lat, current.lon);
       durationMinutes = estimateMinutesFromDistance(distanceKm);
       source = "haversine";
     }
@@ -981,35 +1048,56 @@ export function calculateRoute(startPoint, games) {
     }
 
     legs.push({
-      from: previous.label,
+      from: routeStart.label,
       to: current.label,
       distanceKm,
       durationMinutes,
       source,
+      dateKey,
     });
 
     previous = current;
-  }
+    previousDateKey = dateKey;
 
-  let returnDistanceKm = null;
-  let returnDurationMinutes = null;
-  if (stops.length > 0 && Number.isFinite(previous.lat) && Number.isFinite(previous.lon) && Number.isFinite(start.lat) && Number.isFinite(start.lon)) {
-    returnDistanceKm = haversineDistance(previous.lat, previous.lon, start.lat, start.lon);
-    returnDurationMinutes = estimateMinutesFromDistance(returnDistanceKm);
-    totalKm += returnDistanceKm;
-    knownDistanceLegs += 1;
-    if (Number.isFinite(returnDurationMinutes)) {
-      totalMinutes += returnDurationMinutes;
+    const nextGame = stops[index + 1];
+    const nextDateKey = getGameDateKey(nextGame);
+    const closeDay = !nextGame || shouldCloseRouteDay(dateKey, nextDateKey);
+    if (closeDay) {
+      let returnDistanceKm = null;
+      let returnDurationMinutes = null;
+      let returnSource = "unknown";
+
+      if (
+        Number.isFinite(previous.lat) &&
+        Number.isFinite(previous.lon) &&
+        Number.isFinite(start.lat) &&
+        Number.isFinite(start.lon)
+      ) {
+        returnDistanceKm = haversineDistance(previous.lat, previous.lon, start.lat, start.lon);
+        returnDurationMinutes = estimateMinutesFromDistance(returnDistanceKm);
+        returnSource = "haversine";
+      }
+
+      if (Number.isFinite(returnDistanceKm)) {
+        totalKm += returnDistanceKm;
+        knownDistanceLegs += 1;
+      }
+      if (Number.isFinite(returnDurationMinutes)) {
+        totalMinutes += returnDurationMinutes;
+      }
+
+      legs.push({
+        from: previous.label,
+        to: start.label,
+        distanceKm: returnDistanceKm,
+        durationMinutes: returnDurationMinutes,
+        source: returnSource,
+        dateKey,
+      });
+      previous = start;
+      previousDateKey = "";
     }
   }
-
-  legs.push({
-    from: previous.label,
-    to: start.label,
-    distanceKm: returnDistanceKm,
-    durationMinutes: returnDurationMinutes,
-    source: "haversine",
-  });
 
   const estimatedMinutes = totalMinutes > 0 ? Math.round(totalMinutes) : null;
   const normalizedTotalKm = knownDistanceLegs > 0 ? totalKm : null;
@@ -1035,11 +1123,16 @@ export async function calculateRouteWithDriving(startPoint, games, options = {})
   };
 
   let previous = start;
+  let previousDateKey = "";
 
-  for (const game of stops) {
+  for (let index = 0; index < stops.length; index += 1) {
+    const game = stops[index];
     const current = await resolveGameStopPoint(game);
-    const routed = await fetchDrivingRoute(previous, current, options).catch(() => null);
-    const selected = selectLegResult(previous, current, routed, options);
+    const dateKey = getGameDateKey(game);
+    const sameDayAsPrevious = Boolean(previousDateKey) && Boolean(dateKey) && previousDateKey === dateKey;
+    const routeStart = sameDayAsPrevious ? previous : start;
+    const routed = await fetchDrivingRoute(routeStart, current, options).catch(() => null);
+    const selected = selectLegResult(routeStart, current, routed, options);
 
     if (Number.isFinite(selected.distanceKm)) {
       totalKm += selected.distanceKm;
@@ -1050,36 +1143,47 @@ export async function calculateRouteWithDriving(startPoint, games, options = {})
     }
 
     legs.push({
-      from: previous.label,
+      from: routeStart.label,
       to: current.label,
       distanceKm: Number.isFinite(selected.distanceKm) ? selected.distanceKm : null,
       durationMinutes: Number.isFinite(selected.durationMinutes) ? selected.durationMinutes : null,
       source: selected.source || "unknown",
       provider: selected.provider || null,
+      dateKey,
     });
 
     previous = current;
-  }
+    previousDateKey = dateKey;
 
-  const routedBack = await fetchDrivingRoute(previous, start, options).catch(() => null);
-  const selectedBack = selectLegResult(previous, start, routedBack, options);
+    const nextGame = stops[index + 1];
+    const nextDateKey = getGameDateKey(nextGame);
+    const closeDay = !nextGame || shouldCloseRouteDay(dateKey, nextDateKey);
+    if (closeDay) {
+      const routedBack = await fetchDrivingRoute(previous, start, options).catch(() => null);
+      const selectedBack = selectLegResult(previous, start, routedBack, options);
 
-  if (Number.isFinite(selectedBack.distanceKm)) {
-    totalKm += selectedBack.distanceKm;
-    knownDistanceLegs += 1;
-  }
-  if (Number.isFinite(selectedBack.durationMinutes)) {
-    totalMinutes += selectedBack.durationMinutes;
-  }
+      if (Number.isFinite(selectedBack.distanceKm)) {
+        totalKm += selectedBack.distanceKm;
+        knownDistanceLegs += 1;
+      }
+      if (Number.isFinite(selectedBack.durationMinutes)) {
+        totalMinutes += selectedBack.durationMinutes;
+      }
 
-  legs.push({
-    from: previous.label,
-    to: start.label,
-    distanceKm: Number.isFinite(selectedBack.distanceKm) ? selectedBack.distanceKm : null,
-    durationMinutes: Number.isFinite(selectedBack.durationMinutes) ? selectedBack.durationMinutes : null,
-    source: selectedBack.source || "unknown",
-    provider: selectedBack.provider || null,
-  });
+      legs.push({
+        from: previous.label,
+        to: start.label,
+        distanceKm: Number.isFinite(selectedBack.distanceKm) ? selectedBack.distanceKm : null,
+        durationMinutes: Number.isFinite(selectedBack.durationMinutes) ? selectedBack.durationMinutes : null,
+        source: selectedBack.source || "unknown",
+        provider: selectedBack.provider || null,
+        dateKey,
+      });
+
+      previous = start;
+      previousDateKey = "";
+    }
+  }
 
   return {
     legs,

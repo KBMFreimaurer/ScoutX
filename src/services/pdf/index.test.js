@@ -98,6 +98,7 @@ describe("pdf/index route completeness", () => {
     };
 
     expect(hasCompleteRouteOverview(routeOverview, 2)).toBe(true);
+    expect(hasCompleteRouteOverview(routeOverview, 3)).toBe(false);
     expect(hasCompleteRouteOverview(routeOverview, 4)).toBe(false);
   });
 

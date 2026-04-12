@@ -8,6 +8,7 @@ import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
 import { SectionHeader } from "../components/SectionHeader";
 import { C, card, inp, lbl, secH } from "../styles/theme";
+import { getGoogleRoutingConfig } from "../utils/geo";
 
 export function SetupPage() {
   const {
@@ -53,6 +54,7 @@ export function SetupPage() {
     onSetScoutName,
     onSetKmPauschale,
   } = useScoutX();
+  const googleRouting = getGoogleRoutingConfig();
   const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
   const summaryParts = [
     selectedKreis?.label || "Kein Kreis",
@@ -180,6 +182,46 @@ export function SetupPage() {
                 <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
                   {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
                   {startLocation?.label ? ` · ${startLocation.label}` : ""}
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    borderRadius: 8,
+                    border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
+                    background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
+                  }}
+                >
+                  <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
+                    Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
+                  </strong>
+                  <div>
+                    {googleRouting.googleConfigured
+                      ? "Entfernungen für Route/Fahrtkosten werden über Google Directions berechnet."
+                      : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+                  </div>
+                  {!googleRouting.googleConfigured ? (
+                    <div>
+                      Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
+                      <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
+                      <a
+                        href="https://console.cloud.google.com/apis/credentials"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: C.warn, textDecoration: "underline" }}
+                      >
+                        Google Cloud Console
+                      </a>
+                    </div>
+                  ) : (
+                    <div>
+                      Provider: <code>{googleRouting.routeProvider}</code>
+                      {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+                    </div>
+                  )}
                 </div>
                 {locationError ? (
                   <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>

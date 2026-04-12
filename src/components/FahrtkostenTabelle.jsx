@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { C, card } from "../styles/theme";
+import { buildFahrtkostenRows } from "../utils/fahrtkosten";
 
 const TH = {
   fontSize: 10,
@@ -23,56 +24,46 @@ function eur(value) {
   return value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 }
 
-function dateDe(dateObj) {
-  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
-    return "–";
-  }
-  return dateObj.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
-}
-
-export function FahrtkostenTabelle({ games, kmPauschale, isMobile, onKmChange }) {
+export function FahrtkostenTabelle({ games, routeOverview, kmPauschale, isMobile, onKmChange }) {
   const [overrides, setOverrides] = useState({});
+  const model = useMemo(() => buildFahrtkostenRows(games, routeOverview), [games, routeOverview]);
+  const rows = model.rows;
+  const isRouteMode = model.mode === "route";
 
-  const rows = (Array.isArray(games) ? games : []).filter(
-    (game) => Number.isFinite(game.distanceKm) && game.distanceKm > 0,
-  );
-  const km = (game) => (Number.isFinite(overrides[game.id]) ? overrides[game.id] : game.distanceKm || 0);
+  const kmBase = (row) => (Number.isFinite(overrides[row.id]) ? overrides[row.id] : row.baseKm || 0);
+  const kmAbrechnung = (row) => (isRouteMode ? kmBase(row) : kmBase(row) * 2);
   const rate = Number.isFinite(kmPauschale) && kmPauschale > 0 ? kmPauschale : 0.3;
 
-  const totalKm = rows.reduce((sum, game) => sum + km(game) * 2, 0);
+  const totalKm = rows.reduce((sum, row) => sum + kmAbrechnung(row), 0);
   const totalEur = totalKm * rate;
 
-  const handleChange = (gameId, rawValue) => {
+  const handleChange = (rowId, rawValue) => {
     const value = Number.parseFloat(String(rawValue).replace(",", "."));
     setOverrides((prev) => {
       const next = { ...prev };
       if (Number.isFinite(value) && value >= 0) {
-        next[gameId] = value;
+        next[rowId] = value;
       } else {
-        delete next[gameId];
+        delete next[rowId];
       }
       return next;
     });
-    onKmChange?.(gameId, Number.isFinite(value) ? value : null);
+    onKmChange?.(rowId, Number.isFinite(value) ? value : null);
   };
 
   const exportCsv = () => {
     const date = new Date().toLocaleDateString("de-DE").replace(/\./g, "-");
-    const head = "Nr;Datum;Zeit;Sichtung;Spielort;km einfach;km H+R;Betrag EUR\n";
+    const head = "Nr;Datum;Strecke;km Abrechnung;Betrag EUR\n";
     const body = rows
-      .map((game, index) => {
-        const einfach = km(game);
-        const hinRueck = einfach * 2;
-        const betrag = hinRueck * rate;
+      .map((row, index) => {
+        const kmGesamt = kmAbrechnung(row);
+        const betrag = kmGesamt * rate;
 
         return [
           index + 1,
-          game.dateObj instanceof Date ? game.dateObj.toLocaleDateString("de-DE") : game.date || "",
-          game.time || "",
-          `"Sichtung: ${game.home || "–"} – ${game.away || "–"}"`,
-          `"${game.venue || "–"}"`,
-          einfach.toFixed(1).replace(".", ","),
-          hinRueck.toFixed(1).replace(".", ","),
+          row.dateLabel || "",
+          `"${row.label || "–"}"`,
+          kmGesamt.toFixed(1).replace(".", ","),
           betrag.toFixed(2).replace(".", ","),
         ].join(";");
       })
@@ -90,7 +81,7 @@ export function FahrtkostenTabelle({ games, kmPauschale, isMobile, onKmChange })
   if (rows.length === 0) {
     return (
       <div style={{ ...card, color: C.gray, fontSize: 13 }}>
-        Kein Startort konfiguriert oder keine Entfernungsdaten verfügbar. Bitte im Setup einen Startort setzen.
+        Keine abrechenbaren Strecken verfügbar. Bitte Startort setzen und Route berechnen lassen.
       </div>
     );
   }
@@ -102,51 +93,30 @@ export function FahrtkostenTabelle({ games, kmPauschale, isMobile, onKmChange })
           <tr>
             <th style={TH}>Nr.</th>
             {!isMobile && <th style={TH}>Datum</th>}
-            {!isMobile && <th style={TH}>Zeit</th>}
-            <th style={TH}>Sichtung</th>
-            {!isMobile && <th style={TH}>Spielort</th>}
-            <th style={{ ...TH, textAlign: "right" }}>km (einfach)</th>
-            <th style={{ ...TH, textAlign: "right" }}>km (H+R)</th>
+            <th style={TH}>Strecke</th>
+            <th style={{ ...TH, textAlign: "right" }}>km (Abrechnung)</th>
             <th style={{ ...TH, textAlign: "right" }}>Betrag</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((game, index) => {
-            const einfach = km(game);
-            const hinRueck = einfach * 2;
-            const betrag = hinRueck * rate;
+          {rows.map((row, index) => {
+            const kmGesamt = kmAbrechnung(row);
+            const betrag = kmGesamt * rate;
 
             return (
-              <tr key={game.id}>
+              <tr key={row.id}>
                 <td style={{ ...TD, color: C.gray }}>{index + 1}</td>
-                {!isMobile && <td style={TD}>{dateDe(game.dateObj)}</td>}
-                {!isMobile && <td style={{ ...TD, color: C.gray }}>{game.time || "–"}</td>}
+                {!isMobile && <td style={TD}>{row.dateLabel || "–"}</td>}
                 <td style={TD}>
-                  <strong>{game.home}</strong>
-                  <span style={{ color: C.gray }}> – </span>
-                  {game.away}
+                  <span style={{ color: C.offWhite }}>{row.label || "–"}</span>
                 </td>
-                {!isMobile && (
-                  <td
-                    style={{
-                      ...TD,
-                      color: C.gray,
-                      maxWidth: 130,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {game.venue || "–"}
-                  </td>
-                )}
-                <td style={{ ...TD, textAlign: "right" }}>
+                <td style={{ ...TD, textAlign: "right", whiteSpace: "nowrap" }}>
                   <input
                     type="number"
                     step="0.1"
                     min="0"
-                    value={Number.isFinite(overrides[game.id]) ? overrides[game.id] : einfach.toFixed(1)}
-                    onChange={(event) => handleChange(game.id, event.target.value)}
+                    value={Number.isFinite(overrides[row.id]) ? overrides[row.id] : kmBase(row).toFixed(1)}
+                    onChange={(event) => handleChange(row.id, event.target.value)}
                     style={{
                       width: 64,
                       textAlign: "right",
@@ -160,7 +130,6 @@ export function FahrtkostenTabelle({ games, kmPauschale, isMobile, onKmChange })
                   />
                   <span style={{ color: C.gray, marginLeft: 4 }}>km</span>
                 </td>
-                <td style={{ ...TD, textAlign: "right", color: C.gray }}>{hinRueck.toFixed(1)} km</td>
                 <td style={{ ...TD, textAlign: "right", color: C.green, fontWeight: 600 }}>{eur(betrag)}</td>
               </tr>
             );
@@ -168,15 +137,20 @@ export function FahrtkostenTabelle({ games, kmPauschale, isMobile, onKmChange })
         </tbody>
         <tfoot>
           <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-            <td colSpan={isMobile ? 3 : 5} style={{ ...TD, fontWeight: 700 }}>
+            <td colSpan={isMobile ? 2 : 3} style={{ ...TD, fontWeight: 700 }}>
               Gesamt
             </td>
-            <td style={{ ...TD, textAlign: "right", fontWeight: 600 }} />
             <td style={{ ...TD, textAlign: "right", color: C.gray }}>{totalKm.toFixed(1)} km</td>
             <td style={{ ...TD, textAlign: "right", color: C.green, fontWeight: 700 }}>{eur(totalEur)}</td>
           </tr>
         </tfoot>
       </table>
+
+      {!isRouteMode ? (
+        <div style={{ marginTop: 8, fontSize: 11, color: C.gray }}>
+          Fallback aktiv: Eingabe ist einfache Strecke; für Abrechnung wird automatisch Hin- und Rückweg berechnet.
+        </div>
+      ) : null}
 
       <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
         <button

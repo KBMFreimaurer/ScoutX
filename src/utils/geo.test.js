@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, fetchDrivingRoute, haversineDistance } from "./geo";
+import {
+  calculateDirectStartRoutes,
+  calculateRoute,
+  calculateRouteWithDriving,
+  fetchDrivingRoute,
+  getGoogleRoutingConfig,
+  haversineDistance,
+} from "./geo";
 
 describe("geo utils", () => {
   beforeEach(() => {
@@ -19,12 +26,13 @@ describe("geo utils", () => {
         {
           home: "A",
           away: "B",
+          dateObj: new Date("2026-04-18T00:00:00"),
           venueLat: 51.25,
           venueLon: 6.75,
           fromStartRouteDistanceKm: 25.3,
           fromStartRouteMinutes: 34,
         },
-        { home: "C", away: "D", venueLat: 51.3, venueLon: 6.8 },
+        { home: "C", away: "D", dateObj: new Date("2026-04-18T00:00:00"), venueLat: 51.3, venueLon: 6.8 },
       ],
     );
 
@@ -32,6 +40,7 @@ describe("geo utils", () => {
     expect(route.legs[0].distanceKm).toBe(25.3);
     expect(route.legs[0].durationMinutes).toBe(34);
     expect(route.legs[0].source).toBe("route");
+    expect(route.legs[2].to).toBe("Start");
     expect(route.totalKm).toBeGreaterThan(25);
     expect(route.estimatedMinutes).toBeGreaterThan(0);
   });
@@ -81,18 +90,50 @@ describe("geo utils", () => {
     const route = await calculateRouteWithDriving(
       { label: "Start", lat: 51.2, lon: 6.7 },
       [
-        { home: "A", away: "B", venueLat: 51.25, venueLon: 6.75 },
-        { home: "C", away: "D", venueLat: 51.3, venueLon: 6.8 },
+        { home: "A", away: "B", dateObj: new Date("2026-04-18T00:00:00"), time: "11:30", venueLat: 51.25, venueLon: 6.75 },
+        { home: "C", away: "D", dateObj: new Date("2026-04-18T00:00:00"), time: "15:30", venueLat: 51.3, venueLon: 6.8 },
       ],
     );
 
     expect(route.legs).toHaveLength(3);
     expect(route.legs[0].source).toBe("route");
     expect(route.legs[1].source).toBe("route");
-    expect(route.legs[2].source).toBe("route");
+    expect(route.legs[2].to).toBe("Start");
     expect(route.totalKm).toBeCloseTo(30, 4);
     expect(route.estimatedMinutes).toBe(45);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("startet bei Datumswechsel erneut vom Startort", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distance: 10000,
+            duration: 900,
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const route = await calculateRouteWithDriving(
+      { label: "Start", lat: 51.2, lon: 6.7 },
+      [
+        { home: "A", away: "B", dateObj: new Date("2026-04-17T00:00:00"), time: "18:30", venueLat: 51.25, venueLon: 6.75 },
+        { home: "C", away: "D", dateObj: new Date("2026-04-18T00:00:00"), time: "11:30", venueLat: 51.3, venueLon: 6.8 },
+        { home: "E", away: "F", dateObj: new Date("2026-04-18T00:00:00"), time: "15:30", venueLat: 51.35, venueLon: 6.85 },
+      ],
+    );
+
+    expect(route.legs).toHaveLength(5);
+    expect(route.legs[0].from).toBe("Start");
+    expect(route.legs[1].to).toBe("Start");
+    expect(route.legs[2].from).toBe("Start");
+    expect(route.legs[3].from).toContain("C vs D");
+    expect(route.legs[4].to).toBe("Start");
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4);
   });
 
   it("verhindert OSRM-Fallback wenn requireGoogle aktiv ist", async () => {
@@ -127,5 +168,18 @@ describe("geo utils", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].distanceKm).toBeNull();
     expect(rows[0].provider).toBeNull();
+  });
+
+  it("liefert den Google-Routing-Konfigstatus", () => {
+    const config = getGoogleRoutingConfig();
+
+    expect(config).toMatchObject({
+      keyEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
+      routeProvider: expect.any(String),
+      geocodeProvider: expect.any(String),
+      googleConfigured: expect.any(Boolean),
+      strictRequested: expect.any(Boolean),
+      strictActive: expect.any(Boolean),
+    });
   });
 });

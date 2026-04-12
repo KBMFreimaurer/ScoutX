@@ -56,10 +56,13 @@ Begründung: Starkes Spiel für Vergleich auf gutem Niveau.
 
   it("berechnet Gesamtkette nur aus sichtbaren Segmenten", () => {
     const totals = computeVisibleChainTotals(
-      [{ distanceKm: 50, durationMinutes: 40 }],
       [
-        { distanceKm: 10, durationMinutes: 12 },
-        { distanceKm: 15, durationMinutes: 18 },
+        { dateKey: "2026-04-18", distanceKm: 50, durationMinutes: 40, routeEligible: true },
+        { dateKey: "2026-04-18", distanceKm: 99, durationMinutes: 99, routeEligible: true },
+        { dateKey: "2026-04-19", distanceKm: 15, durationMinutes: 18, routeEligible: true },
+      ],
+      [
+        { pairIndex: 0, distanceKm: 10, durationMinutes: 12 },
       ],
     );
 
@@ -69,8 +72,11 @@ Begründung: Starkes Spiel für Vergleich auf gutem Niveau.
 
   it("setzt Gesamtkette auf unbekannt bei fehlendem Segment", () => {
     const totals = computeVisibleChainTotals(
-      [{ distanceKm: 50, durationMinutes: 40 }],
-      [{ distanceKm: null, durationMinutes: null }],
+      [
+        { dateKey: "2026-04-18", distanceKm: 50, durationMinutes: 40, routeEligible: true },
+        { dateKey: "2026-04-18", distanceKm: 99, durationMinutes: 99, routeEligible: true },
+      ],
+      [{ pairIndex: 0, distanceKm: null, durationMinutes: null }],
     );
 
     expect(totals.totalKm).toBeNull();

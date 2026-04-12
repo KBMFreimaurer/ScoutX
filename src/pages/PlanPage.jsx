@@ -208,6 +208,7 @@ export function PlanPage() {
           <SectionHeader>Fahrtkosten-Abrechnung</SectionHeader>
           <FahrtkostenTabelle
             games={activeGames}
+            routeOverview={routeOverview}
             kmPauschale={kmPauschale}
             isMobile={isMobile}
             onKmChange={handleKmChange}

@@ -12,6 +12,7 @@ import {
 } from "./layout";
 import { COLORS, normalizeLookup, sanitizePdfText, toSafeString, truncateText } from "./styles";
 import { resolveGameMatchUrl } from "../../utils/gameLinks";
+import { buildFahrtkostenRows } from "../../utils/fahrtkosten";
 
 export function limitToSentences(text, maxSentences = 2) {
   const cleaned = toSafeString(text);
@@ -761,6 +762,43 @@ function toFiniteNumberOrNull(value) {
   return null;
 }
 
+function toRouteDateKey(game) {
+  if (game?.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime())) {
+    return `${game.dateObj.getFullYear()}-${String(game.dateObj.getMonth() + 1).padStart(2, "0")}-${String(
+      game.dateObj.getDate(),
+    ).padStart(2, "0")}`;
+  }
+
+  const text = String(game?.date || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
+    const [day, month, year] = text.split(".").map(Number);
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function isSameRouteDate(left, right) {
+  return Boolean(left?.dateKey) && Boolean(right?.dateKey) && left.dateKey === right.dateKey;
+}
+
+function normalizeRouteNodeLabel(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function truncatePlain(text, maxChars) {
   const safe = toSafeString(text);
   if (safe.length <= maxChars) {
@@ -965,6 +1003,7 @@ function buildDirectRouteRows(games, directRoutes, maxGames = 5) {
       index: index + 1,
       match: `${toSafeString(game.home)} vs ${toSafeString(game.away)}`,
       date: formatGameDate(game),
+      dateKey: toRouteDateKey(game),
       time: kickoffText(game.time),
       venue,
       matchUrl: resolveGameMatchUrl(game),
@@ -977,55 +1016,110 @@ function buildDirectRouteRows(games, directRoutes, maxGames = 5) {
 
 function buildBetweenGamesRows(routeOverview, directRows) {
   const legs = Array.isArray(routeOverview?.legs) ? routeOverview.legs : [];
-  const maxBetweenRows = Math.max(0, directRows.length - 1);
-  if (maxBetweenRows === 0) {
-    return [];
-  }
+  const usedLegIndexes = new Set();
+  const rows = [];
 
-  return legs.slice(1, 1 + maxBetweenRows).map((leg, index) => {
+  for (let index = 0; index < directRows.length - 1; index += 1) {
     const left = directRows[index];
     const right = directRows[index + 1];
+    if (!isSameRouteDate(left, right)) {
+      continue;
+    }
+    const fromLabel = normalizeRouteNodeLabel(left.match);
+    const toLabel = normalizeRouteNodeLabel(right.match);
+    const legIndex = legs.findIndex((leg, candidateIndex) => {
+      if (usedLegIndexes.has(candidateIndex)) {
+        return false;
+      }
+      const legDateKey = String(leg?.dateKey || "").trim();
+      const sameDate = legDateKey ? legDateKey === left.dateKey : true;
+      return (
+        sameDate &&
+        normalizeRouteNodeLabel(leg?.from) === fromLabel &&
+        normalizeRouteNodeLabel(leg?.to) === toLabel
+      );
+    });
+    if (legIndex >= 0) {
+      usedLegIndexes.add(legIndex);
+    }
+    const leg = legIndex >= 0 ? legs[legIndex] : null;
     const routeEligible = Boolean(left?.routeEligible) && Boolean(right?.routeEligible);
 
-    return {
+    rows.push({
+      pairIndex: index,
       label: `Spiel ${index + 1} → Spiel ${index + 2}`,
-      from: toSafeString(leg?.from),
-      to: toSafeString(leg?.to),
+      from: toSafeString(leg?.from) || left.match,
+      to: toSafeString(leg?.to) || right.match,
       distanceKm: routeEligible ? toFiniteNumberOrNull(leg?.distanceKm) : null,
       durationMinutes: routeEligible ? toFiniteNumberOrNull(leg?.durationMinutes) : null,
-    };
-  });
+    });
+  }
+
+  return rows;
+}
+
+function buildRouteStepRows(directRows, betweenRows) {
+  const safeDirectRows = Array.isArray(directRows) ? directRows : [];
+  const betweenByPair = new Map((Array.isArray(betweenRows) ? betweenRows : []).map((row) => [row.pairIndex, row]));
+  const steps = [];
+
+  for (let index = 0; index < safeDirectRows.length; index += 1) {
+    const current = safeDirectRows[index];
+    const previous = safeDirectRows[index - 1];
+    const sameDateAsPrevious = index > 0 && isSameRouteDate(previous, current);
+
+    if (!sameDateAsPrevious) {
+      steps.push({
+        stepType: "start",
+        gameIndex: index,
+        match: current?.match || "",
+        distanceKm: toFiniteNumberOrNull(current?.distanceKm),
+        durationMinutes: toFiniteNumberOrNull(current?.durationMinutes),
+        routeEligible: Boolean(current?.routeEligible),
+      });
+      continue;
+    }
+
+    const between = betweenByPair.get(index - 1) || null;
+    const routeEligible = Boolean(previous?.routeEligible) && Boolean(current?.routeEligible);
+
+    steps.push({
+      stepType: "between",
+      gameIndex: index,
+      from: toSafeString(between?.from) || previous?.match || `Spiel ${index}`,
+      to: toSafeString(between?.to) || current?.match || `Spiel ${index + 1}`,
+      distanceKm: routeEligible ? toFiniteNumberOrNull(between?.distanceKm) : null,
+      durationMinutes: routeEligible ? toFiniteNumberOrNull(between?.durationMinutes) : null,
+      routeEligible,
+    });
+  }
+
+  return steps;
 }
 
 export function computeVisibleChainTotals(directRows, betweenRows) {
-  if (!Array.isArray(directRows) || directRows.length === 0) {
+  const steps = buildRouteStepRows(directRows, betweenRows);
+  if (steps.length === 0) {
     return { totalKm: null, totalMinutes: null };
   }
 
-  const firstLegDistance = toFiniteNumberOrNull(directRows[0]?.distanceKm);
-  const firstLegMinutes = toFiniteNumberOrNull(directRows[0]?.durationMinutes);
-  if (firstLegDistance === null) {
-    return { totalKm: null, totalMinutes: null };
-  }
+  let totalKm = 0;
+  let totalMinutes = 0;
+  let minutesKnown = true;
 
-  let totalKm = firstLegDistance;
-  let totalMinutes = firstLegMinutes;
-  let minutesKnown = firstLegMinutes !== null;
-
-  const safeBetweenRows = Array.isArray(betweenRows) ? betweenRows : [];
-  for (const row of safeBetweenRows) {
-    const legDistance = toFiniteNumberOrNull(row?.distanceKm);
+  for (const step of steps) {
+    const legDistance = toFiniteNumberOrNull(step?.distanceKm);
     if (legDistance === null) {
       return { totalKm: null, totalMinutes: null };
     }
     totalKm += legDistance;
 
     if (minutesKnown) {
-      const legMinutes = toFiniteNumberOrNull(row?.durationMinutes);
+      const legMinutes = toFiniteNumberOrNull(step?.durationMinutes);
       if (legMinutes === null) {
         minutesKnown = false;
       } else {
-        totalMinutes = (totalMinutes ?? 0) + legMinutes;
+        totalMinutes += legMinutes;
       }
     }
   }
@@ -1047,14 +1141,32 @@ export function drawRouteCalculationPage(
   const safeStartLabel = toSafeString(startLocationLabel) || "Startort";
   const directRows = buildDirectRouteRows(games, directRoutes, 5);
   const betweenRows = buildBetweenGamesRows(routeOverview, directRows);
+  const routeOverviewLegs = Array.isArray(routeOverview?.legs) ? routeOverview.legs : [];
+  const fallbackRouteSteps = buildRouteStepRows(directRows, betweenRows);
+  const routeSteps =
+    routeOverviewLegs.length > 0
+      ? routeOverviewLegs.map((leg, index) => ({
+          stepType:
+            normalizeRouteNodeLabel(leg?.to) === normalizeRouteNodeLabel(safeStartLabel)
+              ? "return"
+              : normalizeRouteNodeLabel(leg?.from) === normalizeRouteNodeLabel(safeStartLabel)
+                ? "start"
+                : "between",
+          gameIndex: index,
+          from: toSafeString(leg?.from) || "Start",
+          to: toSafeString(leg?.to) || "Spiel",
+          distanceKm: toFiniteNumberOrNull(leg?.distanceKm),
+          durationMinutes: toFiniteNumberOrNull(leg?.durationMinutes),
+          routeEligible: true,
+        }))
+      : fallbackRouteSteps;
   const visibleTotals = computeVisibleChainTotals(directRows, betweenRows);
   const overviewKm = toFiniteNumberOrNull(routeOverview?.totalKm);
   const overviewMinutes = toFiniteNumberOrNull(routeOverview?.estimatedMinutes);
   const totalKm = overviewKm ?? visibleTotals.totalKm;
   const totalMinutes = overviewMinutes ?? visibleTotals.totalMinutes;
   const hasAnyRouteData =
-    directRows.some((row) => Number.isFinite(row?.distanceKm)) ||
-    betweenRows.some((row) => Number.isFinite(row?.distanceKm)) ||
+    routeSteps.some((step) => Number.isFinite(step?.distanceKm)) ||
     Number.isFinite(totalKm);
 
   if (!hasAnyRouteData) {
@@ -1085,7 +1197,7 @@ export function drawRouteCalculationPage(
   );
   state.y += 1;
 
-  if (directRows.length > 0) {
+  if (routeSteps.length > 0) {
     writeText(doc, state, "Streckenfolge", {
       fontSize: 9,
       style: "bold",
@@ -1094,61 +1206,28 @@ export function drawRouteCalculationPage(
       sectionOnNewPage: "Route",
     });
 
-    const firstLeg = directRows[0];
-    writeText(
-      doc,
-      state,
-      `1. Start → Spiel 1 (${truncatePlain(firstLeg.match, 56)}): ${formatDistanceLabel(firstLeg.distanceKm)} · ${formatMinutesLabel(
-        firstLeg.durationMinutes,
-      )}`,
-      {
+    for (let index = 0; index < routeSteps.length; index += 1) {
+      const step = routeSteps[index];
+      const routeText =
+        step.stepType === "return"
+          ? `${step.from} → ${safeStartLabel}`
+          : step.stepType === "start"
+            ? `Start → ${truncatePlain(step.to, 56)}`
+            : `${truncatePlain(step.from, 40)} → ${truncatePlain(step.to, 40)}`;
+      const line = `${index + 1}. ${routeText}: ${formatDistanceLabel(step.distanceKm)} · ${formatMinutesLabel(
+        step.durationMinutes,
+      )}`;
+
+      writeText(doc, state, line, {
         fontSize: 8.4,
         color: COLORS.text,
         lineHeight: 4,
         sectionOnNewPage: "Route",
-      },
-    );
-
-    if (betweenRows.length > 0) {
-      for (let index = 0; index < betweenRows.length; index += 1) {
-        const row = betweenRows[index];
-        writeText(
-          doc,
-          state,
-          `${index + 2}. Spiel ${index + 1} → Spiel ${index + 2}: ${formatDistanceLabel(row.distanceKm)} · ${formatMinutesLabel(
-            row.durationMinutes,
-          )}`,
-          {
-            fontSize: 8.4,
-            color: COLORS.text,
-            lineHeight: 4,
-            sectionOnNewPage: "Route",
-          },
-        );
-      }
-    } else if (directRows.length > 1) {
-      for (let index = 1; index < directRows.length; index += 1) {
-        const row = directRows[index];
-        writeText(
-          doc,
-          state,
-          `${index + 1}. Start → Spiel ${index + 1} (${truncatePlain(row.match, 56)}): ${formatDistanceLabel(
-            row.distanceKm,
-          )} · ${formatMinutesLabel(row.durationMinutes)}`,
-          {
-            fontSize: 8.4,
-            color: COLORS.text,
-            lineHeight: 4,
-            sectionOnNewPage: "Route",
-          },
-        );
-      }
+      });
     }
   }
 
-  const missingSegments =
-    directRows.filter((row) => row.routeEligible && row.distanceKm === null).length +
-    betweenRows.filter((row) => row.distanceKm === null).length;
+  const missingSegments = routeSteps.filter((step) => step.routeEligible && step.distanceKm === null).length;
   if (missingSegments > 0) {
     state.y += 1;
     writeText(doc, state, "Hinweis: Einzelne Strecken konnten nicht eindeutig berechnet werden.", {
@@ -1164,9 +1243,9 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   const scoutName = String(cfg?.scoutName || "").trim();
   const rate = Number(cfg?.kmPauschale) > 0 ? Number(cfg.kmPauschale) : 0.3;
   const overrides = cfg?.kmOverrides ?? {};
-  const rows = (Array.isArray(games) ? games : []).filter(
-    (game) => Number.isFinite(game.distanceKm) && game.distanceKm > 0,
-  );
+  const fahrtkostenModel = buildFahrtkostenRows(games, cfg?.routeOverview);
+  const rows = fahrtkostenModel.rows;
+  const isRouteMode = fahrtkostenModel.mode === "route";
 
   if (rows.length === 0) {
     return;
@@ -1195,7 +1274,7 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   state.y += 1;
 
   const cols = [10, 24, 88, 28, 36];
-  const headers = ["Nr.", "Datum", "Spiel", "km (H+R)", "Betrag"];
+  const headers = ["Nr.", "Datum", "Strecke", "km", "Betrag"];
   const tableX = MARGIN_X;
   const headerHeight = 6.2;
 
@@ -1227,23 +1306,20 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   let totalEur = 0;
 
   for (let index = 0; index < rows.length; index += 1) {
-    const game = rows[index];
-    const einfach = Number.isFinite(overrides[game.id]) ? overrides[game.id] : game.distanceKm;
-    const hinRueck = einfach * 2;
-    const betrag = hinRueck * rate;
-    totalHR += hinRueck;
+    const row = rows[index];
+    const baseKm = Number.isFinite(overrides[row.id]) ? overrides[row.id] : row.baseKm;
+    const abrechnungsKm = isRouteMode ? baseKm : baseKm * 2;
+    const betrag = abrechnungsKm * rate;
+    totalHR += abrechnungsKm;
     totalEur += betrag;
 
-    const dateStr =
-      game.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime())
-        ? game.dateObj.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })
-        : String(game.date || "");
+    const dateStr = row.dateLabel || "";
 
     const values = [
       String(index + 1),
       dateStr,
-      truncateText(`${String(game.home || "–")} – ${String(game.away || "–")}`, 52),
-      `${hinRueck.toFixed(1).replace(".", ",")} km`,
+      truncateText(row.label || "–", 52),
+      `${abrechnungsKm.toFixed(1).replace(".", ",")} km`,
       `${betrag.toFixed(2).replace(".", ",")} €`,
     ];
 

@@ -60,6 +60,7 @@ describe("SetupPage", () => {
     renderSetupPage();
 
     expect(screen.getByLabelText(/Startort \/ Abfahrtsadresse/i)).toBeInTheDocument();
+    expect(screen.getByText(/Routen-API:/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Beobachtete Teams/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Favorit \+/i })).not.toBeInTheDocument();
   });
