@@ -45,7 +45,7 @@ export function buildFahrtkostenRows(games, routeOverview) {
       return {
         id: `leg-${index}`,
         dateLabel: formatDateFromKey(leg?.dateKey),
-        label: `${String(leg?.from || "").trim()} → ${String(leg?.to || "").trim()}`.trim(),
+        label: `${String(leg?.from || "").trim()} -> ${String(leg?.to || "").trim()}`.trim(),
         baseKm: distanceKm,
       };
     })

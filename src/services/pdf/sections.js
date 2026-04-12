@@ -1246,6 +1246,39 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   const fahrtkostenModel = buildFahrtkostenRows(games, cfg?.routeOverview);
   const rows = fahrtkostenModel.rows;
   const isRouteMode = fahrtkostenModel.mode === "route";
+  const startLocationLabel = toSafeString(cfg?.startLocationLabel || cfg?.startLocation?.label || "Startort") || "Startort";
+  const normalizedStartLabel = normalizeRouteNodeLabel(startLocationLabel);
+  const routeOverviewLegs = Array.isArray(cfg?.routeOverview?.legs) ? cfg.routeOverview.legs : [];
+  const routeRows = routeOverviewLegs
+    .map((leg, index) => {
+      const from = toSafeString(leg?.from) || "Start";
+      const to = toSafeString(leg?.to) || "Spiel";
+      const distanceKm = toFiniteNumberOrNull(leg?.distanceKm);
+      const durationMinutes = toFiniteNumberOrNull(leg?.durationMinutes);
+      const legDateKey = String(leg?.dateKey || "").trim();
+      const dateLabel = /^\d{4}-\d{2}-\d{2}$/.test(legDateKey)
+        ? `${legDateKey.slice(8, 10)}.${legDateKey.slice(5, 7)}.`
+        : "";
+      const isReturn = normalizeRouteNodeLabel(to) === normalizedStartLabel;
+      const isStartLeg = normalizeRouteNodeLabel(from) === normalizedStartLabel;
+      const stage = isReturn ? "Rueckfahrt" : isStartLeg ? "Anfahrt" : "Zwischenfahrt";
+      const segment = isReturn
+        ? `${truncatePlain(from, 38)} -> Start`
+        : isStartLeg
+          ? `Start -> ${truncatePlain(to, 38)}`
+          : `${truncatePlain(from, 32)} -> ${truncatePlain(to, 32)}`;
+
+      return {
+        index: index + 1,
+        dateLabel,
+        segment: `${stage}: ${segment}`,
+        distanceKm,
+        durationMinutes,
+      };
+    })
+    .filter((row) => Number.isFinite(row.distanceKm) || Number.isFinite(row.durationMinutes));
+  const routeTotalKm = toFiniteNumberOrNull(cfg?.routeOverview?.totalKm);
+  const routeTotalMinutes = toFiniteNumberOrNull(cfg?.routeOverview?.estimatedMinutes);
 
   if (rows.length === 0) {
     return;
@@ -1259,11 +1292,11 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     state,
     [
       scoutName ? `Scout: ${scoutName}` : null,
-      `Pauschale: ${rate.toFixed(2).replace(".", ",")} €/km`,
+      `Pauschale: ${rate.toFixed(2).replace(".", ",")} EUR/km`,
       `Datum: ${new Date().toLocaleDateString("de-DE")}`,
     ]
       .filter(Boolean)
-      .join(" · "),
+      .join(" | "),
     {
       fontSize: 8.8,
       color: COLORS.muted,
@@ -1271,7 +1304,108 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
       sectionOnNewPage: "Fahrtkosten",
     },
   );
-  state.y += 1;
+  state.y += 2;
+
+  if (routeRows.length > 0) {
+    writeText(doc, state, `Routenfolge fuer die Abrechnung (Start: ${startLocationLabel})`, {
+      fontSize: 9,
+      style: "bold",
+      color: COLORS.text,
+      lineHeight: 4.3,
+      sectionOnNewPage: "Fahrtkosten",
+    });
+    writeText(doc, state, "Nur Fahrten am selben Datum werden verknuepft. Rueckfahrt zum Start ist pro Spieltag enthalten.", {
+      fontSize: 8.3,
+      color: COLORS.muted,
+      lineHeight: 4,
+      sectionOnNewPage: "Fahrtkosten",
+    });
+    writeText(
+      doc,
+      state,
+      `Gesamtroute: ${formatDistanceLabel(routeTotalKm)} | ${formatMinutesLabel(routeTotalMinutes)}`,
+      {
+        fontSize: 8.6,
+        style: "bold",
+        color: COLORS.accent,
+        lineHeight: 4.1,
+        sectionOnNewPage: "Fahrtkosten",
+      },
+    );
+    state.y += 1;
+
+    const routeCols = [10, 18, 98, 24, 36];
+    const routeHeaders = ["Nr.", "Tag", "Segment", "km", "Zeit"];
+    const routeHeaderHeight = 6;
+    const routeTableX = MARGIN_X;
+
+    function drawRouteHeader() {
+      ensureSpace(doc, state, routeHeaderHeight + 1, "Fahrtkosten", () => {
+        drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+        drawRouteHeader();
+      });
+
+      doc.setFillColor(237, 242, 247);
+      doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+      doc.rect(routeTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, routeHeaderHeight, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+
+      let cursorX = routeTableX + 1.8;
+      for (let index = 0; index < routeHeaders.length; index += 1) {
+        doc.text(routeHeaders[index], cursorX, state.y + 4.2);
+        cursorX += routeCols[index];
+      }
+
+      state.y += routeHeaderHeight;
+    }
+
+    drawRouteHeader();
+
+    for (const routeRow of routeRows) {
+      const values = [
+        String(routeRow.index),
+        routeRow.dateLabel || "--",
+        truncatePlain(routeRow.segment, 72),
+        formatDistanceLabel(routeRow.distanceKm),
+        formatMinutesLabel(routeRow.durationMinutes),
+      ];
+
+      const segmentLines = doc.splitTextToSize(values[2], Math.max(12, routeCols[2] - 2)).slice(0, 2);
+      const rowHeight = Math.max(6, segmentLines.length * 3.8 + 2.2);
+      ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
+        drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+        drawRouteHeader();
+      });
+
+      doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+      doc.rect(routeTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.1);
+      doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+
+      let cursorX = routeTableX + 1.8;
+      for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
+        if (colIndex === 2) {
+          let lineY = state.y + 3.8;
+          for (const line of segmentLines) {
+            doc.text(sanitizePdfText(line), cursorX, lineY);
+            lineY += 3.8;
+          }
+        } else {
+          doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
+        }
+        cursorX += routeCols[colIndex];
+      }
+
+      state.y += rowHeight;
+    }
+
+    state.y += 4;
+  }
 
   const cols = [10, 24, 88, 28, 36];
   const headers = ["Nr.", "Datum", "Strecke", "km", "Betrag"];
@@ -1318,7 +1452,7 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     const values = [
       String(index + 1),
       dateStr,
-      truncateText(row.label || "–", 52),
+      truncatePlain(row.label || "-", 64),
       `${abrechnungsKm.toFixed(1).replace(".", ",")} km`,
       `${betrag.toFixed(2).replace(".", ",")} €`,
     ];

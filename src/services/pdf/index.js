@@ -2,7 +2,7 @@ import { CONTENT_TOP, sortGamesByDateTime } from "./layout";
 import { fetchGamesWithProviders } from "../dataProvider";
 import { buildFileName } from "./styles";
 import { calculateDirectStartRoutes, calculateRouteWithDriving } from "../../utils/geo";
-import { drawGamesOverviewPage, drawFahrtkostenPage, drawHeaderFooter, drawRouteCalculationPage } from "./sections";
+import { drawGamesOverviewPage, drawFahrtkostenPage, drawHeaderFooter } from "./sections";
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
 const PREVIEW_URL_REVOKE_DELAY_MS = 10 * 60 * 1000;
@@ -272,14 +272,6 @@ export function buildPdf(JsPdfCtor, games, cfg) {
   const state = { y: CONTENT_TOP, sections: ["Überblick"] };
 
   drawGamesOverviewPage(doc, state, cfgWithBuild, createdAt, normalizedGames);
-  drawRouteCalculationPage(
-    doc,
-    state,
-    cfgWithBuild?.routeOverview,
-    cfgWithBuild?.startLocationLabel || cfgWithBuild?.startLocation?.label || "Startort",
-    normalizedGames,
-    cfgWithBuild?.routeDirectOptions,
-  );
   drawFahrtkostenPage(doc, state, normalizedGames, cfgWithBuild);
   drawHeaderFooter(doc, state, cfgWithBuild, createdAt);
 

@@ -17,6 +17,8 @@ describe("fahrtkosten utils", () => {
     expect(model.rows).toHaveLength(2);
     expect(model.rows[0].id).toBe("leg-0");
     expect(model.rows[0].label).toContain("Start");
+    expect(model.rows[0].label).toContain("->");
+    expect(model.rows[0].label).not.toContain("→");
     expect(model.rows[0].dateLabel).toBe("18.04.");
   });
 
