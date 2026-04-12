@@ -8,8 +8,9 @@ const ROUTING_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
 const PHOTON_BASE_URL = "https://photon.komoot.io/api/";
 const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GOOGLE_DIRECTIONS_BASE_URL = "https://maps.googleapis.com/maps/api/directions/json";
-const GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+const ENV_GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 const GOOGLE_STRICT_ENV = String(import.meta?.env?.VITE_GOOGLE_MAPS_STRICT || "").trim().toLowerCase();
+const GOOGLE_MAPS_RUNTIME_STORAGE_KEY = "scoutplan.googlemaps.apikey.v1";
 const KREIS_GEO_HINTS = {
   duesseldorf: "Düsseldorf, Deutschland",
   duisburg: "Duisburg, Deutschland",
@@ -92,7 +93,61 @@ function pruneMap(map, maxEntries) {
 }
 
 function hasGoogleMapsApiKey() {
-  return GOOGLE_MAPS_API_KEY.length > 0;
+  return getGoogleMapsApiKey().length > 0;
+}
+
+function readRuntimeGoogleMapsApiKey() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  try {
+    return String(window.localStorage.getItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function getGoogleMapsApiKey() {
+  const runtime = readRuntimeGoogleMapsApiKey();
+  if (runtime) {
+    return runtime;
+  }
+  return ENV_GOOGLE_MAPS_API_KEY;
+}
+
+function getGoogleMapsApiKeySource() {
+  const runtime = readRuntimeGoogleMapsApiKey();
+  if (runtime) {
+    return "runtime";
+  }
+  if (ENV_GOOGLE_MAPS_API_KEY) {
+    return "env";
+  }
+  return "none";
+}
+
+export function setRuntimeGoogleMapsApiKey(value) {
+  const key = String(value || "").trim();
+  if (!key || typeof window === "undefined") {
+    return false;
+  }
+  try {
+    window.localStorage.setItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY, key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearRuntimeGoogleMapsApiKey() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY);
+  } catch {
+    // Ignore localStorage errors.
+  }
 }
 
 function isGoogleStrictDisabled() {
@@ -122,14 +177,17 @@ export function getGoogleRoutingConfig() {
   const strictRequested = isGoogleStrictRequestedByEnv();
   const googleConfigured = hasGoogleMapsApiKey();
   const strictActive = shouldUseGoogleStrictMode();
+  const keySource = getGoogleMapsApiKeySource();
 
   return {
     googleConfigured,
     strictRequested,
     strictActive,
+    keySource,
     geocodeProvider: getGeocodeProvider(),
     routeProvider: getRouteProvider(),
     keyEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
+    keyStorageKey: GOOGLE_MAPS_RUNTIME_STORAGE_KEY,
   };
 }
 
@@ -434,7 +492,8 @@ async function requestNominatim(query) {
 }
 
 async function requestGoogleGeocode(query) {
-  if (!hasGoogleMapsApiKey()) {
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
     return null;
   }
 
@@ -442,7 +501,7 @@ async function requestGoogleGeocode(query) {
   endpoint.searchParams.set("address", query);
   endpoint.searchParams.set("language", "de");
   endpoint.searchParams.set("region", "de");
-  endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
+  endpoint.searchParams.set("key", apiKey);
 
   const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
@@ -474,7 +533,8 @@ async function requestGoogleGeocode(query) {
 }
 
 async function requestGoogleReverseGeocode(lat, lon) {
-  if (!hasGoogleMapsApiKey()) {
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
     return null;
   }
 
@@ -482,7 +542,7 @@ async function requestGoogleReverseGeocode(lat, lon) {
   endpoint.searchParams.set("latlng", `${lat},${lon}`);
   endpoint.searchParams.set("language", "de");
   endpoint.searchParams.set("region", "de");
-  endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
+  endpoint.searchParams.set("key", apiKey);
 
   const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
@@ -643,7 +703,8 @@ function buildRouteResult(distanceMeters, durationSeconds, provider = "unknown")
 }
 
 async function requestGoogleDrivingRoute(fromPoint, toPoint) {
-  if (!hasGoogleMapsApiKey()) {
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
     return null;
   }
 
@@ -662,7 +723,7 @@ async function requestGoogleDrivingRoute(fromPoint, toPoint) {
   endpoint.searchParams.set("language", "de");
   endpoint.searchParams.set("region", "de");
   endpoint.searchParams.set("alternatives", "false");
-  endpoint.searchParams.set("key", GOOGLE_MAPS_API_KEY);
+  endpoint.searchParams.set("key", apiKey);
 
   const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {

@@ -3,14 +3,17 @@ import {
   calculateDirectStartRoutes,
   calculateRoute,
   calculateRouteWithDriving,
+  clearRuntimeGoogleMapsApiKey,
   fetchDrivingRoute,
   getGoogleRoutingConfig,
   haversineDistance,
+  setRuntimeGoogleMapsApiKey,
 } from "./geo";
 
 describe("geo utils", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    clearRuntimeGoogleMapsApiKey();
   });
 
   it("berechnet Haversine-Distanz in km", () => {
@@ -181,5 +184,14 @@ describe("geo utils", () => {
       strictRequested: expect.any(Boolean),
       strictActive: expect.any(Boolean),
     });
+  });
+
+  it("nutzt lokal gespeicherten API-Key als Runtime-Quelle", () => {
+    const saved = setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
+    expect(saved).toBe(true);
+
+    const config = getGoogleRoutingConfig();
+    expect(config.googleConfigured).toBe(true);
+    expect(config.keySource).toBe("runtime");
   });
 });

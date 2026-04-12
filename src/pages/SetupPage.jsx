@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { useScoutX } from "../context/ScoutXContext";
@@ -8,7 +9,7 @@ import { TeamPicker } from "../components/TeamPicker";
 import { PrimaryButton } from "../components/Buttons";
 import { SectionHeader } from "../components/SectionHeader";
 import { C, card, inp, lbl, secH } from "../styles/theme";
-import { getGoogleRoutingConfig } from "../utils/geo";
+import { clearRuntimeGoogleMapsApiKey, getGoogleRoutingConfig, setRuntimeGoogleMapsApiKey } from "../utils/geo";
 
 export function SetupPage() {
   const {
@@ -54,6 +55,9 @@ export function SetupPage() {
     onSetScoutName,
     onSetKmPauschale,
   } = useScoutX();
+  const [googleStatusVersion, setGoogleStatusVersion] = useState(0);
+  const [googleKeyDraft, setGoogleKeyDraft] = useState("");
+  const [googleKeyNotice, setGoogleKeyNotice] = useState("");
   const googleRouting = getGoogleRoutingConfig();
   const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
   const summaryParts = [
@@ -75,6 +79,19 @@ export function SetupPage() {
     }
 
     onUseCurrentLocation();
+  };
+
+  const onSaveRuntimeGoogleKey = () => {
+    const ok = setRuntimeGoogleMapsApiKey(googleKeyDraft);
+    setGoogleKeyDraft("");
+    setGoogleKeyNotice(ok ? "API-Key lokal im Browser gespeichert." : "Bitte einen gültigen API-Key eintragen.");
+    setGoogleStatusVersion((value) => value + 1);
+  };
+
+  const onClearRuntimeGoogleKey = () => {
+    clearRuntimeGoogleMapsApiKey();
+    setGoogleKeyNotice("Lokal gespeicherter API-Key entfernt.");
+    setGoogleStatusVersion((value) => value + 1);
   };
 
   return (
@@ -184,6 +201,7 @@ export function SetupPage() {
                   {startLocation?.label ? ` · ${startLocation.label}` : ""}
                 </div>
                 <div
+                  key={googleStatusVersion}
                   style={{
                     marginTop: 8,
                     borderRadius: 8,
@@ -204,22 +222,78 @@ export function SetupPage() {
                       : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
                   </div>
                   {!googleRouting.googleConfigured ? (
-                    <div>
-                      Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
-                      <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
-                      <a
-                        href="https://console.cloud.google.com/apis/credentials"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: C.warn, textDecoration: "underline" }}
-                      >
-                        Google Cloud Console
-                      </a>
+                    <div style={{ marginTop: 6 }}>
+                      <div>
+                        Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
+                        <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
+                        <a
+                          href="https://console.cloud.google.com/apis/credentials"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: C.warn, textDecoration: "underline" }}
+                        >
+                          Google Cloud Console
+                        </a>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                        <input
+                          type="password"
+                          value={googleKeyDraft}
+                          onChange={(event) => setGoogleKeyDraft(event.target.value)}
+                          placeholder="Google API-Key lokal speichern"
+                          style={{
+                            ...inp,
+                            flex: 1,
+                            minWidth: 210,
+                            height: 34,
+                            padding: "6px 10px",
+                            fontSize: 12,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={onSaveRuntimeGoogleKey}
+                          style={{
+                            ...inp,
+                            width: "auto",
+                            minWidth: 140,
+                            height: 34,
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          API-Key speichern
+                        </button>
+                      </div>
+                      {googleKeyNotice ? (
+                        <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
+                      ) : null}
                     </div>
                   ) : (
                     <div>
                       Provider: <code>{googleRouting.routeProvider}</code>
                       {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+                      {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
+                      {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
+                      {googleRouting.keySource === "runtime" ? (
+                        <button
+                          type="button"
+                          onClick={onClearRuntimeGoogleKey}
+                          style={{
+                            marginLeft: 10,
+                            border: "none",
+                            background: "transparent",
+                            color: C.grayLight,
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            fontSize: 11,
+                            padding: 0,
+                          }}
+                        >
+                          lokalen Key entfernen
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </div>
