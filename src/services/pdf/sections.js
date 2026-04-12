@@ -1290,7 +1290,7 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     return normalizePresenceMinutes(presenceOverrides[id]);
   };
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && attendanceRows.length === 0) {
     return;
   }
 
@@ -1444,90 +1444,124 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     state.y += headerHeight;
   }
 
-  drawTableHeader();
-
   let totalHR = 0;
   let totalEur = 0;
+  if (rows.length === 0) {
+    writeText(doc, state, "Keine abrechenbaren Strecken vorhanden.", {
+      fontSize: 8.4,
+      color: COLORS.muted,
+      lineHeight: 4,
+      sectionOnNewPage: "Fahrtkosten",
+    });
+    state.y += 3;
+  } else {
+    drawTableHeader();
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index];
-    const baseKm = Number.isFinite(overrides[row.id]) ? overrides[row.id] : row.baseKm;
-    const abrechnungsKm = isRouteMode ? baseKm : baseKm * 2;
-    const betrag = abrechnungsKm * rate;
-    totalHR += abrechnungsKm;
-    totalEur += betrag;
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const baseKm = Number.isFinite(overrides[row.id]) ? overrides[row.id] : row.baseKm;
+      const abrechnungsKm = isRouteMode ? baseKm : baseKm * 2;
+      const betrag = abrechnungsKm * rate;
+      totalHR += abrechnungsKm;
+      totalEur += betrag;
 
-    const dateStr = row.dateLabel || "";
+      const dateStr = row.dateLabel || "";
 
-    const values = [
-      String(index + 1),
-      dateStr,
-      truncatePlain(row.label || "-", 64),
-      `${abrechnungsKm.toFixed(1).replace(".", ",")} km`,
-      `${betrag.toFixed(2).replace(".", ",")} €`,
-    ];
+      const values = [
+        String(index + 1),
+        dateStr,
+        truncatePlain(row.label || "-", 64),
+        `${abrechnungsKm.toFixed(1).replace(".", ",")} km`,
+        `${betrag.toFixed(2).replace(".", ",")} €`,
+      ];
 
-    const gameLines = doc.splitTextToSize(values[2], Math.max(8, cols[2] - 2)).slice(0, 2);
-    const rowHeight = Math.max(5.4, gameLines.length * 3.8 + 2.2);
-    ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
+      const gameLines = doc.splitTextToSize(values[2], Math.max(8, cols[2] - 2)).slice(0, 2);
+      const rowHeight = Math.max(5.4, gameLines.length * 3.8 + 2.2);
+      ensureSpace(doc, state, rowHeight + 1, "Fahrtkosten", () => {
+        drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+        drawTableHeader();
+      });
+
+      if (index % 2 === 1) {
+        doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+        doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "F");
+      }
+
+      doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+      doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.1);
+
+      let cursorX = tableX + 1.8;
+      for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
+        if (colIndex === values.length - 1) {
+          doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+        } else {
+          doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+        }
+        if (colIndex === 2) {
+          let lineY = state.y + 3.8;
+          for (const line of gameLines) {
+            doc.text(sanitizePdfText(line), cursorX, lineY);
+            lineY += 3.8;
+          }
+        } else {
+          doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
+        }
+        cursorX += cols[colIndex];
+      }
+
+      state.y += rowHeight;
+    }
+
+    const summaryHeight = 6;
+    ensureSpace(doc, state, summaryHeight + 10, "Fahrtkosten", () => {
       drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
       drawTableHeader();
     });
 
+    doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
     doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
-    doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
+    doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, summaryHeight, "FD");
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.1);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.4);
+    doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+    doc.text("Gesamt", tableX + 1.8, state.y + 4.2);
 
-    let cursorX = tableX + 1.8;
-    for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
-      if (colIndex === values.length - 1) {
-        doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-      } else {
-        doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-      }
-      if (colIndex === 2) {
-        let lineY = state.y + 3.8;
-        for (const line of gameLines) {
-          doc.text(sanitizePdfText(line), cursorX, lineY);
-          lineY += 3.8;
-        }
-      } else {
-        doc.text(sanitizePdfText(values[colIndex]), cursorX, state.y + 3.8);
-      }
-      cursorX += cols[colIndex];
-    }
-
-    state.y += rowHeight;
+    const kmX = tableX + cols.slice(0, 3).reduce((sum, col) => sum + col, 0) + 1.8;
+    doc.text(`${totalHR.toFixed(1).replace(".", ",")} km`, kmX, state.y + 4.2);
+    doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+    doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[3], state.y + 4.2);
+    state.y += summaryHeight + 6;
   }
 
-  const summaryHeight = 6;
-  ensureSpace(doc, state, summaryHeight + 10, "Fahrtkosten", () => {
-    drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
-    drawTableHeader();
-  });
-
-  doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
-  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
-  doc.rect(tableX, state.y, PAGE_WIDTH - MARGIN_X * 2, summaryHeight, "FD");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.4);
-  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
-  doc.text("Gesamt", tableX + 1.8, state.y + 4.2);
-
-  const kmX = tableX + cols.slice(0, 3).reduce((sum, col) => sum + col, 0) + 1.8;
-  doc.text(`${totalHR.toFixed(1).replace(".", ",")} km`, kmX, state.y + 4.2);
-  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
-  doc.text(`${totalEur.toFixed(2).replace(".", ",")} €`, kmX + cols[3], state.y + 4.2);
-  state.y += summaryHeight + 6;
-
   if (attendanceRows.length === 0) {
+    writeText(doc, state, "Keine Arbeitszeitdaten vorhanden.", {
+      fontSize: 8.4,
+      color: COLORS.muted,
+      lineHeight: 4,
+      sectionOnNewPage: "Fahrtkosten",
+    });
     return;
   }
 
-  writeText(doc, state, "Arbeitszeiterfassung (manuell)", {
+  let recordedGames = 0;
+  let totalPresenceMinutes = 0;
+
+  for (const row of attendanceRows) {
+    const minutes = presenceMinutesForGame(row.id);
+    if (Number.isFinite(minutes)) {
+      recordedGames += 1;
+      totalPresenceMinutes += minutes;
+    }
+  }
+
+  const openGames = Math.max(0, attendanceRows.length - recordedGames);
+  const totalPresenceLabel = recordedGames > 0 ? formatPresenceMinutes(totalPresenceMinutes) : "nicht erfasst";
+
+  writeText(doc, state, "Arbeitszeit vor Ort", {
     fontSize: 9,
     style: "bold",
     color: COLORS.text,
@@ -1547,8 +1581,33 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   );
   state.y += 1;
 
-  const attendanceCols = [10, 24, 16, 98, 38];
-  const attendanceHeaders = ["Nr.", "Datum", "Zeit", "Spiel", "Vor Ort"];
+  const summaryBoxHeight = 14;
+  ensureSpace(doc, state, summaryBoxHeight + 1.5, "Fahrtkosten", () => {
+    drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
+  });
+  doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+  doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
+  doc.roundedRect(MARGIN_X, state.y, PAGE_WIDTH - MARGIN_X * 2, summaryBoxHeight, 2, 2, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
+  doc.text("Erfasst", MARGIN_X + 2.2, state.y + 4.8);
+  doc.text("Offen", MARGIN_X + 52, state.y + 4.8);
+  doc.text("Gesamt vor Ort", MARGIN_X + 92, state.y + 4.8);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.2);
+  doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
+  doc.text(`${recordedGames}/${attendanceRows.length} Spiele`, MARGIN_X + 2.2, state.y + 10.1);
+  doc.text(String(openGames), MARGIN_X + 52, state.y + 10.1);
+  doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
+  doc.text(totalPresenceLabel, MARGIN_X + 92, state.y + 10.1);
+
+  state.y += summaryBoxHeight + 3;
+
+  const attendanceCols = [10, 22, 14, 86, 22, 28];
+  const attendanceHeaders = ["Nr.", "Datum", "Zeit", "Spiel", "Status", "Dauer"];
   const attendanceTableX = MARGIN_X;
   const attendanceHeaderHeight = 6;
 
@@ -1577,25 +1636,19 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
 
   drawAttendanceHeader();
 
-  let recordedGames = 0;
-  let totalPresenceMinutes = 0;
-
   for (let index = 0; index < attendanceRows.length; index += 1) {
     const row = attendanceRows[index];
     const presenceMinutes = presenceMinutesForGame(row.id);
-    const presenceLabel = formatPresenceMinutes(presenceMinutes);
+    const isRecorded = Number.isFinite(presenceMinutes);
+    const presenceLabel = isRecorded ? formatPresenceMinutes(presenceMinutes) : "nicht erfasst";
     const values = [
       String(index + 1),
       row.dateLabel || "--",
       row.timeLabel || "--:--",
-      truncatePlain(row.matchLabel || "-", 66),
+      truncatePlain(row.matchLabel || "-", 58),
+      isRecorded ? "Erfasst" : "Offen",
       presenceLabel,
     ];
-
-    if (Number.isFinite(presenceMinutes)) {
-      recordedGames += 1;
-      totalPresenceMinutes += presenceMinutes;
-    }
 
     const matchLines = doc.splitTextToSize(values[3], Math.max(8, attendanceCols[3] - 2)).slice(0, 2);
     const rowHeight = Math.max(6, matchLines.length * 3.8 + 2.2);
@@ -1603,6 +1656,11 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
       drawSectionTitle(doc, state, "Fahrtkosten-Abrechnung (Fortsetzung)", "Fahrtkosten");
       drawAttendanceHeader();
     });
+
+    if (index % 2 === 1) {
+      doc.setFillColor(COLORS.tableStripe[0], COLORS.tableStripe[1], COLORS.tableStripe[2]);
+      doc.rect(attendanceTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "F");
+    }
 
     doc.setDrawColor(COLORS.line[0], COLORS.line[1], COLORS.line[2]);
     doc.rect(attendanceTableX, state.y, PAGE_WIDTH - MARGIN_X * 2, rowHeight, "S");
@@ -1613,9 +1671,9 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
     let cursorX = attendanceTableX + 1.8;
     for (let colIndex = 0; colIndex < values.length; colIndex += 1) {
       const value = values[colIndex];
-      if (colIndex === values.length - 1 && !Number.isFinite(presenceMinutes)) {
+      if (colIndex === values.length - 1 && !isRecorded) {
         doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-      } else if (colIndex === values.length - 1) {
+      } else if (colIndex === values.length - 1 || colIndex === values.length - 2) {
         doc.setTextColor(COLORS.accent[0], COLORS.accent[1], COLORS.accent[2]);
       } else {
         doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
@@ -1637,14 +1695,13 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   }
 
   state.y += 1.8;
-  writeText(doc, state, `Erfasst: ${recordedGames}/${attendanceRows.length} Spiele`, {
+  writeText(doc, state, `Status: ${recordedGames}/${attendanceRows.length} erfasst · ${openGames} offen`, {
     fontSize: 8.4,
     color: COLORS.muted,
     lineHeight: 4,
     sectionOnNewPage: "Fahrtkosten",
   });
 
-  const totalPresenceLabel = recordedGames > 0 ? formatPresenceMinutes(totalPresenceMinutes) : "nicht erfasst";
   writeText(doc, state, `Gesamte Vor-Ort-Dauer: ${totalPresenceLabel}`, {
     fontSize: 8.6,
     style: "bold",
