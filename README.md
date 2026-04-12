@@ -53,11 +53,12 @@ Für präzise Entfernungen (Startadresse -> Spiele -> Rückfahrt) inkl. Fahrtkos
 1. In der Google Cloud Console ein Projekt erstellen: `https://console.cloud.google.com/`
 2. Billing für das Projekt aktivieren.
 3. APIs aktivieren:
-   `Geocoding API` und `Directions API`
+   `Geocoding API` und `Routes API (New)`
 4. API-Key anlegen:
    `APIs & Services -> Credentials -> Create credentials -> API key`
 5. API-Key absichern:
    Anwendungseinschränkung `HTTP referrers` (deine Domains/Hosts) und API-Einschränkung auf die beiden APIs oben.
+   Optional: `Directions API (Legacy)` nur dann aktivieren, wenn du den Legacy-Fallback zusätzlich nutzen willst.
 6. In `/.env.local` eintragen:
    `VITE_GOOGLE_MAPS_API_KEY=<DEIN_KEY>`
    `VITE_GOOGLE_MAPS_STRICT=true`
@@ -79,6 +80,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-12: Routing nutzt jetzt primär Google Routes API (v2), Legacy-Directions nur noch als Fallback; Geocoding-Fehler zeigen jetzt konkrete Google-Statusmeldungen (z. B. `REQUEST_DENIED`).
 - 2026-04-11: Google-Routing-Scaffolding ergänzt: sichtbarer API-Status im Setup, ENV-Vorlage bereinigt, Dokumentation für Key-Setup ergänzt.
 - 2026-04-11: Wetterermittlung wurde vollständig entfernt (Enrichment, UI und PDF-Details).
 - 2026-04-07: Games-Seite zeigt jetzt einen Live-Hinweis, wenn Entfernungs-Enrichment im Hintergrund noch läuft.

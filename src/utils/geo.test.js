@@ -5,6 +5,7 @@ import {
   calculateRouteWithDriving,
   clearRuntimeGoogleMapsApiKey,
   fetchDrivingRoute,
+  geocodeAddress,
   getGoogleRoutingConfig,
   haversineDistance,
   setRuntimeGoogleMapsApiKey,
@@ -152,6 +153,50 @@ describe("geo utils", () => {
     const strictResult = await fetchDrivingRoute(fromPoint, toPoint, { requireGoogle: true });
 
     expect(strictResult).toBeNull();
+  });
+
+  it("nutzt Google Routes API v2 mit Runtime-Key", async () => {
+    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        routes: [
+          {
+            distanceMeters: 15432,
+            duration: "1045s",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const route = await fetchDrivingRoute(
+      { lat: 51.40101, lon: 6.90101 },
+      { lat: 51.51101, lon: 7.01101 },
+      { requireGoogle: true },
+    );
+
+    expect(route?.distanceKm).toBeCloseTo(15.432, 3);
+    expect(route?.durationMinutes).toBe(17);
+    expect(route?.provider).toBe("google-routes");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0] || "")).toContain("routes.googleapis.com/directions/v2:computeRoutes");
+  });
+
+  it("gibt im Strict-Mode den Google-Geocoding-Fehler weiter", async () => {
+    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "REQUEST_DENIED",
+        error_message: "API project is not authorized to use this API.",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(geocodeAddress("Geibelstraße 1, 47057 Duisburg")).rejects.toThrow(/REQUEST_DENIED/i);
   });
 
   it("liefert bei Direktstrecken ohne Google-Wert 'unbekannt'", async () => {

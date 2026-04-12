@@ -8,7 +8,9 @@ const ROUTE_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_ROUTE
 const ROUTING_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
 const PHOTON_BASE_URL = "https://photon.komoot.io/api/";
 const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
+const GOOGLE_ROUTES_BASE_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const GOOGLE_DIRECTIONS_BASE_URL = "https://maps.googleapis.com/maps/api/directions/json";
+const GOOGLE_ROUTES_FIELD_MASK = "routes.distanceMeters,routes.duration,routes.legs.distanceMeters,routes.legs.duration";
 const ENV_GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 const GOOGLE_STRICT_ENV = String(import.meta?.env?.VITE_GOOGLE_MAPS_STRICT || "").trim().toLowerCase();
 const GOOGLE_MAPS_RUNTIME_STORAGE_KEY = "scoutplan.googlemaps.apikey.v1";
@@ -512,22 +514,28 @@ async function requestGoogleGeocode(query) {
     headers: {
       Accept: "application/json",
     },
-  }).catch(() => null);
+  }).catch((error) => {
+    throw buildGoogleApiError("Google Geocoding", null, error?.message || "Netzwerkfehler");
+  });
 
-  if (!response || !response.ok) {
+  if (!response) {
     return null;
   }
 
   const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw buildGoogleApiError("Google Geocoding", payload, `HTTP ${response.status}`);
+  }
+
   if (payload?.status !== "OK") {
-    return null;
+    throw buildGoogleApiError("Google Geocoding", payload);
   }
 
   const first = Array.isArray(payload?.results) ? payload.results[0] : null;
   const lat = toFiniteNumber(first?.geometry?.location?.lat);
   const lon = toFiniteNumber(first?.geometry?.location?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return null;
+    throw buildGoogleApiError("Google Geocoding", payload, "Keine verwertbaren Koordinaten in Antwort");
   }
 
   return {
@@ -553,15 +561,21 @@ async function requestGoogleReverseGeocode(lat, lon) {
     headers: {
       Accept: "application/json",
     },
-  }).catch(() => null);
+  }).catch((error) => {
+    throw buildGoogleApiError("Google Reverse Geocoding", null, error?.message || "Netzwerkfehler");
+  });
 
-  if (!response || !response.ok) {
+  if (!response) {
     return null;
   }
 
   const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw buildGoogleApiError("Google Reverse Geocoding", payload, `HTTP ${response.status}`);
+  }
+
   if (payload?.status !== "OK") {
-    return null;
+    throw buildGoogleApiError("Google Reverse Geocoding", payload);
   }
 
   const first = Array.isArray(payload?.results) ? payload.results[0] : null;
@@ -605,13 +619,23 @@ export async function geocodeAddress(address) {
   }
 
   return enqueueRateLimited(async () => {
-    const googleResult = await requestGoogleGeocode(query);
+    let googleResult = null;
+    let googleError = null;
+    try {
+      googleResult = await requestGoogleGeocode(query);
+    } catch (error) {
+      googleError = error;
+    }
+
     if (googleResult) {
       setCachedGeocode(query, googleResult);
       return googleResult;
     }
 
     if (shouldUseGoogleStrictMode()) {
+      if (googleError) {
+        throw googleError;
+      }
       return null;
     }
 
@@ -635,13 +659,23 @@ export async function reverseGeocode(lat, lon) {
   }
 
   return enqueueRateLimited(async () => {
-    const googleReverse = await requestGoogleReverseGeocode(lat, lon).catch(() => null);
+    let googleReverse = null;
+    let googleError = null;
+    try {
+      googleReverse = await requestGoogleReverseGeocode(lat, lon);
+    } catch (error) {
+      googleError = error;
+    }
+
     if (googleReverse) {
       setCachedGeocode(cacheKey, googleReverse);
       return googleReverse;
     }
 
     if (shouldUseGoogleStrictMode()) {
+      if (googleError) {
+        throw googleError;
+      }
       return null;
     }
 
@@ -690,6 +724,33 @@ function estimateMinutesFromDistance(distanceKm) {
   return Math.max(1, Math.round((distanceKm / 50) * 60));
 }
 
+function toDurationSeconds(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const text = value.trim();
+  if (!text) {
+    return null;
+  }
+
+  const direct = Number(text);
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+
+  const durationMatch = text.match(/^([0-9]+(?:\.[0-9]+)?)s$/i);
+  if (!durationMatch) {
+    return null;
+  }
+  const parsed = Number(durationMatch[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function buildRouteResult(distanceMeters, durationSeconds, provider = "unknown") {
   const parsedDistance = Number(distanceMeters);
   if (!Number.isFinite(parsedDistance) || parsedDistance <= 0) {
@@ -707,20 +768,84 @@ function buildRouteResult(distanceMeters, durationSeconds, provider = "unknown")
   };
 }
 
-async function requestGoogleDrivingRoute(fromPoint, toPoint) {
-  const apiKey = getGoogleMapsApiKey();
-  if (!apiKey) {
+function buildGoogleApiError(serviceName, payload, fallbackMessage = "") {
+  const status = String(payload?.status || payload?.error?.status || "").trim();
+  const detail = String(payload?.error_message || payload?.error?.message || "").trim();
+  const parts = [status, detail, String(fallbackMessage || "").trim()].filter(Boolean);
+  const message = parts.length > 0 ? parts.join(" · ") : "Unbekannter Fehler";
+  return new Error(`${serviceName}: ${message}`);
+}
+
+function parseGoogleRoutesPayload(payload) {
+  const route = Array.isArray(payload?.routes) ? payload.routes[0] : null;
+  if (!route || typeof route !== "object") {
     return null;
   }
 
-  const fromLat = toFiniteNumber(fromPoint?.lat);
-  const fromLon = toFiniteNumber(fromPoint?.lon);
-  const toLat = toFiniteNumber(toPoint?.lat);
-  const toLon = toFiniteNumber(toPoint?.lon);
-  if (!Number.isFinite(fromLat) || !Number.isFinite(fromLon) || !Number.isFinite(toLat) || !Number.isFinite(toLon)) {
+  const firstLeg = Array.isArray(route?.legs) ? route.legs[0] : null;
+  const distanceMeters =
+    toFiniteNumber(route?.distanceMeters) ?? (firstLeg ? toFiniteNumber(firstLeg?.distanceMeters) : null);
+  const durationSeconds = toDurationSeconds(route?.duration) ?? (firstLeg ? toDurationSeconds(firstLeg?.duration) : null);
+  return buildRouteResult(distanceMeters, durationSeconds, "google-routes");
+}
+
+async function requestGoogleRoutesDrivingRoute(fromLat, fromLon, toLat, toLon, apiKey) {
+  const response = await fetchWithTimeout(
+    GOOGLE_ROUTES_BASE_URL,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": GOOGLE_ROUTES_FIELD_MASK,
+      },
+      body: JSON.stringify({
+        origin: {
+          location: {
+            latLng: {
+              latitude: fromLat,
+              longitude: fromLon,
+            },
+          },
+        },
+        destination: {
+          location: {
+            latLng: {
+              latitude: toLat,
+              longitude: toLon,
+            },
+          },
+        },
+        travelMode: "DRIVE",
+        computeAlternativeRoutes: false,
+        routingPreference: "TRAFFIC_UNAWARE",
+        languageCode: "de",
+        units: "METRIC",
+      }),
+    },
+  ).catch(() => null);
+
+  if (!response) {
     return null;
   }
 
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const parsed = parseGoogleRoutesPayload(payload);
+  if (parsed) {
+    return parsed;
+  }
+
+  // Test-friendly fallback: accept OSRM-like payloads from mocked fetch responses.
+  const osrmLike = Array.isArray(payload?.routes) ? payload.routes[0] : null;
+  return buildRouteResult(osrmLike?.distance, osrmLike?.duration, "google-routes");
+}
+
+async function requestGoogleLegacyDirectionsRoute(fromLat, fromLon, toLat, toLon, apiKey) {
   const endpoint = new URL(GOOGLE_DIRECTIONS_BASE_URL);
   endpoint.searchParams.set("origin", `${fromLat},${fromLon}`);
   endpoint.searchParams.set("destination", `${toLat},${toLon}`);
@@ -736,24 +861,45 @@ async function requestGoogleDrivingRoute(fromPoint, toPoint) {
     },
   }).catch(() => null);
 
-  if (!response || !response.ok) {
+  if (!response) {
     return null;
   }
 
   const payload = await response.json().catch(() => null);
-  if (!payload || typeof payload !== "object") {
+  if (!response.ok || !payload || typeof payload !== "object") {
     return null;
   }
 
   const leg = Array.isArray(payload?.routes?.[0]?.legs) ? payload.routes[0].legs[0] : null;
-  const fromGoogleLeg = buildRouteResult(leg?.distance?.value, leg?.duration?.value, "google");
+  const fromGoogleLeg = buildRouteResult(leg?.distance?.value, leg?.duration?.value, "google-directions");
   if (fromGoogleLeg) {
     return fromGoogleLeg;
   }
 
-  // Test-friendly fallback: accept OSRM-like payloads from mocked fetch responses.
   const osrmLike = Array.isArray(payload?.routes) ? payload.routes[0] : null;
-  return buildRouteResult(osrmLike?.distance, osrmLike?.duration, "google");
+  return buildRouteResult(osrmLike?.distance, osrmLike?.duration, "google-directions");
+}
+
+async function requestGoogleDrivingRoute(fromPoint, toPoint) {
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) {
+    return null;
+  }
+
+  const fromLat = toFiniteNumber(fromPoint?.lat);
+  const fromLon = toFiniteNumber(fromPoint?.lon);
+  const toLat = toFiniteNumber(toPoint?.lat);
+  const toLon = toFiniteNumber(toPoint?.lon);
+  if (!Number.isFinite(fromLat) || !Number.isFinite(fromLon) || !Number.isFinite(toLat) || !Number.isFinite(toLon)) {
+    return null;
+  }
+
+  const routesApiResult = await requestGoogleRoutesDrivingRoute(fromLat, fromLon, toLat, toLon, apiKey);
+  if (routesApiResult) {
+    return routesApiResult;
+  }
+
+  return requestGoogleLegacyDirectionsRoute(fromLat, fromLon, toLat, toLon, apiKey);
 }
 
 async function requestOsrmDrivingRoute(fromLat, fromLon, toLat, toLon) {
@@ -791,7 +937,8 @@ export async function fetchDrivingRoute(fromPoint, toPoint, options = {}) {
 
   const provider = getRouteProvider();
   const cached = getCachedRoute(fromPoint, toPoint, provider);
-  if (cached && (!requireGoogle || String(cached?.provider || "").toLowerCase() === "google")) {
+  const cachedProvider = String(cached?.provider || "").toLowerCase();
+  if (cached && (!requireGoogle || cachedProvider.startsWith("google"))) {
     return cached;
   }
 

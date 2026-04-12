@@ -218,7 +218,7 @@ export function SetupPage() {
                   </strong>
                   <div>
                     {googleRouting.googleConfigured
-                      ? "Entfernungen für Route/Fahrtkosten werden über Google Directions berechnet."
+                      ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
                       : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
                   </div>
                   {!googleRouting.googleConfigured ? (
