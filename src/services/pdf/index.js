@@ -6,7 +6,7 @@ import { drawGamesOverviewPage, drawFahrtkostenPage, drawHeaderFooter, drawRoute
 
 const URL_REVOKE_DELAY_MS = 60 * 1000;
 const PREVIEW_URL_REVOKE_DELAY_MS = 10 * 60 * 1000;
-const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_TIMEOUT_MS || 12000);
+const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_TIMEOUT_MS || 60000);
 const AUTHORITATIVE_SYNC_TIMEOUT_MS = Math.max(2000, Number(import.meta.env?.VITE_PDF_SYNC_TIMEOUT_MS || 8000));
 const activeBlobUrls = new Set();
 let jsPdfCtorPromise = null;

@@ -7,7 +7,7 @@ import { useSetup } from "./SetupContext";
 
 const PlanContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 12000);
+const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 60000);
 
 function withTimeout(promise, timeoutMs, fallbackValue) {
   const safeTimeout = Number(timeoutMs);

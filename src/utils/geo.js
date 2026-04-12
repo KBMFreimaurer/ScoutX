@@ -1,6 +1,7 @@
 const GEO_CACHE_KEY = "scoutplan.geo.cache.v1";
 const ROUTE_CACHE_KEY = "scoutplan.route.cache.v1";
-const REQUEST_INTERVAL_MS = 1000;
+const REQUEST_INTERVAL_MS_OSM = 1000;
+const REQUEST_INTERVAL_MS_GOOGLE = 150;
 const REQUEST_TIMEOUT_MS = Math.max(2000, Number(import.meta?.env?.VITE_GEO_REQUEST_TIMEOUT_MS || 12000));
 const GEO_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_GEO_CACHE_MAX_ENTRIES || 500));
 const ROUTE_CACHE_MAX_ENTRIES = Math.max(50, Number(import.meta?.env?.VITE_ROUTE_CACHE_MAX_ENTRIES || 500));
@@ -94,6 +95,10 @@ function pruneMap(map, maxEntries) {
 
 function hasGoogleMapsApiKey() {
   return getGoogleMapsApiKey().length > 0;
+}
+
+function getRequestIntervalMs() {
+  return hasGoogleMapsApiKey() ? REQUEST_INTERVAL_MS_GOOGLE : REQUEST_INTERVAL_MS_OSM;
 }
 
 function readRuntimeGoogleMapsApiKey() {
@@ -415,7 +420,7 @@ function setCachedRoute(fromPoint, toPoint, routeValue, provider = getRouteProvi
 
 async function enqueueRateLimited(task) {
   const runner = queue.then(async () => {
-    const waitMs = Math.max(0, lastRequestTs + REQUEST_INTERVAL_MS - now());
+    const waitMs = Math.max(0, lastRequestTs + getRequestIntervalMs() - now());
     if (waitMs > 0) {
       await sleep(waitMs);
     }
