@@ -273,7 +273,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       setLocationError("");
 
       try {
-        const result = await geocodeAddress(query);
+        const result = await geocodeAddress(query, { kreisId });
         if (!result) {
           throw new Error("Adresse konnte nicht aufgelöst werden.");
         }
@@ -286,7 +286,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
         setResolvingLocation(false);
       }
     },
-    [locationDraft],
+    [kreisId, locationDraft],
   );
 
   const onUseCurrentLocation = useCallback(async () => {

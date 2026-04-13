@@ -39,6 +39,7 @@ const KREIS_CENTERS = {
   wesel: { lat: 51.6585, lon: 6.6176 },
   kleve: { lat: 51.7871, lon: 6.1381 },
 };
+const KREIS_BOUND_RADIUS_KM = 85;
 const GENERIC_VENUE_TOKENS = new Set([
   "sportanlage",
   "sportplatz",
@@ -269,6 +270,96 @@ function shouldCloseRouteDay(currentDateKey, nextDateKey) {
   return currentDateKey !== nextDateKey;
 }
 
+function normalizeLookup(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function hasPostalCode(value) {
+  return /\b\d{5}\b/.test(String(value || ""));
+}
+
+function queryIncludesKreisHint(query, kreisHint) {
+  const normalizedQuery = normalizeLookup(query);
+  const normalizedHint = normalizeLookup(kreisHint);
+  if (!normalizedQuery || !normalizedHint) {
+    return false;
+  }
+
+  if (normalizedQuery.includes(normalizedHint)) {
+    return true;
+  }
+
+  return normalizedHint
+    .split(" ")
+    .filter(Boolean)
+    .some((token) => normalizedQuery.includes(token));
+}
+
+function addUniqueCandidate(candidates, value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return;
+  }
+  if (!candidates.includes(text)) {
+    candidates.push(text);
+  }
+}
+
+function buildGeocodeCandidates(query, kreisId) {
+  const candidates = [];
+  const trimmedQuery = String(query || "").trim();
+  const kreisHint = String(KREIS_GEO_HINTS[String(kreisId || "").trim()] || "").trim();
+  const hasHintInQuery = queryIncludesKreisHint(trimmedQuery, kreisHint);
+  const hasPostalInQuery = hasPostalCode(trimmedQuery);
+
+  if (kreisHint && !hasHintInQuery && !hasPostalInQuery) {
+    addUniqueCandidate(candidates, `${trimmedQuery}, ${kreisHint}`);
+  }
+  if (kreisHint && !hasHintInQuery) {
+    addUniqueCandidate(candidates, `${trimmedQuery}, ${kreisHint}, Nordrhein-Westfalen, Deutschland`);
+  }
+  addUniqueCandidate(candidates, trimmedQuery);
+  return candidates;
+}
+
+function centerToViewbox(center, radiusKm = KREIS_BOUND_RADIUS_KM) {
+  const lat = toFiniteNumber(center?.lat);
+  const lon = toFiniteNumber(center?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  const safeRadius = Math.max(10, Number(radiusKm) || KREIS_BOUND_RADIUS_KM);
+  const latDelta = safeRadius / 111;
+  const lonDelta = safeRadius / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+
+  const west = lon - lonDelta;
+  const east = lon + lonDelta;
+  const north = lat + latDelta;
+  const south = lat - latDelta;
+  return { west, north, east, south };
+}
+
+function isPlausibleForKreis(lat, lon, kreisId, maxDistanceKm = 120) {
+  const center = KREIS_CENTERS[String(kreisId || "").trim()];
+  if (!center) {
+    return true;
+  }
+
+  const distanceToCenter = haversineDistance(lat, lon, center.lat, center.lon);
+  if (!Number.isFinite(distanceToCenter)) {
+    return true;
+  }
+
+  return distanceToCenter <= Math.max(10, Number(maxDistanceKm) || 120);
+}
+
 function normalizeAddressKey(address, provider = getGeocodeProvider()) {
   const normalizedAddress = String(address || "")
     .trim()
@@ -483,12 +574,26 @@ function toPhotonGeoResult(entry, fallbackLabel = "") {
   };
 }
 
-async function requestNominatim(query) {
+async function requestNominatim(query, options = {}) {
+  const center = options?.center || null;
+  const bounded = options?.bounded === true;
   const endpoint = new URL("https://nominatim.openstreetmap.org/search");
   endpoint.searchParams.set("format", "jsonv2");
   endpoint.searchParams.set("limit", "1");
   endpoint.searchParams.set("addressdetails", "1");
   endpoint.searchParams.set("q", query);
+  if (center) {
+    const viewbox = centerToViewbox(center);
+    if (viewbox) {
+      endpoint.searchParams.set(
+        "viewbox",
+        `${viewbox.west},${viewbox.north},${viewbox.east},${viewbox.south}`,
+      );
+      if (bounded) {
+        endpoint.searchParams.set("bounded", "1");
+      }
+    }
+  }
 
   const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
@@ -593,11 +698,18 @@ async function requestGoogleReverseGeocode(lat, lon) {
   };
 }
 
-async function requestPhoton(query) {
+async function requestPhoton(query, options = {}) {
+  const center = options?.center || null;
   const endpoint = new URL(PHOTON_BASE_URL);
   endpoint.searchParams.set("q", query);
   endpoint.searchParams.set("limit", "1");
   endpoint.searchParams.set("lang", "de");
+  const lat = toFiniteNumber(center?.lat);
+  const lon = toFiniteNumber(center?.lon);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    endpoint.searchParams.set("lat", String(lat));
+    endpoint.searchParams.set("lon", String(lon));
+  }
 
   const response = await fetchWithTimeout(endpoint.toString(), {
     headers: {
@@ -614,43 +726,73 @@ async function requestPhoton(query) {
   return toPhotonGeoResult(features[0], query);
 }
 
-export async function geocodeAddress(address) {
+export async function geocodeAddress(address, options = {}) {
   const query = String(address || "").trim();
   if (!query) {
     return null;
   }
 
-  const cached = getCachedGeocode(query);
+  const kreisId = String(options?.kreisId || "").trim();
+  const scopedCacheKey = kreisId ? `${query} [kreis:${kreisId}]` : query;
+  const cached = kreisId ? getCachedGeocode(scopedCacheKey) : getCachedGeocode(query);
   if (cached) {
     return cached;
   }
 
-  return enqueueRateLimited(async () => {
-    let googleResult = null;
-    let googleError = null;
-    try {
-      googleResult = await requestGoogleGeocode(query);
-    } catch (error) {
-      googleError = error;
-    }
-
-    if (googleResult) {
-      setCachedGeocode(query, googleResult);
-      return googleResult;
-    }
-
-    if (shouldUseGoogleStrictMode()) {
-      if (googleError) {
-        throw googleError;
+  const queryCandidates = buildGeocodeCandidates(query, kreisId);
+  const center = KREIS_CENTERS[kreisId] || null;
+  const geocodeOptions = center
+    ? {
+        center,
+        bounded: true,
       }
-      return null;
+    : {};
+
+  return enqueueRateLimited(async () => {
+    let googleError = null;
+
+    for (const candidate of queryCandidates) {
+      let googleResult = null;
+      try {
+        googleResult = await requestGoogleGeocode(candidate);
+      } catch (error) {
+        googleError = error;
+      }
+
+      if (googleResult) {
+        const lat = toFiniteNumber(googleResult?.lat);
+        const lon = toFiniteNumber(googleResult?.lon);
+        if (kreisId && Number.isFinite(lat) && Number.isFinite(lon) && !isPlausibleForKreis(lat, lon, kreisId)) {
+          continue;
+        }
+
+        setCachedGeocode(scopedCacheKey, googleResult);
+        return googleResult;
+      }
+
+      if (shouldUseGoogleStrictMode()) {
+        continue;
+      }
+
+      const result = (await requestNominatim(candidate, geocodeOptions)) || (await requestPhoton(candidate, geocodeOptions)) || null;
+      if (!result) {
+        continue;
+      }
+
+      const lat = toFiniteNumber(result?.lat);
+      const lon = toFiniteNumber(result?.lon);
+      if (kreisId && Number.isFinite(lat) && Number.isFinite(lon) && !isPlausibleForKreis(lat, lon, kreisId)) {
+        continue;
+      }
+
+      setCachedGeocode(scopedCacheKey, result);
+      return result;
     }
 
-    const result = (await requestNominatim(query)) || (await requestPhoton(query)) || null;
-    if (result) {
-      setCachedGeocode(query, result);
+    if (shouldUseGoogleStrictMode() && googleError) {
+      throw googleError;
     }
-    return result;
+    return null;
   });
 }
 
@@ -1095,10 +1237,6 @@ function hasStreetNumberPattern(value) {
   );
 }
 
-function hasPostalCode(value) {
-  return /\b\d{5}\b/.test(String(value || ""));
-}
-
 export function isPreciseRouteAddress(value) {
   const text = String(value || "").trim();
   if (!text) {
@@ -1120,16 +1258,6 @@ export function hasRoutableVenueAddress(game) {
   }
 
   return isPreciseRouteAddress(game?.venueAddress) || isPreciseRouteAddress(game?.venue);
-}
-
-function isPlausibleForKreis(lat, lon, kreisId) {
-  const center = KREIS_CENTERS[String(kreisId || "").trim()];
-  if (!center) {
-    return true;
-  }
-
-  const distanceToCenter = haversineDistance(lat, lon, center.lat, center.lon);
-  return Number.isFinite(distanceToCenter) ? distanceToCenter <= 120 : true;
 }
 
 async function resolveGameStopPoint(game) {

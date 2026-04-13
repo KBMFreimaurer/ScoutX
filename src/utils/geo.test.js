@@ -184,6 +184,83 @@ describe("geo utils", () => {
     expect(String(fetchMock.mock.calls[0]?.[0] || "")).toContain("routes.googleapis.com/directions/v2:computeRoutes");
   });
 
+  it("nutzt bei Startortsuche den ausgewählten Kreis als Geocoding-Hinweis", async () => {
+    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "OK",
+        results: [
+          {
+            formatted_address: "Prinzenstraße, 47058 Duisburg, Nordrhein-Westfalen, Deutschland",
+            geometry: {
+              location: {
+                lat: 51.4369,
+                lng: 6.7965,
+              },
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await geocodeAddress("Prinzenstraße", { kreisId: "duisburg" });
+
+    expect(result?.label).toContain("Duisburg");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const requestedUrl = new URL(String(fetchMock.mock.calls[0]?.[0] || ""));
+    expect(requestedUrl.hostname).toContain("maps.googleapis.com");
+    expect(String(requestedUrl.searchParams.get("address") || "")).toContain("Duisburg");
+  });
+
+  it("verwirft Geocoding-Treffer außerhalb des gewählten Kreises", async () => {
+    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "OK",
+          results: [
+            {
+              formatted_address: "Prinzenstraße, Hamburg, Deutschland",
+              geometry: {
+                location: {
+                  lat: 53.5511,
+                  lng: 9.9937,
+                },
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "OK",
+          results: [
+            {
+              formatted_address: "Prinzenstraße 1, 47058 Duisburg, Nordrhein-Westfalen, Deutschland",
+              geometry: {
+                location: {
+                  lat: 51.4369,
+                  lng: 6.7965,
+                },
+              },
+            },
+          ],
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await geocodeAddress("Prinzenstraße 1", { kreisId: "duisburg" });
+
+    expect(result?.label).toContain("Duisburg");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("gibt im Strict-Mode den Google-Geocoding-Fehler weiter", async () => {
     setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
 
