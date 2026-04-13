@@ -256,16 +256,100 @@ select option{background:#18181B;color:#e4e4e7}
   grid-template-columns:minmax(0,1fr);
   gap:16px;
 }
-.setup-step-row{
-  display:grid;
-  grid-template-columns:minmax(0,1fr);
-  gap:16px;
-}
 .setup-exec-left,
 .setup-exec-right{
   display:flex;
   flex-direction:column;
   gap:16px;
+}
+.setup-wizard-progress{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:8px;
+  margin-bottom:14px;
+}
+.setup-wizard-chip{
+  border:1px solid ${C.border};
+  background:rgba(255,255,255,0.02);
+  border-radius:10px;
+  padding:8px 10px;
+  min-height:56px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:2px;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.setup-wizard-chip.active{
+  border-color:${C.greenBorder};
+  background:${C.greenDim};
+  box-shadow:0 0 0 1px rgba(0,200,83,0.15) inset;
+}
+.setup-wizard-chip.done:not(.active){
+  border-color:rgba(0,200,83,0.18);
+  background:rgba(0,200,83,0.06);
+}
+.setup-wizard-chip-num{
+  color:${C.gray};
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  font-weight:700;
+}
+.setup-wizard-chip.active .setup-wizard-chip-num{color:${C.green}}
+.setup-wizard-chip-title{
+  color:${C.grayLight};
+  font-size:12px;
+  line-height:1.25;
+  font-weight:600;
+}
+.setup-wizard-chip.active .setup-wizard-chip-title{color:${C.offWhite}}
+.setup-wizard-page{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.setup-wizard-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.setup-action-summary{
+  color:${C.gray};
+  font-size:12px;
+  font-weight:500;
+  line-height:1.4;
+  white-space:normal;
+}
+.setup-summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:10px;
+}
+.setup-summary-item{
+  border:1px solid ${C.border};
+  border-radius:10px;
+  background:rgba(255,255,255,0.02);
+  padding:10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  min-height:74px;
+}
+.setup-summary-label{
+  color:${C.gray};
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  font-weight:700;
+}
+.setup-summary-value{
+  color:${C.offWhite};
+  font-size:12px;
+  line-height:1.35;
+  font-weight:600;
+  overflow-wrap:anywhere;
 }
 
 .setup-action-bar{
@@ -422,13 +506,21 @@ button,input,select{min-height:44px}
   .setup-exec-subline{font-size:15px}
   .setup-action-bar{position:static;flex-direction:column;align-items:stretch}
   .setup-action-meta{font-size:12px;white-space:normal}
+  .setup-wizard-progress{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .setup-wizard-actions{width:100%}
+  .setup-wizard-actions .ghost-btn,
+  .setup-wizard-actions .pri-btn{
+    flex:1;
+    justify-content:center;
+  }
+}
+
+@media(max-width:980px){
+  .setup-wizard-progress{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
 @media(min-width:980px){
-  .setup-step-row{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    align-items:start;
-  }
+  .setup-wizard-chip{min-height:62px}
 }
 
 /* Glass surface for ambient light */

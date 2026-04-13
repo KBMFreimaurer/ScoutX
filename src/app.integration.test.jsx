@@ -25,9 +25,15 @@ describe("ScoutX Integration", () => {
 
     const kreisButtons = await screen.findAllByRole("button", { name: /Kreis .* auswählen/i }, { timeout: 5000 });
     fireEvent.click(kreisButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 
     const jugendButtons = await screen.findAllByRole("button", { name: /Jugend auswählen/i }, { timeout: 5000 });
     fireEvent.click(jugendButtons[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 
     const generateButton = await screen.findByRole("button", { name: /Spielplan generieren/i }, { timeout: 5000 });
     fireEvent.click(generateButton);

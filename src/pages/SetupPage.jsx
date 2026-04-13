@@ -1,15 +1,51 @@
-import { useState } from "react";
-import { KREISE } from "../data/kreise";
+import { useMemo, useState } from "react";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { useScoutX } from "../context/ScoutXContext";
+import { KREISE } from "../data/kreise";
+import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { AgeGroupSelector } from "../components/AgeGroupSelector";
 import { DateFocusPanel } from "../components/DateFocusPanel";
 import { KreisSelector } from "../components/KreisSelector";
-import { TeamPicker } from "../components/TeamPicker";
-import { PrimaryButton } from "../components/Buttons";
 import { SectionHeader } from "../components/SectionHeader";
+import { TeamPicker } from "../components/TeamPicker";
+import { useScoutX } from "../context/ScoutXContext";
 import { C, card, inp, lbl, secH } from "../styles/theme";
 import { clearRuntimeGoogleMapsApiKey, getGoogleRoutingConfig, setRuntimeGoogleMapsApiKey } from "../utils/geo";
+
+const SETUP_STEPS = [
+  { id: 1, title: "Region & Kreis" },
+  { id: 2, title: "Altersklasse" },
+  { id: 3, title: "Mannschaften (optional)" },
+  { id: 4, title: "Zeitraum" },
+  { id: 5, title: "Tatort" },
+  { id: 6, title: "Fahrtkosten" },
+];
+
+function formatIsoDateLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "Nicht gesetzt";
+  }
+  const parsed = new Date(`${text}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return text;
+  }
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function buildStepCompletionMap({ kreisId, jugendId, fromDate, teamParameterCount, scoutName, kmPauschale }) {
+  return {
+    1: Boolean(kreisId),
+    2: Boolean(jugendId),
+    3: teamParameterCount >= 0,
+    4: Boolean(fromDate),
+    5: true,
+    6: Boolean(String(scoutName || "").trim()) || Number(kmPauschale) > 0,
+  };
+}
 
 export function SetupPage() {
   const {
@@ -53,19 +89,54 @@ export function SetupPage() {
     onSetScoutName,
     onSetKmPauschale,
   } = useScoutX();
+
+  const [currentStep, setCurrentStep] = useState(1);
   const [googleStatusVersion, setGoogleStatusVersion] = useState(0);
   const [googleKeyDraft, setGoogleKeyDraft] = useState("");
   const [googleKeyNotice, setGoogleKeyNotice] = useState("");
+
   const googleRouting = getGoogleRoutingConfig();
+  const totalSteps = SETUP_STEPS.length;
   const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
+  const teamParameterCount = activeTeams.length || 0;
+  const stepCompletionMap = buildStepCompletionMap({
+    kreisId,
+    jugendId,
+    fromDate,
+    teamParameterCount,
+    scoutName,
+    kmPauschale,
+  });
+  const currentStepMeta = SETUP_STEPS[currentStep - 1];
+  const nextStepMeta = SETUP_STEPS[currentStep] || null;
   const summaryParts = [
     selectedKreis?.label || "Kein Kreis",
     jugend?.label || "Keine Altersklasse",
-    `${activeTeams.length || 0} Vereinsparameter`,
+    teamParameterCount > 0 ? `${teamParameterCount} Team-Parameter` : "Ohne Team-Parameter",
     hasLocation ? "Tatort gesetzt" : "Ohne Tatort",
   ];
-  const teamParameterCount = activeTeams.length || 0;
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
+
+  const canContinueToNext = useMemo(() => {
+    if (currentStep >= totalSteps) {
+      return false;
+    }
+    return Boolean(stepCompletionMap[currentStep]);
+  }, [currentStep, totalSteps, stepCompletionMap]);
+
+  const nextButtonLabel = useMemo(() => {
+    if (currentStep === 1 && !kreisId) {
+      return "Kreis auswählen";
+    }
+    if (currentStep === 2 && !jugendId) {
+      return "Altersklasse auswählen";
+    }
+    if (currentStep === 4 && !fromDate) {
+      return "Zeitraum auswählen";
+    }
+    return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
+  }, [currentStep, fromDate, jugendId, kreisId, nextStepMeta]);
+
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
       typeof window === "undefined" || typeof window.confirm !== "function"
@@ -92,26 +163,270 @@ export function SetupPage() {
     setGoogleStatusVersion((value) => value + 1);
   };
 
-  return (
-    <div className="fu">
-      <header className="setup-exec-head">
+  const onBackStep = () => {
+    setCurrentStep((prev) => Math.max(1, prev - 1));
+  };
+
+  const onNextStep = () => {
+    if (!canContinueToNext) {
+      return;
+    }
+    setCurrentStep((prev) => Math.min(totalSteps, prev + 1));
+  };
+
+  const renderTatortCard = () => (
+    <div style={card}>
+      <div style={{ ...secH, marginBottom: 14 }}>
+        <span className="section-number">05</span>
+        Tatort
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <label htmlFor="start-location-input" style={lbl}>
+          Tatort / Einsatzadresse
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            id="start-location-input"
+            className="scout-input"
+            value={locationDraft}
+            onChange={(event) => onSetLocationDraft(event.target.value)}
+            placeholder="Straße, PLZ, Ort"
+            style={{ ...inp, flex: 1, minWidth: 220 }}
+          />
+          <button
+            type="button"
+            onClick={() => onResolveLocation()}
+            disabled={resolvingLocation}
+            style={{
+              ...inp,
+              width: "auto",
+              minWidth: 132,
+              cursor: resolvingLocation ? "not-allowed" : "pointer",
+            }}
+          >
+            {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmUseCurrentLocation}
+            disabled={resolvingLocation}
+            style={{
+              ...inp,
+              width: "auto",
+              minWidth: 210,
+              cursor: resolvingLocation ? "not-allowed" : "pointer",
+            }}
+          >
+            Genauen Standort ermitteln
+          </button>
+        </div>
+        <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
+          {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
+          {startLocation?.label ? ` · ${startLocation.label}` : ""}
+        </div>
+        <div
+          key={googleStatusVersion}
+          style={{
+            marginTop: 8,
+            borderRadius: 8,
+            border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
+            background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
+            padding: "8px 10px",
+            fontSize: 11,
+            lineHeight: 1.5,
+            color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
+          }}
+        >
+          <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
+            Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
+          </strong>
+          <div>
+            {googleRouting.googleConfigured
+              ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
+              : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+          </div>
+          {!googleRouting.googleConfigured ? (
+            <div style={{ marginTop: 6 }}>
+              <div>
+                Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional <code>VITE_GOOGLE_MAPS_STRICT=true</code>{" "}
+                ·{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: C.warn, textDecoration: "underline" }}
+                >
+                  Google Cloud Console
+                </a>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <input
+                  type="password"
+                  value={googleKeyDraft}
+                  onChange={(event) => setGoogleKeyDraft(event.target.value)}
+                  placeholder="Google API-Key lokal speichern"
+                  style={{
+                    ...inp,
+                    flex: 1,
+                    minWidth: 210,
+                    height: 34,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={onSaveRuntimeGoogleKey}
+                  style={{
+                    ...inp,
+                    width: "auto",
+                    minWidth: 140,
+                    height: 34,
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  API-Key speichern
+                </button>
+              </div>
+              {googleKeyNotice ? <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div> : null}
+            </div>
+          ) : (
+            <div>
+              Provider: <code>{googleRouting.routeProvider}</code>
+              {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+              {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
+              {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
+              {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
+              {googleRouting.keySource === "runtime" ? (
+                <button
+                  type="button"
+                  onClick={onClearRuntimeGoogleKey}
+                  style={{
+                    marginLeft: 10,
+                    border: "none",
+                    background: "transparent",
+                    color: C.grayLight,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    fontSize: 11,
+                    padding: 0,
+                  }}
+                >
+                  lokalen Key entfernen
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+        {locationError ? <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div> : null}
+        {hasLocation ? (
+          <button
+            type="button"
+            onClick={onClearLocation}
+            style={{
+              marginTop: 8,
+              border: "none",
+              background: "transparent",
+              color: C.gray,
+              cursor: "pointer",
+              padding: 0,
+              fontSize: 12,
+            }}
+          >
+            Standort entfernen
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const renderFahrtkostenCard = () => (
+    <div id="fahrtkosten" style={{ ...card, scrollMarginTop: 96 }}>
+      <SectionHeader num="06">Fahrtkosten</SectionHeader>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
         <div>
-          <span className="setup-exec-eyebrow">Systemkonfiguration</span>
-          <h1 className="setup-exec-title">Scouting-Plan konfigurieren</h1>
-          <p className="setup-exec-subline">
-            Definiere Kreis, Altersklasse und optional Mannschaften/Vereine für eine saubere, schnelle Spielauswahl.
-          </p>
+          <label htmlFor="scout-name-input" style={lbl}>
+            Scout-Name (für Abrechnung)
+          </label>
+          <input
+            id="scout-name-input"
+            style={inp}
+            type="text"
+            value={scoutName}
+            onChange={(event) => onSetScoutName(event.target.value)}
+            placeholder="Vor- und Nachname"
+            autoComplete="name"
+            inputMode="text"
+            maxLength={80}
+          />
         </div>
-        <div className="setup-exec-status" aria-live="polite">
-          <span className="setup-exec-status-dot" />
-          <span>{statusLabel}</span>
+        <div>
+          <label htmlFor="km-pauschale-input" style={lbl}>
+            € / km
+          </label>
+          <input
+            id="km-pauschale-input"
+            style={inp}
+            type="number"
+            value={kmPauschale}
+            step="0.01"
+            min="0.01"
+            max="2.00"
+            onChange={(event) => onSetKmPauschale(event.target.value)}
+          />
         </div>
-      </header>
+      </div>
+      <p style={{ fontSize: 11, color: C.gray, marginTop: 8, marginBottom: 0 }}>
+        Kilometerpauschale für die automatische Fahrtkosten-Abrechnung im Scout-Plan.
+      </p>
+    </div>
+  );
 
-      <div className="setup-exec-grid">
-        <div className="setup-step-row">
-          <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
+  const renderSummaryCard = () => (
+    <div style={card}>
+      <SectionHeader>Zusammenfassung</SectionHeader>
+      <div className="setup-summary-grid">
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Region & Kreis</span>
+          <span className="setup-summary-value">{selectedKreis?.label || "Nicht gesetzt"}</span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Altersklasse</span>
+          <span className="setup-summary-value">{jugend?.label || "Nicht gesetzt"}</span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Mannschaften</span>
+          <span className="setup-summary-value">
+            {teamParameterCount > 0 ? `${teamParameterCount} gesetzt` : "Keine Team-Parameter"}
+          </span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Zeitraum</span>
+          <span className="setup-summary-value">{formatIsoDateLabel(fromDate)}</span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Tatort</span>
+          <span className="setup-summary-value">{startLocation?.label || "Nicht gesetzt"}</span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Fahrtkosten</span>
+          <span className="setup-summary-value">
+            {String(scoutName || "").trim() || "Scout nicht gesetzt"} · {Number(kmPauschale || 0).toFixed(2)} €/km
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1:
+        return <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />;
+      case 2:
+        return (
           <AgeGroupSelector
             jugendKlassen={JUGEND_KLASSEN}
             jugendId={jugendId}
@@ -122,7 +437,9 @@ export function SetupPage() {
             onToggleSubLevel={onToggleJugendSubLevel}
             onClearSubLevels={onClearJugendSubLevels}
           />
-
+        );
+      case 3:
+        return (
           <TeamPicker
             selectedTeams={selectedTeams}
             teamDraft={teamDraft}
@@ -134,267 +451,126 @@ export function SetupPage() {
             onRemoveTeam={onRemoveTeamField}
             onClearAll={onClearAllTeams}
           />
+        );
+      case 4:
+        return <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} />;
+      case 5:
+        return renderTatortCard();
+      case 6:
+        return (
+          <>
+            {renderFahrtkostenCard()}
+            {renderSummaryCard()}
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="fu">
+      <header className="setup-exec-head">
+        <div>
+          <span className="setup-exec-eyebrow">Systemkonfiguration</span>
+          <h1 className="setup-exec-title">Scouting-Plan konfigurieren</h1>
+          <p className="setup-exec-subline">
+            Du wirst durch alle Parameter geführt. Wähle pro Seite einen Schritt und gehe dann weiter.
+          </p>
         </div>
-
-        <div className="setup-step-row">
-          <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} />
-
-            <div style={card}>
-              <div style={{ ...secH, marginBottom: 14 }}>
-                <span className="section-number">05</span>
-                Tatort
-              </div>
-
-              <div style={{ marginBottom: 10 }}>
-                <label htmlFor="start-location-input" style={lbl}>
-                  Tatort / Einsatzadresse
-                </label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input
-                    id="start-location-input"
-                    className="scout-input"
-                    value={locationDraft}
-                    onChange={(event) => onSetLocationDraft(event.target.value)}
-                    placeholder="Straße, PLZ, Ort"
-                    style={{ ...inp, flex: 1, minWidth: 220 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onResolveLocation()}
-                    disabled={resolvingLocation}
-                    style={{
-                      ...inp,
-                      width: "auto",
-                      minWidth: 132,
-                      cursor: resolvingLocation ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onConfirmUseCurrentLocation}
-                    disabled={resolvingLocation}
-                    style={{
-                      ...inp,
-                      width: "auto",
-                      minWidth: 210,
-                      cursor: resolvingLocation ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Genauen Standort ermitteln
-                  </button>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
-                  {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
-                  {startLocation?.label ? ` · ${startLocation.label}` : ""}
-                </div>
-                <div
-                  key={googleStatusVersion}
-                  style={{
-                    marginTop: 8,
-                    borderRadius: 8,
-                    border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
-                    background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    lineHeight: 1.5,
-                    color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
-                  }}
-                >
-                  <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
-                    Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
-                  </strong>
-                  <div>
-                    {googleRouting.googleConfigured
-                      ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
-                      : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
-                  </div>
-                  {!googleRouting.googleConfigured ? (
-                    <div style={{ marginTop: 6 }}>
-                      <div>
-                        Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
-                        <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
-                        <a
-                          href="https://console.cloud.google.com/apis/credentials"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: C.warn, textDecoration: "underline" }}
-                        >
-                          Google Cloud Console
-                        </a>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-                        <input
-                          type="password"
-                          value={googleKeyDraft}
-                          onChange={(event) => setGoogleKeyDraft(event.target.value)}
-                          placeholder="Google API-Key lokal speichern"
-                          style={{
-                            ...inp,
-                            flex: 1,
-                            minWidth: 210,
-                            height: 34,
-                            padding: "6px 10px",
-                            fontSize: 12,
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={onSaveRuntimeGoogleKey}
-                          style={{
-                            ...inp,
-                            width: "auto",
-                            minWidth: 140,
-                            height: 34,
-                            padding: "6px 10px",
-                            cursor: "pointer",
-                            fontSize: 12,
-                          }}
-                        >
-                          API-Key speichern
-                        </button>
-                      </div>
-                      {googleKeyNotice ? (
-                        <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div>
-                      Provider: <code>{googleRouting.routeProvider}</code>
-                      {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
-                      {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
-                      {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
-                      {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
-                      {googleRouting.keySource === "runtime" ? (
-                        <button
-                          type="button"
-                          onClick={onClearRuntimeGoogleKey}
-                          style={{
-                            marginLeft: 10,
-                            border: "none",
-                            background: "transparent",
-                            color: C.grayLight,
-                            cursor: "pointer",
-                            textDecoration: "underline",
-                            fontSize: 11,
-                            padding: 0,
-                          }}
-                        >
-                          lokalen Key entfernen
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-                {locationError ? (
-                  <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
-                ) : null}
-                {hasLocation ? (
-                  <button
-                    type="button"
-                    onClick={onClearLocation}
-                    style={{
-                      marginTop: 8,
-                      border: "none",
-                      background: "transparent",
-                      color: C.gray,
-                      cursor: "pointer",
-                      padding: 0,
-                      fontSize: 12,
-                    }}
-                  >
-                    Standort entfernen
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-          <div id="fahrtkosten" style={{ ...card, scrollMarginTop: 96 }}>
-            <SectionHeader num="06">Fahrtkosten</SectionHeader>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
-              <div>
-                <label htmlFor="scout-name-input" style={lbl}>Scout-Name (für Abrechnung)</label>
-                <input
-                  id="scout-name-input"
-                  style={inp}
-                  type="text"
-                  value={scoutName}
-                  onChange={(e) => onSetScoutName(e.target.value)}
-                  placeholder="Vor- und Nachname"
-                  autoComplete="name"
-                  inputMode="text"
-                  maxLength={80}
-                />
-              </div>
-              <div>
-                <label htmlFor="km-pauschale-input" style={lbl}>€ / km</label>
-                <input
-                  id="km-pauschale-input"
-                  style={inp}
-                  type="number"
-                  value={kmPauschale}
-                  step="0.01"
-                  min="0.01"
-                  max="2.00"
-                  onChange={(e) => onSetKmPauschale(e.target.value)}
-                />
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: C.gray, marginTop: 8, marginBottom: 0 }}>
-              Kilometerpauschale für die automatische Fahrtkosten-Abrechnung im Scout-Plan.
-            </p>
-          </div>
+        <div className="setup-exec-status" aria-live="polite">
+          <span className="setup-exec-status-dot" />
+          <span>{statusLabel}</span>
         </div>
+      </header>
+
+      <div className="setup-wizard-progress" aria-label="Setup-Fortschritt" role="list">
+        {SETUP_STEPS.map((step) => {
+          const isActive = step.id === currentStep;
+          const isDone = step.id < currentStep || (step.id === currentStep && stepCompletionMap[step.id]);
+          const className = `setup-wizard-chip${isActive ? " active" : ""}${isDone ? " done" : ""}`;
+
+          return (
+            <div key={step.id} role="listitem" className={className}>
+              <span className="setup-wizard-chip-num">{String(step.id).padStart(2, "0")}</span>
+              <span className="setup-wizard-chip-title">{step.title}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="setup-exec-grid">
+        <div className="setup-wizard-page">{renderCurrentStep()}</div>
       </div>
 
       <div className="setup-action-bar">
         <div className="setup-action-meta">
-          <span className="setup-action-eyebrow">Ausgewählte Konfiguration</span>
-          <span>{summaryParts.join(" / ")}</span>
+          <span className="setup-action-eyebrow">
+            Schritt {currentStep} von {totalSteps}
+          </span>
+          <span>{currentStepMeta?.title}</span>
+          {currentStep === totalSteps ? <span className="setup-action-summary">{summaryParts.join(" / ")}</span> : null}
         </div>
-        <PrimaryButton
-          onClick={onBuildAndGo}
-          disabled={!canBuild || loadingGames}
-          style={{
-            width: isMobile ? "100%" : "auto",
-            minWidth: isMobile ? "100%" : 300,
-            fontSize: isMobile ? 13 : 14,
-          }}
-        >
-          {loadingGames ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-              <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
-              Spiele werden geladen...
-            </span>
-          ) : !canBuild ? (
-            !kreisId ? (
-              "Kreis wählen"
-            ) : !jugendId ? (
-              "Jugendklasse wählen"
-            ) : (
-              "Ungültige Auswahl"
-            )
+
+        <div className="setup-wizard-actions">
+          {currentStep > 1 ? (
+            <GhostButton aria-label="Zurück zum vorherigen Schritt" onClick={onBackStep} style={{ minWidth: 138 }}>
+              Zurück
+            </GhostButton>
+          ) : null}
+
+          {currentStep < totalSteps ? (
+            <PrimaryButton
+              aria-label="Weiter zum nächsten Schritt"
+              onClick={onNextStep}
+              disabled={!canContinueToNext}
+              style={{
+                minWidth: isMobile ? "100%" : 230,
+                justifyContent: "center",
+                width: isMobile ? "100%" : "auto",
+              }}
+            >
+              {nextButtonLabel}
+            </PrimaryButton>
           ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-              {teamParameterCount > 0
-                ? `Spielplan generieren — ${teamParameterCount} Team-Parameter`
-                : "Spielplan generieren"}
-            </span>
+            <PrimaryButton
+              aria-label="Spielplan generieren"
+              onClick={onBuildAndGo}
+              disabled={!canBuild || loadingGames}
+              style={{
+                minWidth: isMobile ? "100%" : 300,
+                fontSize: isMobile ? 13 : 14,
+                justifyContent: "center",
+                width: isMobile ? "100%" : "auto",
+              }}
+            >
+              {loadingGames ? (
+                <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+                  <span className="skeleton" style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                  Spiele werden geladen...
+                </span>
+              ) : (
+                <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                  {teamParameterCount > 0
+                    ? `Spielplan generieren — ${teamParameterCount} Team-Parameter`
+                    : "Spielplan generieren"}
+                </span>
+              )}
+            </PrimaryButton>
           )}
-        </PrimaryButton>
+        </div>
       </div>
 
       {err ? (

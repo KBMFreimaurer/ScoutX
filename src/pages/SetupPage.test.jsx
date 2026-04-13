@@ -27,6 +27,46 @@ function renderSetupPage() {
   );
 }
 
+function clickNextStep() {
+  fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+}
+
+function clickBackStep() {
+  fireEvent.click(screen.getByRole("button", { name: /Zurück zum vorherigen Schritt/i }));
+}
+
+function goToStepWithRequiredSelections(step) {
+  if (step <= 1) {
+    return;
+  }
+
+  fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+  clickNextStep();
+
+  if (step <= 2) {
+    return;
+  }
+
+  fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+  clickNextStep();
+
+  if (step <= 3) {
+    return;
+  }
+
+  clickNextStep();
+  if (step <= 4) {
+    return;
+  }
+
+  clickNextStep();
+  if (step <= 5) {
+    return;
+  }
+
+  clickNextStep();
+}
+
 describe("SetupPage", () => {
   beforeEach(() => {
     if (typeof window.localStorage?.clear === "function") {
@@ -42,6 +82,9 @@ describe("SetupPage", () => {
     renderSetupPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    clickNextStep();
+    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+    clickNextStep();
 
     fireEvent.change(screen.getByLabelText(/Verein hinzuf/i), {
       target: { value: "TSV Heimaterde" },
@@ -50,7 +93,11 @@ describe("SetupPage", () => {
 
     expect(screen.getByText(/Alle löschen/i)).toBeInTheDocument();
 
+    clickBackStep();
+    clickBackStep();
     fireEvent.click(screen.getByRole("button", { name: /Kreis Duisburg auswählen/i }));
+    clickNextStep();
+    clickNextStep();
 
     expect(screen.queryByText(/Alle löschen/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
@@ -58,6 +105,7 @@ describe("SetupPage", () => {
 
   it("zeigt nur den Tatort-Block ohne Favoriten-Eingabe", () => {
     renderSetupPage();
+    goToStepWithRequiredSelections(5);
 
     expect(screen.getByLabelText(/Tatort \/ Einsatzadresse/i)).toBeInTheDocument();
     expect(screen.getByText(/Routen-API:/i)).toBeInTheDocument();
@@ -67,6 +115,8 @@ describe("SetupPage", () => {
 
   it("zeigt Unterstufen-Auswahl fuer Jugendklassen ausser Bambini", () => {
     renderSetupPage();
+    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    clickNextStep();
 
     fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
     const d1Chip = screen.getByRole("button", { name: /D I auswählen/i });
@@ -78,6 +128,8 @@ describe("SetupPage", () => {
 
   it("zeigt bei Bambini keinen Unterstufen-Parameter", () => {
     renderSetupPage();
+    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    clickNextStep();
 
     fireEvent.click(screen.getByRole("button", { name: /Bambini auswählen/i }));
 
@@ -101,11 +153,14 @@ describe("SetupPage", () => {
 
     expect(screen.queryByLabelText(/Scout-Fokus/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
+    const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
+    expect(nextButton).toBeDisabled();
+    expect(nextButton).toHaveTextContent(/Kreis auswählen/i);
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {
     renderSetupPage();
+    goToStepWithRequiredSelections(4);
 
     const dateToggle = screen.getByRole("button", { name: /Scouting-Datum auswählen/i });
     fireEvent.click(dateToggle);
@@ -129,6 +184,7 @@ describe("SetupPage", () => {
 
   it("erlaubt Leerzeichen im Scout-Namen", () => {
     renderSetupPage();
+    goToStepWithRequiredSelections(6);
 
     const scoutNameInput = screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i);
     fireEvent.change(scoutNameInput, { target: { value: "Ayoub El Idrissi" } });
