@@ -6,6 +6,7 @@ import {
   clearRuntimeGoogleMapsApiKey,
   fetchDrivingRoute,
   geocodeAddress,
+  getKreisCenter,
   getGoogleRoutingConfig,
   haversineDistance,
   setRuntimeGoogleMapsApiKey,
@@ -238,5 +239,10 @@ describe("geo utils", () => {
     const config = getGoogleRoutingConfig();
     expect(config.googleConfigured).toBe(true);
     expect(config.keySource).toBe("runtime");
+  });
+
+  it("liefert Kreis-Zentren für bekannte Kreis-IDs", () => {
+    expect(getKreisCenter("duisburg")).toEqual({ lat: 51.4344, lon: 6.7623 });
+    expect(getKreisCenter("unbekannt")).toBeNull();
   });
 });

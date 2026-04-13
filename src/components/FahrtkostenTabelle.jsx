@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { C, card } from "../styles/theme";
 import { buildAttendanceRows, formatPresenceMinutes, normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { buildFahrtkostenRows } from "../utils/fahrtkosten";
@@ -102,18 +102,18 @@ export function FahrtkostenTabelle({
   games,
   routeOverview,
   kmPauschale,
+  kmOverrides = {},
   isMobile,
   onKmChange,
   presenceMinutesByGame,
   onPresenceChange,
 }) {
-  const [overrides, setOverrides] = useState({});
   const model = useMemo(() => buildFahrtkostenRows(games, routeOverview), [games, routeOverview]);
   const attendanceRows = useMemo(() => buildAttendanceRows(games), [games]);
   const rows = model.rows;
   const isRouteMode = model.mode === "route";
 
-  const kmBase = (row) => (Number.isFinite(overrides[row.id]) ? overrides[row.id] : row.baseKm || 0);
+  const kmBase = (row) => (Number.isFinite(kmOverrides[row.id]) ? kmOverrides[row.id] : row.baseKm || 0);
   const kmAbrechnung = (row) => (isRouteMode ? kmBase(row) : kmBase(row) * 2);
   const rate = Number.isFinite(kmPauschale) && kmPauschale > 0 ? kmPauschale : 0.3;
 
@@ -122,16 +122,7 @@ export function FahrtkostenTabelle({
 
   const handleChange = (rowId, rawValue) => {
     const value = Number.parseFloat(String(rawValue).replace(",", "."));
-    setOverrides((prev) => {
-      const next = { ...prev };
-      if (Number.isFinite(value) && value >= 0) {
-        next[rowId] = value;
-      } else {
-        delete next[rowId];
-      }
-      return next;
-    });
-    onKmChange?.(rowId, Number.isFinite(value) ? value : null);
+    onKmChange?.(rowId, Number.isFinite(value) && value >= 0 ? value : null);
   };
 
   const exportCsv = () => {
@@ -217,7 +208,7 @@ export function FahrtkostenTabelle({
                             type="number"
                             step="0.1"
                             min="0"
-                            value={Number.isFinite(overrides[row.id]) ? overrides[row.id] : kmBase(row).toFixed(1)}
+                            value={Number.isFinite(kmOverrides[row.id]) ? kmOverrides[row.id] : kmBase(row).toFixed(1)}
                             onChange={(event) => handleChange(row.id, event.target.value)}
                             style={inputStyle}
                             aria-label={`Kilometer für Strecke ${index + 1}`}

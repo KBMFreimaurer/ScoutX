@@ -85,8 +85,8 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("ignoriert persistierte localStorage-Defaults und startet frisch", () => {
-    window.localStorage.setItem(
+  it("stellt persistierte Setup-Defaults aus sessionStorage wieder her", () => {
+    window.sessionStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
         kreisId: "duisburg",
@@ -100,9 +100,9 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("");
-    expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
+    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("Innenverteidiger");
+    expect(screen.getByDisplayValue("TSV Heimaterde")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Spielplan generieren/i })).not.toBeDisabled();
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {

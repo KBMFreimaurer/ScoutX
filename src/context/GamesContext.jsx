@@ -2,7 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
-import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
+import {
+  fetchDrivingRoute,
+  geocodeAddress,
+  getKreisCenter,
+  hasRoutableVenueAddress,
+  haversineDistance,
+  isGoogleRoutingStrictMode,
+} from "../utils/geo";
 import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
 
@@ -242,6 +249,23 @@ async function enrichGames(games, startLocation) {
         }
       }
 
+      if (
+        hasLocation &&
+        !strictGoogleRouting &&
+        !Number.isFinite(distanceKm) &&
+        !Number.isFinite(venueLat) &&
+        !Number.isFinite(venueLon)
+      ) {
+        const center = getKreisCenter(game?.kreisId);
+        if (center) {
+          const estimatedKm = haversineDistance(startLocation.lat, startLocation.lon, center.lat, center.lon);
+          if (Number.isFinite(estimatedKm)) {
+            distanceKm = estimatedKm;
+            distanceSource = "kreis-center";
+          }
+        }
+      }
+
       return {
         ...game,
         venueLat: Number.isFinite(venueLat) ? venueLat : null,
@@ -313,6 +337,7 @@ export function GamesProvider({ children }) {
   });
   const [selectedGameIds, setSelectedGameIds] = useState({});
   const buildRunRef = useRef(0);
+  const buildInFlightRef = useRef(false);
   const favoritesRef = useRef(favorites);
   const gameNotesRef = useRef(gameNotes);
 
@@ -416,6 +441,10 @@ export function GamesProvider({ children }) {
   }, []);
 
   const onBuildAndGo = useCallback(async () => {
+    if (buildInFlightRef.current) {
+      return;
+    }
+
     if (!kreisId) {
       setErr("Bitte einen Kreis wählen.");
       return;
@@ -426,6 +455,7 @@ export function GamesProvider({ children }) {
       return;
     }
 
+    buildInFlightRef.current = true;
     setErr("");
     setLoadingGames(true);
     setEnrichingGames(false);
@@ -487,6 +517,7 @@ export function GamesProvider({ children }) {
       if (buildRunRef.current === runId) {
         setLoadingGames(false);
       }
+      buildInFlightRef.current = false;
     }
   }, [
     kreisId,

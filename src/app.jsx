@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { StepNav } from "./components/StepNav";
 import { C, GCSS } from "./styles/theme";
 import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
@@ -333,7 +334,9 @@ export default function App() {
         <GamesProvider>
           <PlanProvider>
             <ScoutXProvider>
-              <AppLayout />
+              <ErrorBoundary>
+                <AppLayout />
+              </ErrorBoundary>
             </ScoutXProvider>
           </PlanProvider>
         </GamesProvider>

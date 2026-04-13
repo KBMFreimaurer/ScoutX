@@ -17,6 +17,18 @@ export class ErrorBoundary extends React.Component {
     }
   }
 
+  onReload = () => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  };
+
+  onGoToSetup = () => {
+    if (typeof window !== "undefined") {
+      window.location.replace("/setup");
+    }
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -55,6 +67,38 @@ export class ErrorBoundary extends React.Component {
             <p style={{ margin: "0 0 16px", color: C.gray, fontSize: 14, lineHeight: 1.5 }}>
               Die Anwendung ist abgestürzt. Bitte Seite neu laden.
             </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+              <button
+                type="button"
+                onClick={this.onReload}
+                style={{
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.05)",
+                  color: C.offWhite,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  fontSize: 12,
+                }}
+              >
+                Neu laden
+              </button>
+              <button
+                type="button"
+                onClick={this.onGoToSetup}
+                style={{
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.03)",
+                  color: C.gray,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  fontSize: 12,
+                }}
+              >
+                Zur Konfiguration
+              </button>
+            </div>
             <pre
               style={{
                 margin: 0,

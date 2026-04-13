@@ -90,4 +90,30 @@ describe("GameTable", () => {
     fireEvent.change(textarea, { target: { value: "Neuer Hinweis" } });
     expect(onSetNote).toHaveBeenCalledWith("game-1", "Neuer Hinweis");
   });
+
+  it("markiert ausgewählte Spiele mit aria-selected", () => {
+    const games = [
+      {
+        id: "game-1",
+        home: "Team A",
+        away: "Team B",
+        priority: 5,
+        dateObj: new Date("2026-05-01T00:00:00"),
+        dateLabel: "Fr, 01.05.2026",
+        time: "14:00",
+        venue: "Platz A",
+      },
+    ];
+
+    render(
+      <GameTable
+        games={games}
+        selectionEnabled
+        selectedGameIds={{ "game-1": true }}
+      />,
+    );
+
+    const row = screen.getByRole("row", { name: /Team A/i });
+    expect(row).toHaveAttribute("aria-selected", "true");
+  });
 });

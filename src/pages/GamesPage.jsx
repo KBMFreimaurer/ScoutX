@@ -291,9 +291,10 @@ export function GamesPage() {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.gray }}>
+        <label htmlFor="games-sort-mode" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.gray }}>
           Sortierung
           <select
+            id="games-sort-mode"
             value={sortMode}
             onChange={(event) => setSortMode(event.target.value)}
             className="scout-select"

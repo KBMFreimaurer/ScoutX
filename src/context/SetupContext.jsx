@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
@@ -93,7 +93,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
 
-    return {
+    const fallback = {
       kreisId: "",
       jugendId: "",
       selTeams: [],
@@ -104,6 +104,52 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       favorites: [],
       todayIso,
     };
+
+    if (typeof window === "undefined") {
+      return fallback;
+    }
+
+    try {
+      const raw =
+        window.sessionStorage.getItem(STORAGE_KEYS.setup) ||
+        window.localStorage.getItem(STORAGE_KEYS.setup);
+
+      if (!raw) {
+        return fallback;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") {
+        return fallback;
+      }
+
+      const parsedFromDate = String(parsed?.fromDate || "").trim();
+      const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(parsedFromDate)
+        ? parsedFromDate
+        : fallback.fromDate;
+
+      const startLat = Number(parsed?.startLocation?.lat);
+      const startLon = Number(parsed?.startLocation?.lon);
+      const startLabel = String(parsed?.startLocation?.label || "").trim();
+      const startLocation =
+        Number.isFinite(startLat) && Number.isFinite(startLon) && startLabel
+          ? { label: startLabel, lat: startLat, lon: startLon }
+          : null;
+
+      return {
+        ...fallback,
+        kreisId: String(parsed?.kreisId || "").trim(),
+        jugendId: String(parsed?.jugendId || "").trim(),
+        selTeams: normalizeTeamParameters(parsed?.selTeams),
+        fromDate,
+        focus: String(parsed?.focus || "").trim(),
+        jugendSubLevels: normalizeTeamParameters(parsed?.jugendSubLevels),
+        startLocation,
+        favorites: normalizeTeamParameters(parsed?.favorites),
+      };
+    } catch {
+      return fallback;
+    }
   });
 
   const width = useWindowWidth();
@@ -157,6 +203,29 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const payload = {
+      kreisId,
+      jugendId,
+      selTeams: selectedTeams,
+      fromDate,
+      focus,
+      jugendSubLevels,
+      startLocation,
+      favorites: favoriteTeams,
+    };
+
+    try {
+      window.sessionStorage.setItem(STORAGE_KEYS.setup, JSON.stringify(payload));
+    } catch {
+      // Persistenzfehler dürfen den Setup-Flow nicht blockieren.
+    }
+  }, [favoriteTeams, focus, fromDate, jugendId, jugendSubLevels, kreisId, selectedTeams, startLocation]);
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
@@ -375,6 +444,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setFavoriteDraft("");
     setAbrechnungMetaRaw({ scoutName: "", kmPauschale: 0.3 });
     try {
+      window.sessionStorage.removeItem(STORAGE_KEYS.setup);
       window.localStorage.removeItem(STORAGE_KEYS.abrechnungMeta);
     } catch {
       // Falls localStorage blockiert ist, bleibt nur der In-Memory-Reset aktiv.

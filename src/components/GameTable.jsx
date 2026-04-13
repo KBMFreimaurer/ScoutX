@@ -184,6 +184,7 @@ export function GameTable({
               <Fragment key={game.id}>
                 <tr
                   className="row-item"
+                  aria-selected={selectionEnabled ? Boolean(selectedGameIds?.[game.id]) : undefined}
                   style={{
                     borderBottom: noteOpen ? "none" : index < sortedGames.length - 1 ? `1px solid ${C.border}` : "none",
                     background:

@@ -91,6 +91,12 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-13: Setup-Auswahl (Kreis, Jugend, Teams, Datum, Fokus, Startort) wird jetzt pro Browser-Session in `sessionStorage` persistiert und nach Reload wiederhergestellt.
+- 2026-04-13: Bei fehlgeschlagenem Venue-Geocoding nutzt ScoutX jetzt optional das Kreis-Zentrum als Distanz-Fallback (`distanceSource: "kreis-center"`) statt pauschal `unbekannt`.
+- 2026-04-13: Globale ErrorBoundary ist aktiv und bietet Recovery-Aktionen (`Neu laden`, `Zur Konfiguration`).
+- 2026-04-13: Games- und Plan-Flow stabilisiert: Doppelklick-Schutz bei "Spielplan generieren" sowie persistente Kilometer-Overrides in der Fahrtkosten-Tabelle.
+- 2026-04-13: Google Maps API-Key ist nicht mehr hart im Projekt hinterlegt; Key-Quellen sind jetzt nur Runtime-Speicher oder ENV.
+- 2026-04-13: Accessibility-Feinschliff in der Spieleliste (`aria-selected` für markierte Zeilen, verknüpftes Sortier-Label).
 - 2026-04-12: Google Maps API-Key ist direkt im Projekt hinterlegt; ENV/Compose bleibt als optionaler Override aktiv.
 - 2026-04-12: Routing nutzt jetzt primär Google Routes API (v2), Legacy-Directions nur noch als Fallback; Geocoding-Fehler zeigen jetzt konkrete Google-Statusmeldungen (z. B. `REQUEST_DENIED`).
 - 2026-04-11: Google-Routing-Scaffolding ergänzt: sichtbarer API-Status im Setup, ENV-Vorlage bereinigt, Dokumentation für Key-Setup ergänzt.

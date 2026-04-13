@@ -11,7 +11,7 @@ const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/js
 const GOOGLE_ROUTES_BASE_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const GOOGLE_DIRECTIONS_BASE_URL = "https://maps.googleapis.com/maps/api/directions/json";
 const GOOGLE_ROUTES_FIELD_MASK = "routes.distanceMeters,routes.duration,routes.legs.distanceMeters,routes.legs.duration";
-const PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY = "AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc";
+const PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY = "";
 const ENV_GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 const GOOGLE_STRICT_ENV = String(import.meta?.env?.VITE_GOOGLE_MAPS_STRICT || "").trim().toLowerCase();
 const GOOGLE_MAPS_RUNTIME_STORAGE_KEY = "scoutplan.googlemaps.apikey.v1";
@@ -39,6 +39,19 @@ const KREIS_CENTERS = {
   wesel: { lat: 51.6585, lon: 6.6176 },
   kleve: { lat: 51.7871, lon: 6.1381 },
 };
+
+export function getKreisCenter(kreisId) {
+  const key = String(kreisId || "").trim();
+  const center = KREIS_CENTERS[key];
+  if (!center) {
+    return null;
+  }
+
+  return {
+    lat: center.lat,
+    lon: center.lon,
+  };
+}
 const GENERIC_VENUE_TOKENS = new Set([
   "sportanlage",
   "sportplatz",
@@ -133,9 +146,6 @@ function getGoogleMapsApiKeySource() {
   }
   if (ENV_GOOGLE_MAPS_API_KEY) {
     return "env";
-  }
-  if (PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY) {
-    return "project";
   }
   return "none";
 }

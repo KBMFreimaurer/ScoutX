@@ -50,7 +50,33 @@ export function PlanPage() {
   const shouldPaginate = activeGames.length > 100;
   const totalPages = shouldPaginate ? Math.ceil(activeGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
-  const [kmOverrides, setKmOverrides] = useState({});
+  const [kmOverrides, setKmOverrides] = useState(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEYS.kmOverrides);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+
+      return Object.entries(parsed).reduce((acc, [key, value]) => {
+        const id = String(key || "").trim();
+        const km = Number.parseFloat(String(value).replace(",", "."));
+        if (id && Number.isFinite(km) && km >= 0) {
+          acc[id] = km;
+        }
+        return acc;
+      }, {});
+    } catch {
+      return {};
+    }
+  });
   const [presenceMinutesByGame, setPresenceMinutesByGame] = useState(() => {
     if (typeof window === "undefined") {
       return {};
@@ -117,6 +143,18 @@ export function PlanPage() {
     }
 
     try {
+      window.sessionStorage.setItem(STORAGE_KEYS.kmOverrides, JSON.stringify(kmOverrides));
+    } catch {
+      // Ignore sessionStorage write errors.
+    }
+  }, [kmOverrides]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
       window.sessionStorage.setItem(STORAGE_KEYS.presence, JSON.stringify(presenceMinutesByGame));
     } catch {
       // Ignore sessionStorage write errors.
@@ -129,6 +167,26 @@ export function PlanPage() {
         .map((game) => String(game?.id ?? "").trim())
         .filter(Boolean),
     );
+
+    setKmOverrides((prev) => {
+      const next = {};
+      let changed = false;
+
+      for (const [key, value] of Object.entries(prev)) {
+        const id = String(key || "").trim();
+        const km = Number.parseFloat(String(value).replace(",", "."));
+        if (id && activeIds.has(id) && Number.isFinite(km) && km >= 0) {
+          next[id] = km;
+        } else {
+          changed = true;
+        }
+      }
+
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
+      return next;
+    });
 
     setPresenceMinutesByGame((prev) => {
       const next = {};
@@ -298,6 +356,7 @@ export function PlanPage() {
             games={activeGames}
             routeOverview={routeOverview}
             kmPauschale={kmPauschale}
+            kmOverrides={kmOverrides}
             isMobile={isMobile}
             onKmChange={handleKmChange}
             presenceMinutesByGame={presenceMinutesByGame}
