@@ -93,14 +93,13 @@ describe("SetupPage", () => {
         jugendId: "d-jugend",
         selTeams: ["TSV Heimaterde"],
         fromDate: "2026-05-12",
-        focus: "Innenverteidiger",
         adapterEndpoint: "https://example.com/api/games",
       }),
     );
 
     renderSetupPage();
 
-    expect(screen.getByLabelText(/Scout-Fokus/i)).toHaveValue("");
+    expect(screen.queryByLabelText(/Scout-Fokus/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kreis wählen/i })).toBeDisabled();
   });

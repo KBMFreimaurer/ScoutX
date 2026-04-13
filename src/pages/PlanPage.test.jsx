@@ -22,7 +22,6 @@ function createBaseContext(overrides = {}) {
       jugendLabel: "D-Jugend",
       jugendAlter: "11-12",
       fromDate: "2026-04-05",
-      focus: "Allgemein",
     },
     routeOverview: null,
     startLocation: null,

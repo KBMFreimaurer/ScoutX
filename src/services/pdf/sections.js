@@ -684,9 +684,7 @@ export function drawCover(doc, state, cfg, createdAt, games, topGames, routeStop
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
   doc.setTextColor(COLORS.muted[0], COLORS.muted[1], COLORS.muted[2]);
-  const meta = `Erstellt: ${createdAt} · ab ${toSafeString(cfg?.fromDate) || "-"}${
-    toSafeString(cfg?.focus) ? ` · Fokus: ${toSafeString(cfg.focus)}` : ""
-  }`;
+  const meta = `Erstellt: ${createdAt} · ab ${toSafeString(cfg?.fromDate) || "-"}`;
   doc.text(sanitizePdfText(meta), MARGIN_X, state.y);
   state.y += 6;
 

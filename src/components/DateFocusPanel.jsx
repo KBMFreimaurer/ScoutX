@@ -96,7 +96,7 @@ function formatDisplayDate(value, fallback = "Datum auswählen") {
   return DISPLAY_DATE_FORMATTER.format(parsed);
 }
 
-export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, jugendId }) {
+export function DateFocusPanel({ fromDate, onFromDate }) {
   const calendarRef = useRef(null);
   const calendarToggleRef = useRef(null);
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -185,239 +185,225 @@ export function DateFocusPanel({ fromDate, onFromDate, focus, onFocus, jugend, j
 
   return (
     <div style={{ ...card, overflow: "visible", zIndex: isCalendarOpen ? 120 : "auto" }}>
-      <SectionHeader num="04">Zeitraum & Fokus</SectionHeader>
+      <SectionHeader num="04">Zeitraum</SectionHeader>
 
-      <div className="date-focus-row">
-        <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
-          <label htmlFor="scouting-from-date" style={lbl}>Scouting ab</label>
-          <button
-            id="scouting-from-date"
-            ref={calendarToggleRef}
-            type="button"
-            aria-label="Scouting-Datum auswählen"
-            aria-expanded={isCalendarOpen}
-            onClick={() => setIsCalendarOpen((open) => !open)}
-            style={{
-              ...inp,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              cursor: "pointer",
-              textAlign: "left",
-              fontSize: 15,
-              padding: "12px 14px",
-              minHeight: 52,
-            }}
-          >
-            <span>{formatDisplayDate(fromDate)}</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          </button>
+      <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
+        <label htmlFor="scouting-from-date" style={lbl}>Scouting ab</label>
+        <button
+          id="scouting-from-date"
+          ref={calendarToggleRef}
+          type="button"
+          aria-label="Scouting-Datum auswählen"
+          aria-expanded={isCalendarOpen}
+          onClick={() => setIsCalendarOpen((open) => !open)}
+          style={{
+            ...inp,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            textAlign: "left",
+            fontSize: 15,
+            padding: "12px 14px",
+            minHeight: 52,
+          }}
+        >
+          <span>{formatDisplayDate(fromDate)}</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </button>
 
-          <input
-            type="date"
-            tabIndex={-1}
-            aria-hidden="true"
-            value={fromDate}
-            min={todayIso}
-            onChange={(event) => onFromDate(event.target.value)}
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          value={fromDate}
+          min={todayIso}
+          onChange={(event) => onFromDate(event.target.value)}
+          style={{
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 0,
+            height: 0,
+          }}
+        />
+
+        {isCalendarOpen ? (
+          <div
+            role="dialog"
+            aria-label="Kalenderauswahl"
             style={{
               position: "absolute",
-              opacity: 0,
-              pointerEvents: "none",
-              width: 0,
-              height: 0,
+              top: calendarPlacement === "bottom" ? "calc(100% + 10px)" : "auto",
+              bottom: calendarPlacement === "top" ? "calc(100% + 10px)" : "auto",
+              left: 0,
+              width: "min(420px, calc(100vw - 56px))",
+              maxHeight: "min(420px, calc(100vh - 120px))",
+              overflowY: "auto",
+              borderRadius: 14,
+              border: `1px solid ${C.border}`,
+              background: C.surfaceSolid,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset",
+              padding: 14,
+              zIndex: 140,
             }}
-          />
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <button
+                type="button"
+                aria-label="Vorheriger Monat"
+                onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
+                style={{
+                  border: `1px solid ${C.border}`,
+                  background: "rgba(255,255,255,0.03)",
+                  color: C.gray,
+                  borderRadius: 8,
+                  width: 38,
+                  minHeight: 38,
+                  cursor: "pointer",
+                }}
+              >
+                ‹
+              </button>
 
-          {isCalendarOpen ? (
+              <div
+                style={{
+                  color: C.offWhite,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  textTransform: "capitalize",
+                }}
+              >
+                {monthLabel}
+              </div>
+
+              <button
+                type="button"
+                aria-label="Nächster Monat"
+                onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
+                style={{
+                  border: `1px solid ${C.border}`,
+                  background: "rgba(255,255,255,0.03)",
+                  color: C.gray,
+                  borderRadius: 8,
+                  width: 38,
+                  minHeight: 38,
+                  cursor: "pointer",
+                }}
+              >
+                ›
+              </button>
+            </div>
+
             <div
-              role="dialog"
-              aria-label="Kalenderauswahl"
               style={{
-                position: "absolute",
-                top: calendarPlacement === "bottom" ? "calc(100% + 10px)" : "auto",
-                bottom: calendarPlacement === "top" ? "calc(100% + 10px)" : "auto",
-                left: 0,
-                width: "min(420px, calc(100vw - 56px))",
-                maxHeight: "min(420px, calc(100vh - 120px))",
-                overflowY: "auto",
-                borderRadius: 14,
-                border: `1px solid ${C.border}`,
-                background: C.surfaceSolid,
-                boxShadow: "0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset",
-                padding: 14,
-                zIndex: 140,
+                display: "grid",
+                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                gap: 6,
+                marginBottom: 6,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <button
-                  type="button"
-                  aria-label="Vorheriger Monat"
-                  onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
-                  style={{
-                    border: `1px solid ${C.border}`,
-                    background: "rgba(255,255,255,0.03)",
-                    color: C.gray,
-                    borderRadius: 8,
-                    width: 38,
-                    minHeight: 38,
-                    cursor: "pointer",
-                  }}
-                >
-                  ‹
-                </button>
-
+              {WEEKDAY_LABELS.map((weekday) => (
                 <div
+                  key={weekday}
                   style={{
-                    color: C.offWhite,
-                    fontSize: 15,
-                    fontWeight: 700,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {monthLabel}
-                </div>
-
-                <button
-                  type="button"
-                  aria-label="Nächster Monat"
-                  onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
-                  style={{
-                    border: `1px solid ${C.border}`,
-                    background: "rgba(255,255,255,0.03)",
+                    textAlign: "center",
+                    fontSize: 11,
                     color: C.gray,
-                    borderRadius: 8,
-                    width: 38,
-                    minHeight: 38,
-                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    fontWeight: 700,
                   }}
                 >
-                  ›
-                </button>
-              </div>
+                  {weekday}
+                </div>
+              ))}
+            </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                  gap: 6,
-                  marginBottom: 6,
-                }}
-              >
-                {WEEKDAY_LABELS.map((weekday) => (
-                  <div
-                    key={weekday}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                gap: 6,
+              }}
+            >
+              {calendarDays.map((day) => {
+                const inMonth = isInVisibleMonth(day, visibleMonth);
+                const isToday = isSameDay(day, today);
+                const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
+                const isDisabled = isBeforeDay(day, today);
+
+                return (
+                  <button
+                    type="button"
+                    key={toIsoDate(day)}
+                    aria-label={`Datum ${DISPLAY_DATE_FORMATTER.format(day)} auswählen`}
+                    disabled={isDisabled}
+                    onClick={() => onSelectCalendarDay(day)}
                     style={{
-                      textAlign: "center",
-                      fontSize: 11,
-                      color: C.gray,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      fontWeight: 700,
+                      minHeight: 42,
+                      borderRadius: 9,
+                      border: `1px solid ${
+                        isSelected
+                          ? C.greenBorder
+                          : isToday
+                            ? "rgba(0,200,83,0.35)"
+                            : "rgba(255,255,255,0.06)"
+                      }`,
+                      background: isSelected ? C.green : "rgba(255,255,255,0.03)",
+                      color: isSelected
+                        ? C.bg
+                        : isDisabled
+                          ? C.grayDark
+                          : inMonth
+                            ? C.offWhite
+                            : C.gray,
+                      cursor: isDisabled ? "not-allowed" : "pointer",
+                      fontWeight: isSelected ? 700 : isToday ? 600 : 500,
+                      opacity: inMonth ? 1 : 0.75,
+                      transition: "all 0.15s ease",
+                      fontSize: 13,
                     }}
                   >
-                    {weekday}
-                  </div>
-                ))}
-              </div>
+                    {day.getDate()}
+                  </button>
+                );
+              })}
+            </div>
 
-              <div
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
+              <div style={{ fontSize: 11, color: C.gray }}>
+                Heute: {DISPLAY_DATE_FORMATTER.format(today)}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onFromDate(todayIso);
+                  setVisibleMonth(startOfMonth(today));
+                  setIsCalendarOpen(false);
+                }}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                  gap: 6,
+                  border: `1px solid ${C.greenBorder}`,
+                  background: C.greenDim,
+                  color: C.green,
+                  borderRadius: 8,
+                  minHeight: 34,
+                  padding: "0 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontWeight: 600,
                 }}
               >
-                {calendarDays.map((day) => {
-                  const inMonth = isInVisibleMonth(day, visibleMonth);
-                  const isToday = isSameDay(day, today);
-                  const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-                  const isDisabled = isBeforeDay(day, today);
-
-                  return (
-                    <button
-                      type="button"
-                      key={toIsoDate(day)}
-                      aria-label={`Datum ${DISPLAY_DATE_FORMATTER.format(day)} auswählen`}
-                      disabled={isDisabled}
-                      onClick={() => onSelectCalendarDay(day)}
-                      style={{
-                        minHeight: 42,
-                        borderRadius: 9,
-                        border: `1px solid ${
-                          isSelected
-                            ? C.greenBorder
-                            : isToday
-                              ? "rgba(0,200,83,0.35)"
-                              : "rgba(255,255,255,0.06)"
-                        }`,
-                        background: isSelected ? C.green : "rgba(255,255,255,0.03)",
-                        color: isSelected
-                          ? C.bg
-                          : isDisabled
-                            ? C.grayDark
-                            : inMonth
-                              ? C.offWhite
-                              : C.gray,
-                        cursor: isDisabled ? "not-allowed" : "pointer",
-                        fontWeight: isSelected ? 700 : isToday ? 600 : 500,
-                        opacity: inMonth ? 1 : 0.75,
-                        transition: "all 0.15s ease",
-                        fontSize: 13,
-                      }}
-                    >
-                      {day.getDate()}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
-                <div style={{ fontSize: 11, color: C.gray }}>
-                  Heute: {DISPLAY_DATE_FORMATTER.format(today)}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onFromDate(todayIso);
-                    setVisibleMonth(startOfMonth(today));
-                    setIsCalendarOpen(false);
-                  }}
-                  style={{
-                    border: `1px solid ${C.greenBorder}`,
-                    background: C.greenDim,
-                    color: C.green,
-                    borderRadius: 8,
-                    minHeight: 34,
-                    padding: "0 10px",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  Heute wählen
-                </button>
-              </div>
+                Heute wählen
+              </button>
             </div>
-          ) : null}
-        </div>
-
-        <div>
-          <label htmlFor="scout-focus-input" style={lbl}>Scout-Fokus</label>
-          <input
-            id="scout-focus-input"
-            className="scout-input"
-            placeholder={jugendId ? `z.B. Torhüter ${jugend?.label}, Außenspieler...` : "z.B. Stürmer, Innenverteidiger..."}
-            value={focus}
-            onChange={(event) => onFocus(event.target.value)}
-            style={inp}
-          />
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

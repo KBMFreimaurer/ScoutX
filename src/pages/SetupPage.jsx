@@ -24,7 +24,6 @@ export function SetupPage() {
     teamDraft,
     teamValidation,
     fromDate,
-    focus,
     canBuild,
     loadingGames,
     err,
@@ -46,7 +45,6 @@ export function SetupPage() {
     onSetTeamDraft,
     onClearAllTeams,
     onSetFromDate,
-    onSetFocus,
     onBuildAndGo,
     onSetLocationDraft,
     onResolveLocation,
@@ -111,8 +109,9 @@ export function SetupPage() {
       </header>
 
       <div className="setup-exec-grid">
-        <div className="setup-exec-left">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
+
           <AgeGroupSelector
             jugendKlassen={JUGEND_KLASSEN}
             jugendId={jugendId}
@@ -124,238 +123,225 @@ export function SetupPage() {
             onClearSubLevels={onClearJugendSubLevels}
           />
 
-          <DateFocusPanel
-            fromDate={fromDate}
-            onFromDate={onSetFromDate}
-            focus={focus}
-            onFocus={onSetFocus}
-            jugend={jugend}
-            jugendId={jugendId}
+          <TeamPicker
+            selectedTeams={selectedTeams}
+            teamDraft={teamDraft}
+            teamValidation={teamValidation}
+            onTeamDraft={onSetTeamDraft}
+            onAddTeam={onAddTeamField}
+            onUpdateTeam={onUpdateTeamField}
+            onNormalizeTeams={onNormalizeTeamField}
+            onRemoveTeam={onRemoveTeamField}
+            onClearAll={onClearAllTeams}
           />
-        </div>
 
-        <div className="setup-exec-right">
-          <div>
-            <TeamPicker
-              selectedTeams={selectedTeams}
-              teamDraft={teamDraft}
-              teamValidation={teamValidation}
-              onTeamDraft={onSetTeamDraft}
-              onAddTeam={onAddTeamField}
-              onUpdateTeam={onUpdateTeamField}
-              onNormalizeTeams={onNormalizeTeamField}
-              onRemoveTeam={onRemoveTeamField}
-              onClearAll={onClearAllTeams}
-            />
-          </div>
+          <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} />
 
-          <div>
-            <div style={{ ...card, marginBottom: 16 }}>
-              <div style={{ ...secH, marginBottom: 14 }}>
-                <span className="section-number">06</span>
-                Startort
-              </div>
+          <div style={card}>
+            <div style={{ ...secH, marginBottom: 14 }}>
+              <span className="section-number">05</span>
+              Startort
+            </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <label htmlFor="start-location-input" style={lbl}>
-                  Startort / Abfahrtsadresse
-                </label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input
-                    id="start-location-input"
-                    className="scout-input"
-                    value={locationDraft}
-                    onChange={(event) => onSetLocationDraft(event.target.value)}
-                    placeholder="Straße, PLZ, Ort"
-                    style={{ ...inp, flex: 1, minWidth: 220 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onResolveLocation()}
-                    disabled={resolvingLocation}
-                    style={{
-                      ...inp,
-                      width: "auto",
-                      minWidth: 132,
-                      cursor: resolvingLocation ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onConfirmUseCurrentLocation}
-                    disabled={resolvingLocation}
-                    style={{
-                      ...inp,
-                      width: "auto",
-                      minWidth: 210,
-                      cursor: resolvingLocation ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Genauen Standort ermitteln
-                  </button>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
-                  {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
-                  {startLocation?.label ? ` · ${startLocation.label}` : ""}
-                </div>
-                <div
-                  key={googleStatusVersion}
+            <div style={{ marginBottom: 10 }}>
+              <label htmlFor="start-location-input" style={lbl}>
+                Startort / Abfahrtsadresse
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  id="start-location-input"
+                  className="scout-input"
+                  value={locationDraft}
+                  onChange={(event) => onSetLocationDraft(event.target.value)}
+                  placeholder="Straße, PLZ, Ort"
+                  style={{ ...inp, flex: 1, minWidth: 220 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onResolveLocation()}
+                  disabled={resolvingLocation}
                   style={{
-                    marginTop: 8,
-                    borderRadius: 8,
-                    border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
-                    background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    lineHeight: 1.5,
-                    color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
+                    ...inp,
+                    width: "auto",
+                    minWidth: 132,
+                    cursor: resolvingLocation ? "not-allowed" : "pointer",
                   }}
                 >
-                  <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
-                    Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
-                  </strong>
-                  <div>
-                    {googleRouting.googleConfigured
-                      ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
-                      : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
-                  </div>
-                  {!googleRouting.googleConfigured ? (
-                    <div style={{ marginTop: 6 }}>
-                      <div>
-                        Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
-                        <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
-                        <a
-                          href="https://console.cloud.google.com/apis/credentials"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: C.warn, textDecoration: "underline" }}
-                        >
-                          Google Cloud Console
-                        </a>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-                        <input
-                          type="password"
-                          value={googleKeyDraft}
-                          onChange={(event) => setGoogleKeyDraft(event.target.value)}
-                          placeholder="Google API-Key lokal speichern"
-                          style={{
-                            ...inp,
-                            flex: 1,
-                            minWidth: 210,
-                            height: 34,
-                            padding: "6px 10px",
-                            fontSize: 12,
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={onSaveRuntimeGoogleKey}
-                          style={{
-                            ...inp,
-                            width: "auto",
-                            minWidth: 140,
-                            height: 34,
-                            padding: "6px 10px",
-                            cursor: "pointer",
-                            fontSize: 12,
-                          }}
-                        >
-                          API-Key speichern
-                        </button>
-                      </div>
-                      {googleKeyNotice ? (
-                        <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
-                      ) : null}
-                    </div>
-                  ) : (
+                  {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmUseCurrentLocation}
+                  disabled={resolvingLocation}
+                  style={{
+                    ...inp,
+                    width: "auto",
+                    minWidth: 210,
+                    cursor: resolvingLocation ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Genauen Standort ermitteln
+                </button>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
+                {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
+                {startLocation?.label ? ` · ${startLocation.label}` : ""}
+              </div>
+              <div
+                key={googleStatusVersion}
+                style={{
+                  marginTop: 8,
+                  borderRadius: 8,
+                  border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
+                  background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
+                  padding: "8px 10px",
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
+                }}
+              >
+                <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
+                  Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
+                </strong>
+                <div>
+                  {googleRouting.googleConfigured
+                    ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
+                    : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+                </div>
+                {!googleRouting.googleConfigured ? (
+                  <div style={{ marginTop: 6 }}>
                     <div>
-                      Provider: <code>{googleRouting.routeProvider}</code>
-                      {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
-                      {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
-                      {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
-                      {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
-                      {googleRouting.keySource === "runtime" ? (
-                        <button
-                          type="button"
-                          onClick={onClearRuntimeGoogleKey}
-                          style={{
-                            marginLeft: 10,
-                            border: "none",
-                            background: "transparent",
-                            color: C.grayLight,
-                            cursor: "pointer",
-                            textDecoration: "underline",
-                            fontSize: 11,
-                            padding: 0,
-                          }}
-                        >
-                          lokalen Key entfernen
-                        </button>
-                      ) : null}
+                      Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
+                      <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
+                      <a
+                        href="https://console.cloud.google.com/apis/credentials"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: C.warn, textDecoration: "underline" }}
+                      >
+                        Google Cloud Console
+                      </a>
                     </div>
-                  )}
-                </div>
-                {locationError ? (
-                  <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
-                ) : null}
-                {hasLocation ? (
-                  <button
-                    type="button"
-                    onClick={onClearLocation}
-                    style={{
-                      marginTop: 8,
-                      border: "none",
-                      background: "transparent",
-                      color: C.gray,
-                      cursor: "pointer",
-                      padding: 0,
-                      fontSize: 12,
-                    }}
-                  >
-                    Standort entfernen
-                  </button>
-                ) : null}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                      <input
+                        type="password"
+                        value={googleKeyDraft}
+                        onChange={(event) => setGoogleKeyDraft(event.target.value)}
+                        placeholder="Google API-Key lokal speichern"
+                        style={{
+                          ...inp,
+                          flex: 1,
+                          minWidth: 210,
+                          height: 34,
+                          padding: "6px 10px",
+                          fontSize: 12,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={onSaveRuntimeGoogleKey}
+                        style={{
+                          ...inp,
+                          width: "auto",
+                          minWidth: 140,
+                          height: 34,
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        API-Key speichern
+                      </button>
+                    </div>
+                    {googleKeyNotice ? (
+                      <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div>
+                    Provider: <code>{googleRouting.routeProvider}</code>
+                    {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+                    {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
+                    {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
+                    {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
+                    {googleRouting.keySource === "runtime" ? (
+                      <button
+                        type="button"
+                        onClick={onClearRuntimeGoogleKey}
+                        style={{
+                          marginLeft: 10,
+                          border: "none",
+                          background: "transparent",
+                          color: C.grayLight,
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          fontSize: 11,
+                          padding: 0,
+                        }}
+                      >
+                        lokalen Key entfernen
+                      </button>
+                    ) : null}
+                  </div>
+                )}
               </div>
+              {locationError ? (
+                <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
+              ) : null}
+              {hasLocation ? (
+                <button
+                  type="button"
+                  onClick={onClearLocation}
+                  style={{
+                    marginTop: 8,
+                    border: "none",
+                    background: "transparent",
+                    color: C.gray,
+                    cursor: "pointer",
+                    padding: 0,
+                    fontSize: 12,
+                  }}
+                >
+                  Standort entfernen
+                </button>
+              ) : null}
             </div>
+          </div>
 
-            <div id="fahrtkosten" style={{ ...card, marginTop: 16, scrollMarginTop: 96 }}>
-              <SectionHeader>Fahrtkosten</SectionHeader>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
-                <div>
-                  <label htmlFor="scout-name-input" style={lbl}>Scout-Name (für Abrechnung)</label>
-                  <input
-                    id="scout-name-input"
-                    style={inp}
-                    type="text"
-                    value={scoutName}
-                    onChange={(e) => onSetScoutName(e.target.value)}
-                    placeholder="Vor- und Nachname"
-                    autoComplete="name"
-                    inputMode="text"
-                    maxLength={80}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="km-pauschale-input" style={lbl}>€ / km</label>
-                  <input
-                    id="km-pauschale-input"
-                    style={inp}
-                    type="number"
-                    value={kmPauschale}
-                    step="0.01"
-                    min="0.01"
-                    max="2.00"
-                    onChange={(e) => onSetKmPauschale(e.target.value)}
-                  />
-                </div>
+          <div id="fahrtkosten" style={{ ...card, scrollMarginTop: 96 }}>
+            <SectionHeader num="06">Fahrtkosten</SectionHeader>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "end" }}>
+              <div>
+                <label htmlFor="scout-name-input" style={lbl}>Scout-Name (für Abrechnung)</label>
+                <input
+                  id="scout-name-input"
+                  style={inp}
+                  type="text"
+                  value={scoutName}
+                  onChange={(e) => onSetScoutName(e.target.value)}
+                  placeholder="Vor- und Nachname"
+                  autoComplete="name"
+                  inputMode="text"
+                  maxLength={80}
+                />
               </div>
-              <p style={{ fontSize: 11, color: C.gray, marginTop: 8, marginBottom: 0 }}>
-                Kilometerpauschale für die automatische Fahrtkosten-Abrechnung im Scout-Plan.
-              </p>
+              <div>
+                <label htmlFor="km-pauschale-input" style={lbl}>€ / km</label>
+                <input
+                  id="km-pauschale-input"
+                  style={inp}
+                  type="number"
+                  value={kmPauschale}
+                  step="0.01"
+                  min="0.01"
+                  max="2.00"
+                  onChange={(e) => onSetKmPauschale(e.target.value)}
+                />
+              </div>
             </div>
+            <p style={{ fontSize: 11, color: C.gray, marginTop: 8, marginBottom: 0 }}>
+              Kilometerpauschale für die automatische Fahrtkosten-Abrechnung im Scout-Plan.
+            </p>
           </div>
         </div>
       </div>

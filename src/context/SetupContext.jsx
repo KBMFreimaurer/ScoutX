@@ -98,7 +98,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       jugendId: "",
       selTeams: [],
       fromDate: todayIso,
-      focus: "",
       jugendSubLevels: [],
       startLocation: null,
       favorites: [],
@@ -115,7 +114,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [teamDraft, setTeamDraft] = useState("");
   const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
-  const [focus, setFocus] = useState(setupDefaults.focus);
   const [jugendSubLevels, setJugendSubLevels] = useState(() => normalizeTeamParameters(setupDefaults.jugendSubLevels));
   const adapterEndpoint = useMemo(
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
@@ -366,7 +364,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setJugendSubLevels([]);
     setAdapterToken(adapterTokenDefault);
     setFromDate(setupDefaults.todayIso);
-    setFocus("");
     setStartLocation(null);
     setLocationDraft("");
     setLocationError("");
@@ -395,7 +392,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamDraft,
       teamValidation,
       fromDate,
-      focus,
       jugendSubLevels,
       availableJugendSubLevels,
       adapterEndpoint,
@@ -425,7 +421,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onSetTeamDraft: setTeamDraft,
       onClearAllTeams,
       onSetFromDate: setFromDate,
-      onSetFocus: setFocus,
       onAdapterTokenChange: setAdapterToken,
       onSetLocationDraft: setLocationDraft,
       onResolveLocation,
@@ -456,7 +451,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamDraft,
       teamValidation,
       fromDate,
-      focus,
       jugendSubLevels,
       availableJugendSubLevels,
       adapterEndpoint,
