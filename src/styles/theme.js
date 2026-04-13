@@ -264,7 +264,7 @@ select option{background:#18181B;color:#e4e4e7}
 }
 .setup-wizard-progress{
   display:grid;
-  grid-template-columns:repeat(6,minmax(0,1fr));
+  grid-template-columns:repeat(7,minmax(0,1fr));
   gap:8px;
   margin-bottom:14px;
 }

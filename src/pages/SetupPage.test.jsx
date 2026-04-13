@@ -65,6 +65,12 @@ function goToStepWithRequiredSelections(step) {
   }
 
   clickNextStep();
+  if (step <= 6) {
+    return;
+  }
+
+  fireEvent.change(screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i), { target: { value: "Ayoub Kerbab" } });
+  clickNextStep();
 }
 
 describe("SetupPage", () => {
@@ -182,16 +188,12 @@ describe("SetupPage", () => {
     expect(dateToggle).toHaveTextContent(selectedDateText);
   });
 
-  it("erlaubt ein separates Scouting-Bis-Datum", () => {
+  it("zeigt Scouting-Bis ohne doppeltes Eingabefeld", () => {
     renderSetupPage();
     goToStepWithRequiredSelections(4);
 
     expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toBeInTheDocument();
-
-    const toDateInput = screen.getByLabelText(/Scouting-Bis direkt eingeben/i);
-    fireEvent.change(toDateInput, { target: { value: "2026-06-15" } });
-
-    expect(toDateInput).toHaveValue("2026-06-15");
+    expect(screen.queryByLabelText(/Scouting-Bis direkt eingeben/i)).not.toBeInTheDocument();
   });
 
   it("erlaubt Leerzeichen im Scout-Namen", () => {
@@ -202,5 +204,19 @@ describe("SetupPage", () => {
     fireEvent.change(scoutNameInput, { target: { value: "Ayoub El Idrissi" } });
 
     expect(scoutNameInput).toHaveValue("Ayoub El Idrissi");
+  });
+
+  it("zeigt die Zusammenfassung erst nach Weiter von Schritt Fahrtkosten", () => {
+    renderSetupPage();
+    goToStepWithRequiredSelections(6);
+
+    expect(document.querySelector(".setup-summary-grid")).toBeNull();
+    expect(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i), { target: { value: "Ayoub Kerbab" } });
+    clickNextStep();
+
+    expect(document.querySelector(".setup-summary-grid")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Spielplan generieren/i })).toBeInTheDocument();
   });
 });

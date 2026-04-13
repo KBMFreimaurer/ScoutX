@@ -286,20 +286,6 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
             </button>
-            <input
-              type="date"
-              aria-label="Scouting-Bis direkt eingeben"
-              value={toDate}
-              min={minToDateIso}
-              onChange={(event) => onToDate(event.target.value)}
-              style={{
-                ...inp,
-                marginTop: 8,
-                minHeight: 40,
-                padding: "8px 10px",
-                fontSize: 12,
-              }}
-            />
           </div>
         </div>
 
@@ -314,6 +300,21 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
           value={fromDate}
           min={todayIso}
           onChange={(event) => onFromDate(event.target.value)}
+          style={{
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 0,
+            height: 0,
+          }}
+        />
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          value={toDate}
+          min={minToDateIso}
+          onChange={(event) => onToDate(event.target.value)}
           style={{
             position: "absolute",
             opacity: 0,

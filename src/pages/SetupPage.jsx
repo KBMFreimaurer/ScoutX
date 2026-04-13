@@ -18,6 +18,7 @@ const SETUP_STEPS = [
   { id: 4, title: "Zeitraum" },
   { id: 5, title: "Startpunkt" },
   { id: 6, title: "Fahrtkosten" },
+  { id: 7, title: "Zusammenfassung" },
 ];
 
 function formatIsoDateLabel(value) {
@@ -44,6 +45,8 @@ function formatDateRangeLabel(fromDate, toDate) {
 
 function buildStepCompletionMap({ kreisId, jugendId, fromDate, toDate, teamParameterCount, scoutName, kmPauschale }) {
   const hasValidRange = Boolean(fromDate && toDate && String(toDate) >= String(fromDate));
+  const hasScoutName = Boolean(String(scoutName || "").trim());
+  const hasKmPauschale = Number(kmPauschale) > 0;
 
   return {
     1: Boolean(kreisId),
@@ -51,8 +54,13 @@ function buildStepCompletionMap({ kreisId, jugendId, fromDate, toDate, teamParam
     3: teamParameterCount >= 0,
     4: hasValidRange,
     5: true,
-    6: Boolean(String(scoutName || "").trim()) || Number(kmPauschale) > 0,
+    6: hasScoutName && hasKmPauschale,
+    7: canBuildStepCompletion({ kreisId, jugendId, hasValidRange, hasScoutName, hasKmPauschale }),
   };
+}
+
+function canBuildStepCompletion({ kreisId, jugendId, hasValidRange, hasScoutName, hasKmPauschale }) {
+  return Boolean(kreisId && jugendId && hasValidRange && hasScoutName && hasKmPauschale);
 }
 
 export function SetupPage() {
@@ -145,8 +153,11 @@ export function SetupPage() {
     if (currentStep === 4 && (!fromDate || !toDate || String(toDate) < String(fromDate))) {
       return "Zeitraum auswählen";
     }
+    if (currentStep === 6 && !String(scoutName || "").trim()) {
+      return "Scout-Name eintragen";
+    }
     return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
-  }, [currentStep, fromDate, toDate, jugendId, kreisId, nextStepMeta]);
+  }, [currentStep, fromDate, toDate, jugendId, kreisId, scoutName, nextStepMeta]);
 
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
@@ -468,9 +479,10 @@ export function SetupPage() {
       case 5:
         return renderStartpunktCard();
       case 6:
+        return renderFahrtkostenCard();
+      case 7:
         return (
           <>
-            {renderFahrtkostenCard()}
             {renderSummaryCard()}
           </>
         );

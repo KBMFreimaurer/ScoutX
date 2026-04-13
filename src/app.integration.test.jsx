@@ -34,6 +34,8 @@ describe("ScoutX Integration", () => {
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+    fireEvent.change(screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i), { target: { value: "Ayoub Kerbab" } });
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 
     const generateButton = await screen.findByRole("button", { name: /Spielplan generieren/i }, { timeout: 5000 });
     fireEvent.click(generateButton);
