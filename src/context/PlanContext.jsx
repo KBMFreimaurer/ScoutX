@@ -347,6 +347,26 @@ export function PlanProvider({ children }) {
     );
   }, []);
 
+  const onUpdatePlanHistoryGames = useCallback((entryId, games) => {
+    const id = String(entryId || "").trim();
+    if (!id || !Array.isArray(games)) {
+      return;
+    }
+
+    const serializedGames = games.map(serializeGameForHistory);
+    setPlanHistory((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== id) {
+          return entry;
+        }
+        return {
+          ...entry,
+          games: serializedGames,
+        };
+      }),
+    );
+  }, []);
+
   const onGeneratePlanPdf = useCallback(async () => {
     if (pdfExporting) {
       return;
@@ -462,6 +482,7 @@ export function PlanProvider({ children }) {
       onDeletePlanHistory,
       onClearPlanHistory,
       onUpdatePlanHistoryPresence,
+      onUpdatePlanHistoryGames,
       onBackGames,
       onResetSoft,
       onResetHard,
@@ -480,6 +501,7 @@ export function PlanProvider({ children }) {
       onDeletePlanHistory,
       onClearPlanHistory,
       onUpdatePlanHistoryPresence,
+      onUpdatePlanHistoryGames,
       onBackGames,
       onResetSoft,
       onResetHard,

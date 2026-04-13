@@ -8,6 +8,7 @@ import { FahrtkostenTabelle } from "../components/FahrtkostenTabelle";
 import { SectionHeader } from "../components/SectionHeader";
 import { STORAGE_KEYS } from "../config/storage";
 import { useScoutX } from "../context/ScoutXContext";
+import { checkPlanConsistency, isAdapterSyncContext } from "../services/liveConsistency";
 import { C } from "../styles/theme";
 import { normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { downloadCalendarIcs } from "../utils/calendar";
@@ -70,11 +71,13 @@ export function PlanPage() {
     startLocation,
     scoutName,
     kmPauschale,
+    setGames,
     setErr,
     onOpenPlanHistory,
     onDeletePlanHistory,
     onClearPlanHistory,
     onUpdatePlanHistoryPresence,
+    onUpdatePlanHistoryGames,
     onBackGames,
     onResetSoft,
     onResetHard,
@@ -91,6 +94,8 @@ export function PlanPage() {
   const totalPages = shouldPaginate ? Math.ceil(activeGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
   const [kmOverrides, setKmOverrides] = useState({});
+  const [consistencyChecking, setConsistencyChecking] = useState(false);
+  const [consistencyResult, setConsistencyResult] = useState(null);
   const [presenceMinutesByGame, setPresenceMinutesByGame] = useState(() => {
     if (typeof window === "undefined") {
       return {};
@@ -124,6 +129,20 @@ export function PlanPage() {
         ...activeHistoryEntry.syncContext,
       }
     : null;
+  const liveConsistencySyncContext = activeHistoryEntry?.syncContext && typeof activeHistoryEntry.syncContext === "object"
+    ? activeHistoryEntry.syncContext
+    : {
+        source: dataSourceUsed,
+        adapterEndpoint,
+        adapterToken,
+        kreisId,
+        jugendId,
+        fromDate,
+        toDate,
+        teams: activeTeams,
+        turnier: Boolean(jugend?.turnier),
+      };
+  const canCheckConsistency = activeGames.length > 0 && isAdapterSyncContext(liveConsistencySyncContext);
 
   const handleKmChange = (gameId, newKm) =>
     setKmOverrides((prev) => {
@@ -153,9 +172,45 @@ export function PlanPage() {
     });
   };
 
+  const handleCheckConsistency = async () => {
+    if (consistencyChecking || !canCheckConsistency) {
+      return;
+    }
+
+    setErr("");
+    setConsistencyChecking(true);
+
+    try {
+      const timeoutMs = Math.max(2000, Number(import.meta.env?.VITE_PLAN_CONSISTENCY_TIMEOUT_MS || 12000));
+      const result = await checkPlanConsistency(activeGames, liveConsistencySyncContext, timeoutMs);
+
+      if (result?.ok) {
+        if (Array.isArray(result.games) && result.correctedCount > 0) {
+          setGames(result.games);
+          if (activeHistoryEntry?.id) {
+            onUpdatePlanHistoryGames(activeHistoryEntry.id, result.games);
+          }
+        }
+        setConsistencyResult(result);
+      } else {
+        setConsistencyResult(result || null);
+      }
+    } catch (error) {
+      const message = String(error?.message || error || "Unbekannter Fehler");
+      setErr(`Konsistenzprüfung fehlgeschlagen: ${message}`);
+      setConsistencyResult(null);
+    } finally {
+      setConsistencyChecking(false);
+    }
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [activeGames.length]);
+
+  useEffect(() => {
+    setConsistencyResult(null);
+  }, [activeHistoryEntry?.id]);
 
   useEffect(() => {
     if (!activeHistoryEntry?.id) {
@@ -460,6 +515,89 @@ export function PlanPage() {
       ) : null}
 
       <PlanView plan={plan} jugendLabel={displayJugendLabel} kreisLabel={displayKreisLabel} isMobile={isMobile} games={activeGames} />
+
+      <div
+        className="fu2"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: `1px solid ${C.border}`,
+          borderRadius: 14,
+          padding: 14,
+          marginTop: 14,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: C.offWhite, fontWeight: 700 }}>Live-Konsistenzprüfung</div>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCheckConsistency();
+            }}
+            disabled={!canCheckConsistency || consistencyChecking}
+            aria-label="Live-Daten auf Änderungen prüfen"
+            style={{
+              fontSize: 12,
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+              background: consistencyChecking ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
+              color: !canCheckConsistency ? C.grayDark : C.grayLight,
+              padding: "8px 12px",
+              cursor: !canCheckConsistency || consistencyChecking ? "not-allowed" : "pointer",
+              minHeight: 36,
+              opacity: !canCheckConsistency ? 0.7 : 1,
+            }}
+          >
+            {consistencyChecking ? "Live-Daten werden geprüft..." : "Live-Daten prüfen"}
+          </button>
+        </div>
+
+        {!canCheckConsistency ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>
+            Prüfung nur verfügbar, wenn der Plan aus dem Live-Adapter stammt.
+          </div>
+        ) : null}
+
+        {consistencyResult?.ok ? (
+          <div style={{ marginTop: 10, fontSize: 12, color: C.grayLight, display: "grid", gap: 6 }}>
+            <div>
+              Geprüft am{" "}
+              {new Date(consistencyResult.checkedAt).toLocaleString("de-DE", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {" · "}
+              {consistencyResult.correctedCount > 0
+                ? `${consistencyResult.correctedCount} Änderung(en) übernommen`
+                : "Keine Änderungen gefunden"}
+              {" · "}
+              {consistencyResult.checkedCount} Spiel(e) geprüft
+            </div>
+
+            {consistencyResult.missingCount > 0 ? (
+              <div style={{ color: "#fcd34d" }}>
+                {consistencyResult.missingCount} Spiel(e) konnten im Live-Datensatz nicht eindeutig zugeordnet werden.
+              </div>
+            ) : null}
+
+            {Array.isArray(consistencyResult.changes) && consistencyResult.changes.length > 0 ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                {consistencyResult.changes.slice(0, 6).map((change) => (
+                  <div key={`${change.id || "match"}-${change.home}-${change.away}`} style={{ color: C.gray }}>
+                    {change.home} vs {change.away}: {change.details.join(" · ")}
+                  </div>
+                ))}
+                {consistencyResult.changes.length > 6 ? (
+                  <div style={{ color: C.grayDark }}>+ {consistencyResult.changes.length - 6} weitere Änderungen</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {activeGames.length > 0 ? (
         <div style={{ marginTop: 28, marginBottom: 28 }} className="fu2">
