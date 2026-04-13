@@ -16,7 +16,7 @@ const SETUP_STEPS = [
   { id: 2, title: "Altersklasse" },
   { id: 3, title: "Mannschaften (optional)" },
   { id: 4, title: "Zeitraum" },
-  { id: 5, title: "Tatort" },
+  { id: 5, title: "Startpunkt" },
   { id: 6, title: "Fahrtkosten" },
 ];
 
@@ -36,12 +36,20 @@ function formatIsoDateLabel(value) {
   }).format(parsed);
 }
 
-function buildStepCompletionMap({ kreisId, jugendId, fromDate, teamParameterCount, scoutName, kmPauschale }) {
+function formatDateRangeLabel(fromDate, toDate) {
+  const fromLabel = formatIsoDateLabel(fromDate);
+  const toLabel = formatIsoDateLabel(toDate);
+  return `${fromLabel} bis ${toLabel}`;
+}
+
+function buildStepCompletionMap({ kreisId, jugendId, fromDate, toDate, teamParameterCount, scoutName, kmPauschale }) {
+  const hasValidRange = Boolean(fromDate && toDate && String(toDate) >= String(fromDate));
+
   return {
     1: Boolean(kreisId),
     2: Boolean(jugendId),
     3: teamParameterCount >= 0,
-    4: Boolean(fromDate),
+    4: hasValidRange,
     5: true,
     6: Boolean(String(scoutName || "").trim()) || Number(kmPauschale) > 0,
   };
@@ -60,6 +68,7 @@ export function SetupPage() {
     teamDraft,
     teamValidation,
     fromDate,
+    toDate,
     canBuild,
     loadingGames,
     err,
@@ -81,6 +90,7 @@ export function SetupPage() {
     onSetTeamDraft,
     onClearAllTeams,
     onSetFromDate,
+    onSetToDate,
     onBuildAndGo,
     onSetLocationDraft,
     onResolveLocation,
@@ -103,6 +113,7 @@ export function SetupPage() {
     kreisId,
     jugendId,
     fromDate,
+    toDate,
     teamParameterCount,
     scoutName,
     kmPauschale,
@@ -113,7 +124,7 @@ export function SetupPage() {
     selectedKreis?.label || "Kein Kreis",
     jugend?.label || "Keine Altersklasse",
     teamParameterCount > 0 ? `${teamParameterCount} Team-Parameter` : "Ohne Team-Parameter",
-    hasLocation ? "Tatort gesetzt" : "Ohne Tatort",
+    hasLocation ? "Startpunkt gesetzt" : "Ohne Startpunkt",
   ];
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
 
@@ -131,11 +142,11 @@ export function SetupPage() {
     if (currentStep === 2 && !jugendId) {
       return "Altersklasse auswählen";
     }
-    if (currentStep === 4 && !fromDate) {
+    if (currentStep === 4 && (!fromDate || !toDate || String(toDate) < String(fromDate))) {
       return "Zeitraum auswählen";
     }
     return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
-  }, [currentStep, fromDate, jugendId, kreisId, nextStepMeta]);
+  }, [currentStep, fromDate, toDate, jugendId, kreisId, nextStepMeta]);
 
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
@@ -174,16 +185,16 @@ export function SetupPage() {
     setCurrentStep((prev) => Math.min(totalSteps, prev + 1));
   };
 
-  const renderTatortCard = () => (
+  const renderStartpunktCard = () => (
     <div style={card}>
       <div style={{ ...secH, marginBottom: 14 }}>
         <span className="section-number">05</span>
-        Tatort
+        Startpunkt
       </div>
 
       <div style={{ marginBottom: 10 }}>
         <label htmlFor="start-location-input" style={lbl}>
-          Tatort / Einsatzadresse
+          Startpunkt / Einsatzadresse
         </label>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
@@ -405,10 +416,10 @@ export function SetupPage() {
         </div>
         <div className="setup-summary-item">
           <span className="setup-summary-label">Zeitraum</span>
-          <span className="setup-summary-value">{formatIsoDateLabel(fromDate)}</span>
+          <span className="setup-summary-value">{formatDateRangeLabel(fromDate, toDate)}</span>
         </div>
         <div className="setup-summary-item">
-          <span className="setup-summary-label">Tatort</span>
+          <span className="setup-summary-label">Startpunkt</span>
           <span className="setup-summary-value">{startLocation?.label || "Nicht gesetzt"}</span>
         </div>
         <div className="setup-summary-item">
@@ -453,9 +464,9 @@ export function SetupPage() {
           />
         );
       case 4:
-        return <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} />;
+        return <DateFocusPanel fromDate={fromDate} toDate={toDate} onFromDate={onSetFromDate} onToDate={onSetToDate} />;
       case 5:
-        return renderTatortCard();
+        return renderStartpunktCard();
       case 6:
         return (
           <>

@@ -103,11 +103,11 @@ describe("SetupPage", () => {
     expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
   });
 
-  it("zeigt nur den Tatort-Block ohne Favoriten-Eingabe", () => {
+  it("zeigt nur den Startpunkt-Block ohne Favoriten-Eingabe", () => {
     renderSetupPage();
     goToStepWithRequiredSelections(5);
 
-    expect(screen.getByLabelText(/Tatort \/ Einsatzadresse/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Startpunkt \/ Einsatzadresse/i)).toBeInTheDocument();
     expect(screen.getByText(/Routen-API:/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Beobachtete Teams/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Favorit \+/i })).not.toBeInTheDocument();
@@ -180,6 +180,18 @@ describe("SetupPage", () => {
 
     expect(screen.queryByRole("dialog", { name: /Kalenderauswahl/i })).not.toBeInTheDocument();
     expect(dateToggle).toHaveTextContent(selectedDateText);
+  });
+
+  it("erlaubt ein separates Scouting-Bis-Datum", () => {
+    renderSetupPage();
+    goToStepWithRequiredSelections(4);
+
+    expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toBeInTheDocument();
+
+    const toDateInput = screen.getByLabelText(/Scouting-Bis direkt eingeben/i);
+    fireEvent.change(toDateInput, { target: { value: "2026-06-15" } });
+
+    expect(toDateInput).toHaveValue("2026-06-15");
   });
 
   it("erlaubt Leerzeichen im Scout-Namen", () => {

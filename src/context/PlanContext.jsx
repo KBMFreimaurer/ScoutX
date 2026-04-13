@@ -107,9 +107,10 @@ export function PlanProvider({ children }) {
       jugendLabel: setup.jugend?.label ?? "",
       jugendAlter: setup.jugend?.alter ?? "",
       fromDate: setup.fromDate,
+      toDate: setup.toDate,
       startLocationLabel: setup.startLocation?.label ?? "",
     }),
-    [setup.kreis, setup.jugend, setup.fromDate, setup.startLocation],
+    [setup.kreis, setup.jugend, setup.fromDate, setup.toDate, setup.startLocation],
   );
 
   const effectivePlannedGames = useMemo(() => {

@@ -216,6 +216,7 @@ async function fetchAuthoritativeGames(syncContext) {
   const kreisId = String(syncContext?.kreisId || "").trim();
   const jugendId = String(syncContext?.jugendId || "").trim();
   const fromDate = String(syncContext?.fromDate || "").trim();
+  const toDate = String(syncContext?.toDate || "").trim();
   const adapterToken = String(syncContext?.adapterToken || "").trim();
   const teams = Array.isArray(syncContext?.teams) ? syncContext.teams : [];
 
@@ -223,13 +224,14 @@ async function fetchAuthoritativeGames(syncContext) {
     throw new Error("Live-Abgleich unvollständig konfiguriert (Adapter/Kreis/Jugend/Datum).");
   }
   const weekRange = getWeekRange(fromDate);
+  const requestedToDate = toDate || weekRange.toDate;
 
   const result = await fetchGamesWithProviders({
     mode: "adapter",
     kreisId,
     jugendId,
-    fromDate: weekRange.fromDate,
-    toDate: weekRange.toDate,
+    fromDate,
+    toDate: requestedToDate,
     teams,
     uploadedGames: [],
     adapterEndpoint,

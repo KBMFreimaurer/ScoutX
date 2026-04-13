@@ -4,7 +4,7 @@ import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { STORAGE_KEYS } from "../config/storage";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
-import { normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
+import { getWeekRange, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
@@ -89,15 +89,48 @@ function buildJugendSubLevelHints(values) {
   return normalizeTeamParameters(hints);
 }
 
+function parseIsoDate(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function toIsoDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = new Date().toISOString().split("T")[0];
+    const initialRange = getWeekRange(todayIso);
 
     return {
       kreisId: "",
       jugendId: "",
       selTeams: [],
-      fromDate: todayIso,
+      fromDate: initialRange.fromDate,
+      toDate: initialRange.toDate,
       jugendSubLevels: [],
       startLocation: null,
       favorites: [],
@@ -114,6 +147,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [teamDraft, setTeamDraft] = useState("");
   const [teamValidation, setTeamValidation] = useState(null);
   const [fromDate, setFromDate] = useState(setupDefaults.fromDate);
+  const [toDate, setToDate] = useState(setupDefaults.toDate);
   const [jugendSubLevels, setJugendSubLevels] = useState(() => normalizeTeamParameters(setupDefaults.jugendSubLevels));
   const adapterEndpoint = useMemo(
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
@@ -224,6 +258,44 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setSelectedTeams([]);
     setTeamValidation(null);
   }, []);
+
+  const onSetFromDate = useCallback((value) => {
+    const normalized = String(value || "").trim();
+    setFromDate(normalized);
+
+    const fromParsed = parseIsoDate(normalized);
+    if (!fromParsed) {
+      return;
+    }
+
+    setToDate((prevToDate) => {
+      const prevParsed = parseIsoDate(prevToDate);
+      if (!prevParsed || prevParsed.getTime() < fromParsed.getTime()) {
+        return toIsoDate(fromParsed);
+      }
+      return prevToDate;
+    });
+  }, []);
+
+  const onSetToDate = useCallback(
+    (value) => {
+      const normalized = String(value || "").trim();
+      const toParsed = parseIsoDate(normalized);
+      if (!toParsed) {
+        setToDate(normalized);
+        return;
+      }
+
+      const fromParsed = parseIsoDate(fromDate);
+      if (fromParsed && toParsed.getTime() < fromParsed.getTime()) {
+        setToDate(toIsoDate(fromParsed));
+        return;
+      }
+
+      setToDate(normalized);
+    },
+    [fromDate],
+  );
 
   const onAddTeamField = useCallback(
     (value = teamDraft) => {
@@ -363,7 +435,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamValidation(null);
     setJugendSubLevels([]);
     setAdapterToken(adapterTokenDefault);
-    setFromDate(setupDefaults.todayIso);
+    setFromDate(setupDefaults.fromDate);
+    setToDate(setupDefaults.toDate);
     setStartLocation(null);
     setLocationDraft("");
     setLocationError("");
@@ -377,7 +450,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       // Falls localStorage blockiert ist, bleibt nur der In-Memory-Reset aktiv.
     }
     setErr("");
-  }, [adapterTokenDefault, setupDefaults.todayIso]);
+  }, [adapterTokenDefault, setupDefaults.fromDate, setupDefaults.toDate]);
 
   const value = useMemo(
     () => ({
@@ -392,6 +465,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamDraft,
       teamValidation,
       fromDate,
+      toDate,
       jugendSubLevels,
       availableJugendSubLevels,
       adapterEndpoint,
@@ -420,7 +494,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onRemoveTeamField,
       onSetTeamDraft: setTeamDraft,
       onClearAllTeams,
-      onSetFromDate: setFromDate,
+      onSetFromDate,
+      onSetToDate,
       onAdapterTokenChange: setAdapterToken,
       onSetLocationDraft: setLocationDraft,
       onResolveLocation,
@@ -451,6 +526,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       teamDraft,
       teamValidation,
       fromDate,
+      toDate,
       jugendSubLevels,
       availableJugendSubLevels,
       adapterEndpoint,
@@ -475,6 +551,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onNormalizeTeamField,
       onRemoveTeamField,
       onClearAllTeams,
+      onSetFromDate,
+      onSetToDate,
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,

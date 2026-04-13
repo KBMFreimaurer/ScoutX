@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { fetchGamesWithProviders } from "../services/dataProvider";
 import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
-import { getWeekRange } from "./shared";
 import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
@@ -282,6 +281,7 @@ export function GamesProvider({ children }) {
     kreisId,
     jugendId,
     fromDate,
+    toDate,
     activeTeams,
     favorites,
     adapterEndpoint,
@@ -435,13 +435,12 @@ export function GamesProvider({ children }) {
     buildRunRef.current = runId;
 
     try {
-      const weekRange = getWeekRange(fromDate);
       const { games: fetchedGames, source, meta } = await fetchGamesWithProviders({
         mode: "adapter",
         kreisId,
         jugendId,
-        fromDate: weekRange.fromDate,
-        toDate: weekRange.toDate,
+        fromDate,
+        toDate,
         teams: activeTeams,
         uploadedGames: [],
         adapterEndpoint,
@@ -492,6 +491,7 @@ export function GamesProvider({ children }) {
     kreisId,
     jugendId,
     fromDate,
+    toDate,
     activeTeams,
     adapterEndpoint,
     adapterToken,

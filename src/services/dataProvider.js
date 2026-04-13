@@ -233,6 +233,27 @@ function getWeekRange(isoDate) {
   };
 }
 
+function normalizeRequestedDateRange(fromDate, toDate) {
+  const from = parseIsoDateStrict(fromDate);
+  let to = null;
+
+  if (String(toDate || "").trim()) {
+    to = parseIsoDateStrict(toDate);
+  } else {
+    const fallbackRange = getWeekRange(fromDate);
+    to = parseIsoDateStrict(fallbackRange.toDate);
+  }
+
+  if (to.getTime() < from.getTime()) {
+    throw new Error("Ungültiger Zeitraum: 'Scouting bis' muss am oder nach 'Scouting ab' liegen.");
+  }
+
+  return {
+    fromDate: toIsoDate(from),
+    toDate: toIsoDate(to),
+  };
+}
+
 export function formatDate(dateValue) {
   return dateValue.toLocaleDateString("de-DE", {
     weekday: "short",
@@ -730,7 +751,7 @@ async function fetchGamesAdapter(params) {
     headers.Authorization = `Bearer ${params.adapterToken}`;
   }
 
-  const weekRange = getWeekRange(params.fromDate);
+  const requestedRange = normalizeRequestedDateRange(params.fromDate, params.toDate);
   const endpointCandidates = buildAdapterEndpointCandidates(adapterEndpoint);
   let payload = null;
   let connectionError = null;
@@ -747,8 +768,8 @@ async function fetchGamesAdapter(params) {
           body: JSON.stringify({
             kreisId: params.kreisId,
             jugendId: params.jugendId,
-            fromDate: weekRange.fromDate,
-            toDate: weekRange.toDate,
+            fromDate: requestedRange.fromDate,
+            toDate: requestedRange.toDate,
             teams: params.teams,
             ensureWeekData: true,
           }),
@@ -844,7 +865,18 @@ export async function fetchGamesWithProviders({
   turnier,
   retryDelaysMs,
 }) {
-  const context = { kreisId, jugendId, fromDate, toDate, teams, uploadedGames, adapterEndpoint, adapterToken, turnier };
+  const normalizedRange = normalizeRequestedDateRange(fromDate, toDate);
+  const context = {
+    kreisId,
+    jugendId,
+    fromDate: normalizedRange.fromDate,
+    toDate: normalizedRange.toDate,
+    teams,
+    uploadedGames,
+    adapterEndpoint,
+    adapterToken,
+    turnier,
+  };
 
   const providerOrder =
     mode === "mock" ? ["mock"] : mode === "csv" ? ["csv"] : mode === "adapter" ? ["adapter"] : ["csv", "adapter"];

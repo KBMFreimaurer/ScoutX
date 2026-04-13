@@ -434,7 +434,7 @@ button,input,select{min-height:44px}
 @media(min-width:700px){.team-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
 
 .date-focus-row{display:grid;grid-template-columns:1fr;gap:12px}
-@media(min-width:560px){.date-focus-row{grid-template-columns:1fr 2fr}}
+@media(min-width:560px){.date-focus-row{grid-template-columns:1fr 1fr}}
 
 .reset-row{display:grid;grid-template-columns:1fr;gap:8px}
 @media(min-width:480px){.reset-row{grid-template-columns:1fr 1fr}}

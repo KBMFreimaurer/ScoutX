@@ -27,6 +27,7 @@ export function PlanPage() {
     adapterEndpoint,
     adapterToken,
     fromDate,
+    toDate,
     isMobile,
     cfg,
     routeOverview,
@@ -228,6 +229,7 @@ export function PlanPage() {
             kreisId,
             jugendId,
             fromDate,
+            toDate,
             teams: activeTeams,
             turnier: Boolean(jugend?.turnier),
           }}

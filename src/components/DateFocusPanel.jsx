@@ -71,6 +71,10 @@ function isBeforeDay(left, right) {
   return startOfDay(left).getTime() < startOfDay(right).getTime();
 }
 
+function maxDay(left, right) {
+  return isBeforeDay(left, right) ? right : left;
+}
+
 function getCalendarDays(monthDate) {
   const firstDayOfMonth = startOfMonth(monthDate);
   const firstWeekday = (firstDayOfMonth.getDay() + 6) % 7;
@@ -96,20 +100,32 @@ function formatDisplayDate(value, fallback = "Datum auswählen") {
   return DISPLAY_DATE_FORMATTER.format(parsed);
 }
 
-export function DateFocusPanel({ fromDate, onFromDate }) {
+function buildRangeLabel(fromDate, toDate) {
+  const fromLabel = formatDisplayDate(fromDate, "n/a");
+  const toLabel = formatDisplayDate(toDate, "n/a");
+  return `${fromLabel} bis ${toLabel}`;
+}
+
+export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
   const calendarRef = useRef(null);
-  const calendarToggleRef = useRef(null);
+  const fromToggleRef = useRef(null);
+  const toToggleRef = useRef(null);
   const today = useMemo(() => startOfDay(new Date()), []);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [activeField, setActiveField] = useState("from");
   const [calendarPlacement, setCalendarPlacement] = useState("bottom");
-  const selectedDate = useMemo(() => parseIsoDate(fromDate), [fromDate]);
-  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(selectedDate || today));
+
+  const selectedFromDate = useMemo(() => parseIsoDate(fromDate), [fromDate]);
+  const selectedToDate = useMemo(() => parseIsoDate(toDate), [toDate]);
+  const activeSelectedDate = activeField === "to" ? selectedToDate : selectedFromDate;
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(selectedFromDate || selectedToDate || today));
 
   useEffect(() => {
     if (!isCalendarOpen) {
-      setVisibleMonth(startOfMonth(selectedDate || today));
+      const seedDate = activeField === "to" ? selectedToDate || selectedFromDate : selectedFromDate || selectedToDate;
+      setVisibleMonth(startOfMonth(seedDate || today));
     }
-  }, [selectedDate, today, isCalendarOpen]);
+  }, [activeField, isCalendarOpen, selectedFromDate, selectedToDate, today]);
 
   useEffect(() => {
     if (!isCalendarOpen) {
@@ -117,7 +133,8 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
     }
 
     const updatePlacement = () => {
-      const rect = calendarToggleRef.current?.getBoundingClientRect();
+      const activeRef = activeField === "to" ? toToggleRef.current : fromToggleRef.current;
+      const rect = activeRef?.getBoundingClientRect();
       if (!rect) {
         setCalendarPlacement("bottom");
         return;
@@ -141,7 +158,7 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
       window.removeEventListener("resize", updatePlacement);
       window.removeEventListener("scroll", updatePlacement, true);
     };
-  }, [isCalendarOpen]);
+  }, [activeField, isCalendarOpen]);
 
   useEffect(() => {
     if (!isCalendarOpen) {
@@ -174,12 +191,28 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
   const monthLabel = useMemo(() => MONTH_LABEL_FORMATTER.format(visibleMonth), [visibleMonth]);
   const calendarDays = useMemo(() => getCalendarDays(visibleMonth), [visibleMonth]);
   const todayIso = toIsoDate(today);
+  const minToDate = selectedFromDate ? maxDay(today, selectedFromDate) : today;
+  const minToDateIso = toIsoDate(minToDate);
+  const activeMinDate = activeField === "to" ? minToDate : today;
+
+  const openCalendar = (field) => {
+    setActiveField(field);
+    const seedDate = field === "to" ? selectedToDate || selectedFromDate : selectedFromDate || selectedToDate;
+    setVisibleMonth(startOfMonth(seedDate || today));
+    setIsCalendarOpen(true);
+  };
 
   const onSelectCalendarDay = (day) => {
-    if (isBeforeDay(day, today)) {
+    if (isBeforeDay(day, activeMinDate)) {
       return;
     }
-    onFromDate(toIsoDate(day));
+
+    const nextIso = toIsoDate(day);
+    if (activeField === "to") {
+      onToDate(nextIso);
+    } else {
+      onFromDate(nextIso);
+    }
     setIsCalendarOpen(false);
   };
 
@@ -188,34 +221,91 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
       <SectionHeader num="04">Zeitraum</SectionHeader>
 
       <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
-        <label htmlFor="scouting-from-date" style={lbl}>Scouting ab</label>
-        <button
-          id="scouting-from-date"
-          ref={calendarToggleRef}
-          type="button"
-          aria-label="Scouting-Datum auswählen"
-          aria-expanded={isCalendarOpen}
-          onClick={() => setIsCalendarOpen((open) => !open)}
-          style={{
-            ...inp,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            cursor: "pointer",
-            textAlign: "left",
-            fontSize: 15,
-            padding: "12px 14px",
-            minHeight: 52,
-          }}
-        >
-          <span>{formatDisplayDate(fromDate)}</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-        </button>
+        <div className="date-focus-row">
+          <div>
+            <label htmlFor="scouting-from-date" style={lbl}>
+              Scouting ab
+            </label>
+            <button
+              id="scouting-from-date"
+              ref={fromToggleRef}
+              type="button"
+              aria-label="Scouting-Datum auswählen"
+              aria-expanded={isCalendarOpen && activeField === "from"}
+              onClick={() => openCalendar("from")}
+              style={{
+                ...inp,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: 15,
+                padding: "12px 14px",
+                minHeight: 52,
+              }}
+            >
+              <span>{formatDisplayDate(fromDate)}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          </div>
+
+          <div>
+            <label htmlFor="scouting-to-date" style={lbl}>
+              Scouting bis
+            </label>
+            <button
+              id="scouting-to-date"
+              ref={toToggleRef}
+              type="button"
+              aria-label="Scouting-Bis-Datum auswählen"
+              aria-expanded={isCalendarOpen && activeField === "to"}
+              onClick={() => openCalendar("to")}
+              style={{
+                ...inp,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: 15,
+                padding: "12px 14px",
+                minHeight: 52,
+              }}
+            >
+              <span>{formatDisplayDate(toDate)}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+            <input
+              type="date"
+              aria-label="Scouting-Bis direkt eingeben"
+              value={toDate}
+              min={minToDateIso}
+              onChange={(event) => onToDate(event.target.value)}
+              style={{
+                ...inp,
+                marginTop: 8,
+                minHeight: 40,
+                padding: "8px 10px",
+                fontSize: 12,
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>
+          Zeitraum: {buildRangeLabel(fromDate, toDate)}
+        </div>
 
         <input
           type="date"
@@ -335,8 +425,8 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
               {calendarDays.map((day) => {
                 const inMonth = isInVisibleMonth(day, visibleMonth);
                 const isToday = isSameDay(day, today);
-                const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-                const isDisabled = isBeforeDay(day, today);
+                const isSelected = activeSelectedDate ? isSameDay(day, activeSelectedDate) : false;
+                const isDisabled = isBeforeDay(day, activeMinDate);
 
                 return (
                   <button
@@ -383,8 +473,14 @@ export function DateFocusPanel({ fromDate, onFromDate }) {
               <button
                 type="button"
                 onClick={() => {
-                  onFromDate(todayIso);
-                  setVisibleMonth(startOfMonth(today));
+                  const minDate = activeField === "to" ? minToDate : today;
+                  const nextIso = toIsoDate(minDate);
+                  if (activeField === "to") {
+                    onToDate(nextIso);
+                  } else {
+                    onFromDate(nextIso);
+                  }
+                  setVisibleMonth(startOfMonth(minDate));
                   setIsCalendarOpen(false);
                 }}
                 style={{
