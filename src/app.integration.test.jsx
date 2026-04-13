@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./app";
+import { STORAGE_KEYS } from "./config/storage";
 import { openScoutPdf } from "./services/pdf";
 
 vi.mock("./services/pdf", () => ({
@@ -171,5 +172,58 @@ describe("ScoutX Integration", () => {
       String(element?.textContent || "").includes(`Spieldaten konnten nicht geladen werden: ${expectedText}`),
     );
     expect(matches.length).toBeGreaterThan(0);
+  });
+
+  it("laedt historischen Plan nach Reload und erlaubt erneuten PDF-Export", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({}),
+      }),
+    );
+
+    window.localStorage.setItem(
+      STORAGE_KEYS.planHistory,
+      JSON.stringify([
+        {
+          id: "hist-1",
+          createdAt: "2026-04-13T16:00:00.000Z",
+          planText: "Historischer Plantext",
+          games: [],
+          selectedGameIds: [],
+          meta: {
+            kreisLabel: "Duisburg",
+            jugendLabel: "D-Jugend",
+            fromDate: "2026-04-19",
+            toDate: "2026-04-19",
+            startLocationLabel: "47058 Duisburg",
+          },
+          syncContext: {
+            source: "adapter",
+          },
+          presenceByGame: {},
+        },
+      ]),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/setup"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Plan konfigurieren/i }, { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole("button", { name: /Schritt Plan/i }));
+    await screen.findByText(/Plan-Historie/i, { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole("button", { name: /Historischen Plan .* öffnen/i }));
+    await screen.findByText(/Historischer Plantext/i, { timeout: 5000 });
+    expect(screen.getByText(/Keine Spiele verfügbar/i)).toBeInTheDocument();
   });
 });

@@ -13,6 +13,39 @@ import { normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
 
+function normalizePresenceMap(rawValue) {
+  const source = rawValue && typeof rawValue === "object" ? rawValue : {};
+  return Object.entries(source).reduce((acc, [key, value]) => {
+    const id = String(key || "").trim();
+    const minutes = normalizePresenceMinutes(value);
+    if (id && Number.isFinite(minutes)) {
+      acc[id] = minutes;
+    }
+    return acc;
+  }, {});
+}
+
+function isSamePresenceMap(left, right) {
+  const leftKeys = Object.keys(left || {}).sort();
+  const rightKeys = Object.keys(right || {}).sort();
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  for (let index = 0; index < leftKeys.length; index += 1) {
+    const leftKey = leftKeys[index];
+    const rightKey = rightKeys[index];
+    if (leftKey !== rightKey) {
+      return false;
+    }
+    if (Number(left[leftKey]) !== Number(right[rightKey])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function PlanPage() {
   const {
     games,
@@ -32,10 +65,16 @@ export function PlanPage() {
     cfg,
     routeOverview,
     routeCalculating,
+    planHistory,
+    activeHistoryEntry,
     startLocation,
     scoutName,
     kmPauschale,
     setErr,
+    onOpenPlanHistory,
+    onDeletePlanHistory,
+    onClearPlanHistory,
+    onUpdatePlanHistoryPresence,
     onBackGames,
     onResetSoft,
     onResetHard,
@@ -67,18 +106,24 @@ export function PlanPage() {
         return {};
       }
 
-      return Object.entries(parsed).reduce((acc, [key, value]) => {
-        const id = String(key || "").trim();
-        const minutes = normalizePresenceMinutes(value);
-        if (id && Number.isFinite(minutes)) {
-          acc[id] = minutes;
-        }
-        return acc;
-      }, {});
+      return normalizePresenceMap(parsed);
     } catch {
       return {};
     }
   });
+  const historyEntries = useMemo(() => (Array.isArray(planHistory) ? planHistory : []), [planHistory]);
+  const activeHistoryMeta = activeHistoryEntry?.meta && typeof activeHistoryEntry.meta === "object" ? activeHistoryEntry.meta : null;
+  const displayJugendLabel = String(activeHistoryMeta?.jugendLabel || jugend?.label || "").trim();
+  const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreis?.label || "").trim();
+  const effectiveScoutName = String(activeHistoryMeta?.scoutName || scoutName || "").trim();
+  const effectiveKmPauschale = Number(activeHistoryMeta?.kmPauschale);
+  const kmPauschaleForPdf = Number.isFinite(effectiveKmPauschale) && effectiveKmPauschale > 0 ? effectiveKmPauschale : kmPauschale;
+  const planSyncContext = activeHistoryEntry?.syncContext && typeof activeHistoryEntry.syncContext === "object"
+    ? {
+        source: "history",
+        ...activeHistoryEntry.syncContext,
+      }
+    : null;
 
   const handleKmChange = (gameId, newKm) =>
     setKmOverrides((prev) => {
@@ -113,6 +158,15 @@ export function PlanPage() {
   }, [activeGames.length]);
 
   useEffect(() => {
+    if (!activeHistoryEntry?.id) {
+      return;
+    }
+
+    const normalized = normalizePresenceMap(activeHistoryEntry?.presenceByGame);
+    setPresenceMinutesByGame((prev) => (isSamePresenceMap(prev, normalized) ? prev : normalized));
+  }, [activeHistoryEntry?.id, activeHistoryEntry?.presenceByGame]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -123,6 +177,13 @@ export function PlanPage() {
       // Ignore sessionStorage write errors.
     }
   }, [presenceMinutesByGame]);
+
+  useEffect(() => {
+    if (!activeHistoryEntry?.id) {
+      return;
+    }
+    onUpdatePlanHistoryPresence(activeHistoryEntry.id, presenceMinutesByGame);
+  }, [activeHistoryEntry?.id, onUpdatePlanHistoryPresence, presenceMinutesByGame]);
 
   useEffect(() => {
     const activeIds = new Set(
@@ -193,7 +254,7 @@ export function PlanPage() {
               whiteSpace: "nowrap",
             }}
           >
-            Scout-Plan · {jugend?.label}
+            Scout-Plan · {displayJugendLabel}
           </div>
 
           <div
@@ -205,7 +266,7 @@ export function PlanPage() {
                 "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
-            {kreis?.label}
+            {displayKreisLabel}
           </div>
         </div>
 
@@ -214,25 +275,31 @@ export function PlanPage() {
           plan={plan}
           cfg={{
             ...cfg,
+            kreisLabel: displayKreisLabel || cfg?.kreisLabel || "",
+            jugendLabel: displayJugendLabel || cfg?.jugendLabel || "",
+            fromDate: String(activeHistoryMeta?.fromDate || cfg?.fromDate || ""),
+            toDate: String(activeHistoryMeta?.toDate || cfg?.toDate || ""),
+            startLocationLabel: String(activeHistoryMeta?.startLocationLabel || startLocation?.label || cfg?.startLocationLabel || ""),
             routeOverview,
             startLocation,
-            startLocationLabel: startLocation?.label || cfg?.startLocationLabel || "",
-            scoutName,
-            kmPauschale,
+            scoutName: effectiveScoutName,
+            kmPauschale: kmPauschaleForPdf,
             kmOverrides,
             presenceOverrides: presenceMinutesByGame,
           }}
-          syncContext={{
-            source: dataSourceUsed,
-            adapterEndpoint,
-            adapterToken,
-            kreisId,
-            jugendId,
-            fromDate,
-            toDate,
-            teams: activeTeams,
-            turnier: Boolean(jugend?.turnier),
-          }}
+          syncContext={
+            planSyncContext || {
+              source: dataSourceUsed,
+              adapterEndpoint,
+              adapterToken,
+              kreisId,
+              jugendId,
+              fromDate,
+              toDate,
+              teams: activeTeams,
+              turnier: Boolean(jugend?.turnier),
+            }
+          }
           variant="primary"
           label="PDF herunterladen"
           confirmBeforeDownload
@@ -285,13 +352,114 @@ export function PlanPage() {
         </button>
       </div>
 
+      {historyEntries.length > 0 ? (
+        <div
+          className="fu2"
+          style={{
+            background: "rgba(255,255,255,0.03)",
+            border: `1px solid ${C.border}`,
+            borderRadius: 14,
+            padding: 14,
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, color: C.offWhite, fontWeight: 700 }}>Plan-Historie</div>
+            <button
+              type="button"
+              onClick={onClearPlanHistory}
+              style={{
+                fontSize: 11,
+                border: "none",
+                background: "transparent",
+                color: C.gray,
+                cursor: "pointer",
+                textDecoration: "underline",
+                padding: 0,
+                minHeight: 0,
+              }}
+            >
+              Historie leeren
+            </button>
+          </div>
+          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+            {historyEntries.slice(0, 8).map((entry) => {
+              const meta = entry?.meta && typeof entry.meta === "object" ? entry.meta : {};
+              const labelJugend = String(meta.jugendLabel || "").trim();
+              const labelKreis = String(meta.kreisLabel || "").trim();
+              const labelFrom = String(meta.fromDate || "").trim();
+              const labelTo = String(meta.toDate || "").trim();
+              const createdAt = String(entry?.createdAt || "").trim();
+              const createdAtLabel = createdAt
+                ? new Date(createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                : "unbekannt";
+              const isActive = activeHistoryEntry?.id === entry.id;
+
+              return (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    border: `1px solid ${isActive ? C.greenBorder : C.border}`,
+                    borderRadius: 10,
+                    padding: "8px 10px",
+                    background: isActive ? C.greenDim : "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onOpenPlanHistory(entry.id)}
+                    aria-label={`Historischen Plan ${createdAtLabel} öffnen`}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: isActive ? C.offWhite : C.grayLight,
+                      textAlign: "left",
+                      cursor: "pointer",
+                      flex: 1,
+                      minHeight: 0,
+                      padding: 0,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{createdAtLabel}</div>
+                    <div style={{ fontSize: 11, color: C.gray }}>
+                      {labelKreis || "-"} · {labelJugend || "-"} · {labelFrom || "-"} bis {labelTo || "-"}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeletePlanHistory(entry.id)}
+                    aria-label={`Historischen Plan ${createdAtLabel} entfernen`}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#fca5a5",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      textDecoration: "underline",
+                      minHeight: 0,
+                      padding: 0,
+                    }}
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       {startLocation && routeCalculating ? (
         <div aria-live="polite" style={{ fontSize: 12, color: C.grayDark, marginBottom: 10 }}>
           Route wird berechnet. Danach ist der PDF-Export vollständig.
         </div>
       ) : null}
 
-      <PlanView plan={plan} jugendLabel={jugend?.label} kreisLabel={kreis?.label} isMobile={isMobile} games={activeGames} />
+      <PlanView plan={plan} jugendLabel={displayJugendLabel} kreisLabel={displayKreisLabel} isMobile={isMobile} games={activeGames} />
 
       {activeGames.length > 0 ? (
         <div style={{ marginTop: 28, marginBottom: 28 }} className="fu2">
@@ -354,8 +522,8 @@ export function PlanPage() {
               fontWeight: 600,
             }}
           >
-            {hasManualSelection ? "Ausgewählte" : "Alle"} {activeGames.length} Spiele · {jugend?.label} ·{" "}
-            {kreis?.label}
+            {hasManualSelection ? "Ausgewählte" : "Alle"} {activeGames.length} Spiele · {displayJugendLabel} ·{" "}
+            {displayKreisLabel}
           </div>
 
           <GameTable games={visibleGames} mode="plan" />

@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { STORAGE_KEYS } from "../config/storage";
 import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
 import { cleanScoutPlanText } from "./shared";
 import { useGames } from "./GamesContext";
@@ -8,6 +9,7 @@ import { useSetup } from "./SetupContext";
 const PlanContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 60000);
+const PLAN_HISTORY_LIMIT = 20;
 
 function withTimeout(promise, timeoutMs, fallbackValue) {
   const safeTimeout = Number(timeoutMs);
@@ -89,6 +91,77 @@ function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier, usedF
   return cleanScoutPlanText(lines.join("\n"));
 }
 
+function serializeGameForHistory(game) {
+  const dateObjIso = game?.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime()) ? game.dateObj.toISOString() : null;
+  return {
+    ...game,
+    dateObj: dateObjIso,
+  };
+}
+
+function deserializeGameFromHistory(game) {
+  const dateObjText = String(game?.dateObj || "").trim();
+  const parsedDateObj = dateObjText ? new Date(dateObjText) : null;
+  return {
+    ...game,
+    dateObj: parsedDateObj && !Number.isNaN(parsedDateObj.getTime()) ? parsedDateObj : null,
+  };
+}
+
+function normalizePlanHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const id = String(entry.id || "").trim();
+  const createdAt = String(entry.createdAt || "").trim();
+  if (!id || !createdAt) {
+    return null;
+  }
+
+  const games = Array.isArray(entry.games) ? entry.games : [];
+  const selectedGameIds = Array.isArray(entry.selectedGameIds)
+    ? entry.selectedGameIds.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+
+  return {
+    id,
+    createdAt,
+    planText: String(entry.planText || ""),
+    games,
+    selectedGameIds,
+    meta: entry.meta && typeof entry.meta === "object" ? entry.meta : {},
+    syncContext: entry.syncContext && typeof entry.syncContext === "object" ? entry.syncContext : {},
+    presenceByGame: entry.presenceByGame && typeof entry.presenceByGame === "object" ? entry.presenceByGame : {},
+  };
+}
+
+function readPlanHistory() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.planHistory);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map(normalizePlanHistoryEntry)
+      .filter(Boolean)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+      .slice(0, PLAN_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
 export function PlanProvider({ children }) {
   const navigate = useNavigate();
   const setup = useSetup();
@@ -100,6 +173,9 @@ export function PlanProvider({ children }) {
   const [routeOverview, setRouteOverview] = useState(null);
   const [routeDirectOptions, setRouteDirectOptions] = useState([]);
   const [routeCalculating, setRouteCalculating] = useState(false);
+  const [planHistory, setPlanHistory] = useState(() => readPlanHistory());
+  const [activeHistoryId, setActiveHistoryId] = useState("");
+  const suspendNextPlanResetRef = useRef(false);
 
   const cfg = useMemo(
     () => ({
@@ -187,8 +263,89 @@ export function PlanProvider({ children }) {
   }, [setup.startLocation, routePreviewGames, strictGoogleRouting]);
 
   useEffect(() => {
+    if (suspendNextPlanResetRef.current) {
+      suspendNextPlanResetRef.current = false;
+      return;
+    }
     setPlan("");
+    setActiveHistoryId("");
   }, [gamesCtx.games, gamesCtx.selectedGameCount]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.planHistory, JSON.stringify(planHistory));
+    } catch {
+      // Ignore localStorage write errors for optional history.
+    }
+  }, [planHistory]);
+
+  const activeHistoryEntry = useMemo(
+    () => planHistory.find((entry) => entry.id === activeHistoryId) || null,
+    [planHistory, activeHistoryId],
+  );
+
+  const onOpenPlanHistory = useCallback(
+    (entryId) => {
+      const id = String(entryId || "").trim();
+      if (!id) {
+        return;
+      }
+
+      const entry = planHistory.find((item) => item.id === id);
+      if (!entry) {
+        return;
+      }
+
+      const restoredGames = (Array.isArray(entry.games) ? entry.games : []).map(deserializeGameFromHistory);
+      suspendNextPlanResetRef.current = true;
+      gamesCtx.setGames(restoredGames);
+      gamesCtx.setDataSourceUsed("history");
+      gamesCtx.onRestorePlannedGames(entry.selectedGameIds);
+      setup.setErr("");
+      setPlan(String(entry.planText || ""));
+      setActiveHistoryId(entry.id);
+      navigate("/plan");
+    },
+    [gamesCtx, navigate, planHistory, setup],
+  );
+
+  const onDeletePlanHistory = useCallback((entryId) => {
+    const id = String(entryId || "").trim();
+    if (!id) {
+      return;
+    }
+
+    setPlanHistory((prev) => prev.filter((entry) => entry.id !== id));
+    setActiveHistoryId((prev) => (prev === id ? "" : prev));
+  }, []);
+
+  const onClearPlanHistory = useCallback(() => {
+    setPlanHistory([]);
+    setActiveHistoryId("");
+  }, []);
+
+  const onUpdatePlanHistoryPresence = useCallback((entryId, presenceByGame) => {
+    const id = String(entryId || "").trim();
+    if (!id || !presenceByGame || typeof presenceByGame !== "object") {
+      return;
+    }
+
+    setPlanHistory((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== id) {
+          return entry;
+        }
+        return {
+          ...entry,
+          presenceByGame,
+        };
+      }),
+    );
+  }, []);
 
   const onGeneratePlanPdf = useCallback(async () => {
     if (pdfExporting) {
@@ -221,6 +378,41 @@ export function PlanProvider({ children }) {
         usedFallbackAll,
       });
 
+      const nowIso = new Date().toISOString();
+      const historyId = `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const historyEntry = normalizePlanHistoryEntry({
+        id: historyId,
+        createdAt: nowIso,
+        planText: manualPlan,
+        games: effectivePlannedGames.map(serializeGameForHistory),
+        selectedGameIds: usedFallbackAll ? [] : selectedGames.map((game) => String(game?.id || "").trim()).filter(Boolean),
+        meta: {
+          kreisLabel: setup.kreis?.label || "",
+          jugendLabel: setup.jugend?.label || "",
+          fromDate: setup.fromDate || "",
+          toDate: setup.toDate || "",
+          startLocationLabel: setup.startLocation?.label || "",
+          scoutName: setup.scoutName || "",
+          kmPauschale: setup.kmPauschale,
+        },
+        syncContext: {
+          source: String(gamesCtx.dataSourceUsed || ""),
+          adapterEndpoint: String(setup.adapterEndpoint || ""),
+          adapterToken: String(setup.adapterToken || ""),
+          kreisId: String(setup.kreisId || ""),
+          jugendId: String(setup.jugendId || ""),
+          fromDate: String(setup.fromDate || ""),
+          toDate: String(setup.toDate || ""),
+          teams: Array.isArray(setup.activeTeams) ? setup.activeTeams : [],
+          turnier: Boolean(setup.jugend?.turnier),
+        },
+      });
+
+      if (historyEntry) {
+        setPlanHistory((prev) => [historyEntry, ...prev.filter((entry) => entry.id !== historyEntry.id)].slice(0, PLAN_HISTORY_LIMIT));
+        setActiveHistoryId(historyEntry.id);
+      }
+
       setPlan(manualPlan);
       navigate("/plan");
     } finally {
@@ -230,6 +422,7 @@ export function PlanProvider({ children }) {
     pdfExporting,
     plan,
     gamesCtx.plannedGames,
+    gamesCtx.dataSourceUsed,
     effectivePlannedGames,
     navigate,
     setup,
@@ -242,6 +435,7 @@ export function PlanProvider({ children }) {
   const onResetSoft = useCallback(() => {
     gamesCtx.resetGames();
     setPlan("");
+    setActiveHistoryId("");
     setup.setTeamValidation(null);
     setup.setErr("");
     navigate("/setup");
@@ -260,8 +454,14 @@ export function PlanProvider({ children }) {
       routeCalculating,
       cfg,
       routeOverview,
+      planHistory,
+      activeHistoryEntry,
       setPlan,
       onGeneratePlanPdf,
+      onOpenPlanHistory,
+      onDeletePlanHistory,
+      onClearPlanHistory,
+      onUpdatePlanHistoryPresence,
       onBackGames,
       onResetSoft,
       onResetHard,
@@ -273,7 +473,13 @@ export function PlanProvider({ children }) {
       routeCalculating,
       cfg,
       routeOverview,
+      planHistory,
+      activeHistoryEntry,
       onGeneratePlanPdf,
+      onOpenPlanHistory,
+      onDeletePlanHistory,
+      onClearPlanHistory,
+      onUpdatePlanHistoryPresence,
       onBackGames,
       onResetSoft,
       onResetHard,

@@ -415,6 +415,26 @@ export function GamesProvider({ children }) {
     setSelectedGameIds({});
   }, []);
 
+  const onRestorePlannedGames = useCallback((gameIds) => {
+    const safeIds = Array.isArray(gameIds)
+      ? gameIds
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+
+    if (safeIds.length === 0) {
+      setSelectedGameIds({});
+      return;
+    }
+
+    setSelectedGameIds(() =>
+      safeIds.reduce((acc, id) => {
+        acc[id] = true;
+        return acc;
+      }, {}),
+    );
+  }, []);
+
   const onBuildAndGo = useCallback(async () => {
     if (!kreisId) {
       setErr("Bitte einen Kreis wählen.");
@@ -522,6 +542,7 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
+      onRestorePlannedGames,
     }),
     [
       games,
@@ -540,6 +561,7 @@ export function GamesProvider({ children }) {
       onTogglePlannedGame,
       onSelectAllPlannedGames,
       onClearPlannedGames,
+      onRestorePlannedGames,
     ],
   );
 

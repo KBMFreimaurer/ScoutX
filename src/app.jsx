@@ -85,7 +85,9 @@ function RouteFallback() {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { width, isMobile, games, plan, err, loadingGames, enrichingGames, clearErr, onResetSoft } = useScoutX();
+  const { width, isMobile, games, plan, planHistory, err, loadingGames, enrichingGames, clearErr, onResetSoft } = useScoutX();
+  const hasPlanHistory = Array.isArray(planHistory) && planHistory.length > 0;
+  const canAccessPlan = Boolean(plan) || hasPlanHistory;
 
   const currentStep = useMemo(() => {
     if (location.pathname.startsWith("/games")) {
@@ -107,7 +109,7 @@ function AppLayout() {
   const railItems = [
     { id: "setup", label: "Konfiguration", onClick: () => navigate("/setup") },
     ...(games.length > 0 ? [{ id: "games", label: "Spiele", onClick: () => navigate("/games") }] : []),
-    ...(plan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
+    ...(canAccessPlan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
   ];
 
   const liveStatus = err
@@ -179,7 +181,7 @@ function AppLayout() {
           <StepNav
             currentStep={currentStep}
             canAccessGames={games.length > 0}
-            canAccessPlan={Boolean(plan)}
+            canAccessPlan={canAccessPlan}
             onStepChange={onStepChange}
             isMobile={isMobile}
           />
@@ -293,7 +295,7 @@ function AppLayout() {
               <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
               <Route
                 path="/plan"
-                element={plan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
+                element={canAccessPlan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
               />
               <Route path="*" element={<Navigate to="/setup" replace />} />
             </Routes>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanPage } from "./PlanPage";
 import { useScoutX } from "../context/ScoutXContext";
@@ -24,7 +24,13 @@ function createBaseContext(overrides = {}) {
       fromDate: "2026-04-05",
     },
     routeOverview: null,
+    planHistory: [],
+    activeHistoryEntry: null,
     startLocation: null,
+    onOpenPlanHistory: vi.fn(),
+    onDeletePlanHistory: vi.fn(),
+    onClearPlanHistory: vi.fn(),
+    onUpdatePlanHistoryPresence: vi.fn(),
     onBackGames: vi.fn(),
     onResetSoft: vi.fn(),
     onResetHard: vi.fn(),
@@ -131,5 +137,34 @@ describe("PlanPage", () => {
     render(<PlanPage />);
 
     expect(screen.getByText(/Arbeitszeiterfassung \(manuell\)/i)).toBeInTheDocument();
+  });
+
+  it("zeigt Plan-Historie und lädt einen historischen Plan", () => {
+    const onOpenPlanHistory = vi.fn();
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        planHistory: [
+          {
+            id: "hist-1",
+            createdAt: "2026-04-13T10:20:00.000Z",
+            meta: {
+              kreisLabel: "Duisburg",
+              jugendLabel: "D-Jugend",
+              fromDate: "2026-04-10",
+              toDate: "2026-04-13",
+            },
+          },
+        ],
+        onOpenPlanHistory,
+      }),
+    );
+
+    render(<PlanPage />);
+
+    const openButton = screen.getByRole("button", { name: /Historischen Plan .* öffnen/i });
+    fireEvent.click(openButton);
+
+    expect(onOpenPlanHistory).toHaveBeenCalledWith("hist-1");
   });
 });
