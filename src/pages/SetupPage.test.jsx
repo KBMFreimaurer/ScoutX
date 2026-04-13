@@ -56,10 +56,10 @@ describe("SetupPage", () => {
     expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
   });
 
-  it("zeigt nur den Startort-Block ohne Favoriten-Eingabe", () => {
+  it("zeigt nur den Tatort-Block ohne Favoriten-Eingabe", () => {
     renderSetupPage();
 
-    expect(screen.getByLabelText(/Startort \/ Abfahrtsadresse/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Tatort \/ Einsatzadresse/i)).toBeInTheDocument();
     expect(screen.getByText(/Routen-API:/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Beobachtete Teams/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Favorit \+/i })).not.toBeInTheDocument();

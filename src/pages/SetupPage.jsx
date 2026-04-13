@@ -62,7 +62,7 @@ export function SetupPage() {
     selectedKreis?.label || "Kein Kreis",
     jugend?.label || "Keine Altersklasse",
     `${activeTeams.length || 0} Vereinsparameter`,
-    hasLocation ? "Startort gesetzt" : "Ohne Startort",
+    hasLocation ? "Tatort gesetzt" : "Ohne Tatort",
   ];
   const teamParameterCount = activeTeams.length || 0;
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
@@ -109,7 +109,7 @@ export function SetupPage() {
       </header>
 
       <div className="setup-exec-grid">
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="setup-step-row">
           <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />
 
           <AgeGroupSelector
@@ -134,179 +134,181 @@ export function SetupPage() {
             onRemoveTeam={onRemoveTeamField}
             onClearAll={onClearAllTeams}
           />
+        </div>
 
+        <div className="setup-step-row">
           <DateFocusPanel fromDate={fromDate} onFromDate={onSetFromDate} />
 
-          <div style={card}>
-            <div style={{ ...secH, marginBottom: 14 }}>
-              <span className="section-number">05</span>
-              Startort
-            </div>
+            <div style={card}>
+              <div style={{ ...secH, marginBottom: 14 }}>
+                <span className="section-number">05</span>
+                Tatort
+              </div>
 
-            <div style={{ marginBottom: 10 }}>
-              <label htmlFor="start-location-input" style={lbl}>
-                Startort / Abfahrtsadresse
-              </label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  id="start-location-input"
-                  className="scout-input"
-                  value={locationDraft}
-                  onChange={(event) => onSetLocationDraft(event.target.value)}
-                  placeholder="Straße, PLZ, Ort"
-                  style={{ ...inp, flex: 1, minWidth: 220 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => onResolveLocation()}
-                  disabled={resolvingLocation}
-                  style={{
-                    ...inp,
-                    width: "auto",
-                    minWidth: 132,
-                    cursor: resolvingLocation ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onConfirmUseCurrentLocation}
-                  disabled={resolvingLocation}
-                  style={{
-                    ...inp,
-                    width: "auto",
-                    minWidth: 210,
-                    cursor: resolvingLocation ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Genauen Standort ermitteln
-                </button>
-              </div>
-              <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
-                {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
-                {startLocation?.label ? ` · ${startLocation.label}` : ""}
-              </div>
-              <div
-                key={googleStatusVersion}
-                style={{
-                  marginTop: 8,
-                  borderRadius: 8,
-                  border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
-                  background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
-                  padding: "8px 10px",
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                  color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
-                }}
-              >
-                <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
-                  Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
-                </strong>
-                <div>
-                  {googleRouting.googleConfigured
-                    ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
-                    : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+              <div style={{ marginBottom: 10 }}>
+                <label htmlFor="start-location-input" style={lbl}>
+                  Tatort / Einsatzadresse
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    id="start-location-input"
+                    className="scout-input"
+                    value={locationDraft}
+                    onChange={(event) => onSetLocationDraft(event.target.value)}
+                    placeholder="Straße, PLZ, Ort"
+                    style={{ ...inp, flex: 1, minWidth: 220 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onResolveLocation()}
+                    disabled={resolvingLocation}
+                    style={{
+                      ...inp,
+                      width: "auto",
+                      minWidth: 132,
+                      cursor: resolvingLocation ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {resolvingLocation ? "Prüfe..." : "Adresse prüfen"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onConfirmUseCurrentLocation}
+                    disabled={resolvingLocation}
+                    style={{
+                      ...inp,
+                      width: "auto",
+                      minWidth: 210,
+                      cursor: resolvingLocation ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Genauen Standort ermitteln
+                  </button>
                 </div>
-                {!googleRouting.googleConfigured ? (
-                  <div style={{ marginTop: 6 }}>
-                    <div>
-                      Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
-                      <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
-                      <a
-                        href="https://console.cloud.google.com/apis/credentials"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: C.warn, textDecoration: "underline" }}
-                      >
-                        Google Cloud Console
-                      </a>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-                      <input
-                        type="password"
-                        value={googleKeyDraft}
-                        onChange={(event) => setGoogleKeyDraft(event.target.value)}
-                        placeholder="Google API-Key lokal speichern"
-                        style={{
-                          ...inp,
-                          flex: 1,
-                          minWidth: 210,
-                          height: 34,
-                          padding: "6px 10px",
-                          fontSize: 12,
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={onSaveRuntimeGoogleKey}
-                        style={{
-                          ...inp,
-                          width: "auto",
-                          minWidth: 140,
-                          height: 34,
-                          padding: "6px 10px",
-                          cursor: "pointer",
-                          fontSize: 12,
-                        }}
-                      >
-                        API-Key speichern
-                      </button>
-                    </div>
-                    {googleKeyNotice ? (
-                      <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div>
-                    Provider: <code>{googleRouting.routeProvider}</code>
-                    {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
-                    {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
-                    {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
-                    {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
-                    {googleRouting.keySource === "runtime" ? (
-                      <button
-                        type="button"
-                        onClick={onClearRuntimeGoogleKey}
-                        style={{
-                          marginLeft: 10,
-                          border: "none",
-                          background: "transparent",
-                          color: C.grayLight,
-                          cursor: "pointer",
-                          textDecoration: "underline",
-                          fontSize: 11,
-                          padding: 0,
-                        }}
-                      >
-                        lokalen Key entfernen
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              {locationError ? (
-                <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
-              ) : null}
-              {hasLocation ? (
-                <button
-                  type="button"
-                  onClick={onClearLocation}
+                <div style={{ marginTop: 6, fontSize: 12, color: hasLocation ? C.green : C.gray }}>
+                  {hasLocation ? "Standort gesetzt ✓" : "Kein Standort gesetzt"}
+                  {startLocation?.label ? ` · ${startLocation.label}` : ""}
+                </div>
+                <div
+                  key={googleStatusVersion}
                   style={{
                     marginTop: 8,
-                    border: "none",
-                    background: "transparent",
-                    color: C.gray,
-                    cursor: "pointer",
-                    padding: 0,
-                    fontSize: 12,
+                    borderRadius: 8,
+                    border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
+                    background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
                   }}
                 >
-                  Standort entfernen
-                </button>
-              ) : null}
+                  <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
+                    Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
+                  </strong>
+                  <div>
+                    {googleRouting.googleConfigured
+                      ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
+                      : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+                  </div>
+                  {!googleRouting.googleConfigured ? (
+                    <div style={{ marginTop: 6 }}>
+                      <div>
+                        Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional{" "}
+                        <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
+                        <a
+                          href="https://console.cloud.google.com/apis/credentials"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: C.warn, textDecoration: "underline" }}
+                        >
+                          Google Cloud Console
+                        </a>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                        <input
+                          type="password"
+                          value={googleKeyDraft}
+                          onChange={(event) => setGoogleKeyDraft(event.target.value)}
+                          placeholder="Google API-Key lokal speichern"
+                          style={{
+                            ...inp,
+                            flex: 1,
+                            minWidth: 210,
+                            height: 34,
+                            padding: "6px 10px",
+                            fontSize: 12,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={onSaveRuntimeGoogleKey}
+                          style={{
+                            ...inp,
+                            width: "auto",
+                            minWidth: 140,
+                            height: 34,
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          API-Key speichern
+                        </button>
+                      </div>
+                      {googleKeyNotice ? (
+                        <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>
+                      Provider: <code>{googleRouting.routeProvider}</code>
+                      {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+                      {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
+                      {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
+                      {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
+                      {googleRouting.keySource === "runtime" ? (
+                        <button
+                          type="button"
+                          onClick={onClearRuntimeGoogleKey}
+                          style={{
+                            marginLeft: 10,
+                            border: "none",
+                            background: "transparent",
+                            color: C.grayLight,
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            fontSize: 11,
+                            padding: 0,
+                          }}
+                        >
+                          lokalen Key entfernen
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+                {locationError ? (
+                  <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div>
+                ) : null}
+                {hasLocation ? (
+                  <button
+                    type="button"
+                    onClick={onClearLocation}
+                    style={{
+                      marginTop: 8,
+                      border: "none",
+                      background: "transparent",
+                      color: C.gray,
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: 12,
+                    }}
+                  >
+                    Standort entfernen
+                  </button>
+                ) : null}
+              </div>
             </div>
-          </div>
 
           <div id="fahrtkosten" style={{ ...card, scrollMarginTop: 96 }}>
             <SectionHeader num="06">Fahrtkosten</SectionHeader>

@@ -256,6 +256,11 @@ select option{background:#18181B;color:#e4e4e7}
   grid-template-columns:minmax(0,1fr);
   gap:16px;
 }
+.setup-step-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:16px;
+}
 .setup-exec-left,
 .setup-exec-right{
   display:flex;
@@ -420,8 +425,8 @@ button,input,select{min-height:44px}
 }
 
 @media(min-width:980px){
-  .setup-exec-grid{
-    grid-template-columns:minmax(0,4fr) minmax(0,8fr);
+  .setup-step-row{
+    grid-template-columns:repeat(3,minmax(0,1fr));
     align-items:start;
   }
 }
