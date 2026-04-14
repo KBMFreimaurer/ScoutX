@@ -71,6 +71,20 @@ function normalizeTeamName(value) {
   return String(value || "").trim();
 }
 
+function getEntryManualSelectedGames(entry) {
+  const games = Array.isArray(entry?.games) ? entry.games : [];
+  const selectedGameIds = Array.isArray(entry?.selectedGameIds)
+    ? entry.selectedGameIds.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+
+  if (selectedGameIds.length === 0) {
+    return [];
+  }
+
+  const selectedSet = new Set(selectedGameIds);
+  return games.filter((game) => selectedSet.has(String(game?.id || "").trim()));
+}
+
 function resolveEntryKmRate(entry, defaultRate) {
   const metaRate = toFiniteNumber(entry?.meta?.kmPauschale);
   if (Number.isFinite(metaRate) && metaRate > 0) {
@@ -136,7 +150,8 @@ export function buildDashboardModel(planHistory, options = {}) {
     .filter((entry) => entry && typeof entry === "object")
     .sort((left, right) => String(right?.createdAt || "").localeCompare(String(left?.createdAt || "")));
 
-  const teamCounts = {};
+  const allTeams = new Set();
+  const manualTeamCounts = {};
   const venueSet = new Set();
   const weekdayCounts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
   const monthCounts = {};
@@ -166,10 +181,10 @@ export function buildDashboardModel(planHistory, options = {}) {
       const venue = String(game?.venue || "").trim();
 
       if (home) {
-        teamCounts[home] = (teamCounts[home] || 0) + 1;
+        allTeams.add(home);
       }
       if (away) {
-        teamCounts[away] = (teamCounts[away] || 0) + 1;
+        allTeams.add(away);
       }
       if (venue) {
         venueSet.add(venue);
@@ -191,12 +206,25 @@ export function buildDashboardModel(planHistory, options = {}) {
       const day = parsed.getDay();
       weekdayCounts[day] = (weekdayCounts[day] || 0) + 1;
     }
+
+    const manualSelectedGames = getEntryManualSelectedGames(entry);
+    for (const game of manualSelectedGames) {
+      const home = normalizeTeamName(game?.home);
+      const away = normalizeTeamName(game?.away);
+
+      if (home) {
+        manualTeamCounts[home] = (manualTeamCounts[home] || 0) + 1;
+      }
+      if (away) {
+        manualTeamCounts[away] = (manualTeamCounts[away] || 0) + 1;
+      }
+    }
   }
 
   const sortedDateKeys = [...allDateKeys].sort((left, right) => left.localeCompare(right));
   const reportCount = entries.length;
 
-  const topTeams = Object.entries(teamCounts)
+  const topTeams = Object.entries(manualTeamCounts)
     .map(([team, count]) => ({ team, count }))
     .sort((left, right) => {
       if (right.count !== left.count) {
@@ -221,7 +249,7 @@ export function buildDashboardModel(planHistory, options = {}) {
       reportCount,
       gameCount,
       avgGamesPerReport: reportCount > 0 ? roundTo(gameCount / reportCount, 1) : 0,
-      uniqueTeamCount: Object.keys(teamCounts).length,
+      uniqueTeamCount: allTeams.size,
       uniqueVenueCount: venueSet.size,
       earliestDateKey: sortedDateKeys[0] || "",
       latestDateKey: sortedDateKeys[sortedDateKeys.length - 1] || "",

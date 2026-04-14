@@ -181,9 +181,14 @@ export function DashboardPage() {
                 padding: 14,
               }}
             >
-              <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Top-Teams</div>
+              <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                Diese Teams besuchst du am häufigsten:
+              </div>
+              <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>
+                Basis: nur manuell ausgewählte Spiele aus der Plan-Historie.
+              </div>
               {topTeams.length === 0 ? (
-                <div style={{ color: C.gray, fontSize: 12 }}>Keine Teamdaten in der Historie vorhanden.</div>
+                <div style={{ color: C.gray, fontSize: 12 }}>Keine manuell ausgewählten Teamdaten in der Historie vorhanden.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {topTeams.map((item) => (

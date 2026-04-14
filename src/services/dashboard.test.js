@@ -32,6 +32,7 @@ describe("buildDashboardModel", () => {
           kreisLabel: "Duisburg",
           kmPauschale: 0.38,
         },
+        selectedGameIds: ["g-2"],
         games: [
           {
             id: "g-1",
@@ -59,6 +60,7 @@ describe("buildDashboardModel", () => {
           kreisLabel: "Essen",
           kmPauschale: 0.3,
         },
+        selectedGameIds: [],
         games: [
           {
             id: "g-3",
@@ -86,8 +88,10 @@ describe("buildDashboardModel", () => {
     expect(model.summary.withoutDistanceCount).toBe(1);
     expect(model.summary.distanceCoveragePct).toBe(66.7);
 
-    expect(model.topTeams[0]).toEqual({ team: "SV B", count: 2 });
-    expect(model.topTeams[1]).toEqual({ team: "TSV A", count: 2 });
+    expect(model.topTeams).toEqual([
+      { team: "FC C", count: 1 },
+      { team: "TSV A", count: 1 },
+    ]);
     expect(model.monthActivity).toEqual([{ monthKey: "2026-04", count: 3 }]);
     expect(model.weekdayActivity).toEqual([
       { weekday: 1, label: "Mo", count: 1 },
