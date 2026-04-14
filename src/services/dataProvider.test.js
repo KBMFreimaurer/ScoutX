@@ -454,6 +454,32 @@ describe("data provider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns actionable 401 message when adapter token is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      }),
+    );
+
+    await expect(
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-04-01",
+        toDate: "2026-04-07",
+        teams: ["Team A"],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+        adapterToken: "",
+        retryDelaysMs: [],
+      }),
+    ).rejects.toThrow("Adapter HTTP 401 (Unauthorized). Bitte Adapter-Token in Schritt 7 setzen.");
+  });
+
   it("handles empty csv input gracefully", () => {
     const report = parseUploadedGamesReport("date,time,home,away", "games.csv", {
       kreisId: "duesseldorf",

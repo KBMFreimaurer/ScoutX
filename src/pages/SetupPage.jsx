@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { KREISE } from "../data/kreise";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
@@ -102,6 +102,7 @@ export function SetupPage() {
     onSetFromDate,
     onSetToDate,
     onBuildAndGo,
+    onAdapterTokenChange,
     onSetLocationDraft,
     onResolveLocation,
     onUseCurrentLocation,
@@ -114,6 +115,8 @@ export function SetupPage() {
   const [googleStatusVersion, setGoogleStatusVersion] = useState(0);
   const [googleKeyDraft, setGoogleKeyDraft] = useState("");
   const [googleKeyNotice, setGoogleKeyNotice] = useState("");
+  const [adapterTokenDraft, setAdapterTokenDraft] = useState(adapterToken);
+  const [adapterTokenNotice, setAdapterTokenNotice] = useState("");
 
   const googleRouting = getGoogleRoutingConfig();
   const totalSteps = SETUP_STEPS.length;
@@ -185,6 +188,22 @@ export function SetupPage() {
     clearRuntimeGoogleMapsApiKey();
     setGoogleKeyNotice("Lokal gespeicherter API-Key entfernt.");
     setGoogleStatusVersion((value) => value + 1);
+  };
+
+  useEffect(() => {
+    setAdapterTokenDraft(adapterToken);
+  }, [adapterToken]);
+
+  const onSaveAdapterToken = () => {
+    const normalized = String(adapterTokenDraft || "").trim();
+    onAdapterTokenChange(normalized);
+    setAdapterTokenNotice(normalized ? "Adapter-Token lokal gespeichert." : "Adapter-Token entfernt.");
+  };
+
+  const onClearAdapterToken = () => {
+    setAdapterTokenDraft("");
+    onAdapterTokenChange("");
+    setAdapterTokenNotice("Adapter-Token entfernt.");
   };
 
   const onBackStep = () => {
@@ -440,6 +459,56 @@ export function SetupPage() {
           <span className="setup-summary-value">
             {String(scoutName || "").trim() || "Scout nicht gesetzt"} · {Number(kmPauschale || 0).toFixed(2)} €/km
           </span>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 12, color: C.gray, marginBottom: 8 }}>
+          Adapter-Verbindung: <code>{adapterEndpoint}</code>
+        </div>
+        <label htmlFor="adapter-token-input" style={lbl}>
+          Adapter-Token (optional, benötigt bei Adapter-Auth)
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            id="adapter-token-input"
+            type="password"
+            value={adapterTokenDraft}
+            onChange={(event) => setAdapterTokenDraft(event.target.value)}
+            placeholder="Bearer Token"
+            autoComplete="off"
+            style={{ ...inp, flex: 1, minWidth: 220, marginBottom: 0 }}
+          />
+          <button
+            type="button"
+            onClick={onSaveAdapterToken}
+            style={{
+              ...inp,
+              width: "auto",
+              minWidth: 120,
+              cursor: "pointer",
+              marginBottom: 0,
+            }}
+          >
+            Token speichern
+          </button>
+          <button
+            type="button"
+            onClick={onClearAdapterToken}
+            style={{
+              ...inp,
+              width: "auto",
+              minWidth: 120,
+              cursor: "pointer",
+              marginBottom: 0,
+            }}
+          >
+            Token löschen
+          </button>
+        </div>
+        <div style={{ marginTop: 6, fontSize: 11, color: C.gray }}>
+          Status: {adapterToken ? "Token gesetzt" : "Kein Token gesetzt"}
+          {adapterTokenNotice ? ` · ${adapterTokenNotice}` : ""}
         </div>
       </div>
     </div>

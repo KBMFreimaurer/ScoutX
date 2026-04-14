@@ -779,6 +779,12 @@ async function fetchGamesAdapter(params) {
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          if (!String(params.adapterToken || "").trim()) {
+            throw new Error("Adapter HTTP 401 (Unauthorized). Bitte Adapter-Token in Schritt 7 setzen.");
+          }
+          throw new Error("Adapter HTTP 401 (Unauthorized). Bitte Adapter-Token prüfen.");
+        }
         throw new Error(`Adapter HTTP ${response.status}`);
       }
 
