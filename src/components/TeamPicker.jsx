@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+import { fetchClubSuggestions } from "../services/clubSearch";
 import { C, card, inp, lbl } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
@@ -7,6 +9,46 @@ function buildLookup(values) {
     map.set(String(value || "").toLowerCase(), true);
   }
   return map;
+}
+
+function toLookupKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isAbsoluteUrl(value) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+function normalizeLogoUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  if (text.startsWith("//")) {
+    return `https:${text}`;
+  }
+  return isAbsoluteUrl(text) ? text : "";
+}
+
+function initials(value) {
+  const tokens = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (tokens.length === 0) {
+    return "??";
+  }
+  if (tokens.length === 1) {
+    return tokens[0].slice(0, 2).toUpperCase();
+  }
+  return `${tokens[0][0] || ""}${tokens[1][0] || ""}`.toUpperCase();
 }
 
 export function TeamPicker({
@@ -19,9 +61,88 @@ export function TeamPicker({
   onNormalizeTeams,
   onRemoveTeam,
   onClearAll,
+  adapterEndpoint = "",
+  adapterToken = "",
 }) {
   const matchedLookup = buildLookup(teamValidation?.matchedTeams || []);
   const missingLookup = buildLookup(teamValidation?.missingTeams || []);
+  const [teamInputFocused, setTeamInputFocused] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [remoteSuggestions, setRemoteSuggestions] = useState([]);
+
+  useEffect(() => {
+    const query = String(teamDraft || "").trim().replace(/\s+/g, " ");
+    if (query.length < 2) {
+      setRemoteSuggestions([]);
+      setLookupLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLookupLoading(true);
+
+      try {
+        const suggestions = await fetchClubSuggestions(adapterEndpoint, adapterToken, query, 8);
+        if (!cancelled) {
+          setRemoteSuggestions(suggestions);
+        }
+      } catch {
+        if (!cancelled) {
+          setRemoteSuggestions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLookupLoading(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [teamDraft, adapterEndpoint, adapterToken]);
+
+  const teamSuggestions = useMemo(() => {
+    const queryKey = toLookupKey(teamDraft);
+    if (!queryKey) {
+      return [];
+    }
+
+    const merged = new Map();
+    for (const item of remoteSuggestions) {
+      const name = String(item?.name || "").trim();
+      if (!name) {
+        continue;
+      }
+
+      const key = toLookupKey(name);
+      if (!key || !key.includes(queryKey)) {
+        continue;
+      }
+
+      merged.set(key, {
+        key,
+        name,
+        logoUrl: normalizeLogoUrl(item?.logoUrl),
+        location: String(item?.location || "").trim(),
+      });
+    }
+
+    return [...merged.values()].slice(0, 8);
+  }, [remoteSuggestions, teamDraft]);
+
+  const showSuggestions = teamInputFocused && String(teamDraft || "").trim().length >= 2 && (teamSuggestions.length > 0 || lookupLoading);
+
+  const onSelectSuggestion = (suggestion) => {
+    const name = String(suggestion?.name || "").trim();
+    if (!name) {
+      return;
+    }
+    onTeamDraft(name);
+    setTeamInputFocused(false);
+  };
 
   return (
     <div style={card}>
@@ -78,13 +199,18 @@ export function TeamPicker({
       </p>
 
       <label htmlFor="team-draft-input" style={lbl}>Mannschaft/Verein hinzufügen</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, position: "relative" }}>
         <input
           id="team-draft-input"
           className="scout-input"
           placeholder="z. B. TSV Heimaterde"
           value={teamDraft}
           onChange={(event) => onTeamDraft(event.target.value)}
+          onFocus={() => setTeamInputFocused(true)}
+          onBlur={() => {
+            setTimeout(() => setTeamInputFocused(false), 120);
+          }}
+          autoComplete="off"
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -114,6 +240,88 @@ export function TeamPicker({
         >
           + Feld
         </button>
+
+        {showSuggestions ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              left: 0,
+              right: 0,
+              borderRadius: 10,
+              border: `1px solid ${C.borderHi}`,
+              background: C.surface,
+              boxShadow: "0 14px 28px rgba(0,0,0,0.35)",
+              zIndex: 40,
+              overflow: "hidden",
+            }}
+          >
+            {teamSuggestions.length === 0 ? (
+              <div style={{ padding: "10px 12px", color: C.gray, fontSize: 12 }}>Vereine werden geladen...</div>
+            ) : (
+              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                {teamSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.key}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onSelectSuggestion(suggestion);
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "9px 10px",
+                      border: "none",
+                      borderBottom: `1px solid ${C.border}`,
+                      background: "transparent",
+                      color: C.offWhite,
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        overflow: "hidden",
+                        border: `1px solid ${C.border}`,
+                        background: "rgba(255,255,255,0.04)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: C.grayLight,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {suggestion.logoUrl ? (
+                        <img
+                          src={suggestion.logoUrl}
+                          alt={`Logo ${suggestion.name}`}
+                          loading="lazy"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        initials(suggestion.name)
+                      )}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: C.offWhite, lineHeight: 1.2 }}>{suggestion.name}</div>
+                      {suggestion.location ? (
+                        <div style={{ marginTop: 2, fontSize: 11, color: C.gray }}>{suggestion.location}</div>
+                      ) : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {selectedTeams.length > 0 ? (

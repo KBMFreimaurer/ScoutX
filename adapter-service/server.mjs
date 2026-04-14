@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
+import { extractClubSearchResults } from "./lib/fussballde.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
 import { fetchWeekTemplateGames, runExportCommand } from "./lib/dynamicSources.js";
 import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } from "./lib/week.js";
@@ -51,6 +52,9 @@ const WEEK_EXTERNAL_TIMEOUT_MS = 30000;
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.ADAPTER_RATE_LIMIT_WINDOW_MS || 60000);
 const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
+const CLUB_SEARCH_URL = process.env.ADAPTER_CLUB_SEARCH_URL || "https://www.fussball.de/suche";
+const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS || 12000);
+const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
 
 const rateLimitStore = new Map();
 
@@ -127,6 +131,62 @@ function splitTeamValidation(teams, games) {
     matchedTeams,
     missingTeams,
   };
+}
+
+function clampLimit(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function normalizeSearchQuery(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+async function fetchTextWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "user-agent": "ScoutXAdapter/1.0 (+https://www.fussball.de)",
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return await response.text();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Timeout nach ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchClubSuggestions(query, limit) {
+  const text = normalizeSearchQuery(query);
+  if (text.length < 2) {
+    return [];
+  }
+
+  const searchUrl = new URL(CLUB_SEARCH_URL);
+  searchUrl.searchParams.set("text", text);
+  searchUrl.searchParams.set("cat", "CLUB_AND_TEAM");
+
+  const html = await fetchTextWithTimeout(searchUrl.toString(), CLUB_SEARCH_TIMEOUT_MS);
+  return extractClubSearchResults(html, limit);
 }
 
 let refreshPromise = null;
@@ -533,6 +593,31 @@ const server = createServer(async (req, res) => {
     } catch (error) {
       console.error("[adapter] /api/games error:", error.message || error);
       sendJson(res, 400, { ok: false, error: "Ungültige Anfrage." }, origin);
+    }
+
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/clubs/search") {
+    if (!isAuthorized(req)) {
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      return;
+    }
+
+    const query = normalizeSearchQuery(url.searchParams.get("q"));
+    const limit = clampLimit(url.searchParams.get("limit"), 1, Math.max(1, CLUB_SEARCH_MAX_LIMIT), 8);
+
+    if (query.length < 2) {
+      sendJson(res, 200, { ok: true, query, clubs: [] }, origin);
+      return;
+    }
+
+    try {
+      const clubs = await fetchClubSuggestions(query, limit);
+      sendJson(res, 200, { ok: true, query, clubs }, origin);
+    } catch (error) {
+      console.error("[adapter] /api/clubs/search error:", error.message || error);
+      sendJson(res, 502, { ok: false, error: "Vereinssuche fehlgeschlagen.", clubs: [] }, origin);
     }
 
     return;

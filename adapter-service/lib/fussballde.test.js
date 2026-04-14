@@ -4,6 +4,7 @@ import {
   extractKickoffFromTeamPageHtml,
   extractMatchDetails,
   extractMatchesFromDatePage,
+  extractClubSearchResults,
   pickAreaIdsForLeague,
   toSpieldatumUrl,
 } from "./fussballde";
@@ -62,6 +63,39 @@ describe("fussballde helpers", () => {
         home: "JSG Brüggen/Bracht D1",
         away: "SC Waldniel D1",
         matchUrl: "https://www.fussball.de/spiel/jsg-brueggen-bracht-d1-sc-waldniel-d1/-/spiel/02U0CT5KPG000000VS5489BTVUFLAKGJ",
+      },
+    ]);
+  });
+
+  it("extracts club suggestions with logos from search result page", () => {
+    const html = `
+      <section id="club-search-results">
+        <div class="search-results">
+          <div id="clublist">
+            <ul>
+              <li>
+                <a href="/verein/msv-duisburg-ev-niederrhein/-/id/00ES8GN8VS00001TVV0AG08LVUPGND5I" class="image-wrapper">
+                  <div class="image">
+                    <img src="//www.fussball.de/export.media/-/action/getLogo/format/7/id/00ES8GN8VS00001TVV0AG08LVUPGND5I" alt="logo">
+                  </div>
+                  <div class="text">
+                    <p class="name">MSV Duisburg E.V.<span class="icon-link-arrow"></span></p>
+                    <p class="sub">47055&nbsp;Duisburg</p>
+                  </div>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    `;
+
+    expect(extractClubSearchResults(html, 5)).toEqual([
+      {
+        name: "MSV Duisburg E.V.",
+        location: "47055 Duisburg",
+        logoUrl: "https://www.fussball.de/export.media/-/action/getLogo/format/7/id/00ES8GN8VS00001TVV0AG08LVUPGND5I",
+        link: "https://www.fussball.de/verein/msv-duisburg-ev-niederrhein/-/id/00ES8GN8VS00001TVV0AG08LVUPGND5I",
       },
     ]);
   });

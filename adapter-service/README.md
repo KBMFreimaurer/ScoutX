@@ -89,6 +89,7 @@ ADAPTER_WEEK_SOURCE_TOKEN="..."
 
 - `GET /health`
 - `POST /api/games`
+- `GET /api/clubs/search?q=<Vereinsname>&limit=8`
 - `POST /api/admin/refresh`
 - `POST /api/admin/import`
 - `GET /api/admin/status`
@@ -118,6 +119,9 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_WEEK_SOURCE_TOKEN` (optional)
 - `ADAPTER_EXPORT_COMMAND` (optional)
   - default: `node "<adapter-service>/scripts/fetch-week.fussballde.mjs"`
+- `ADAPTER_CLUB_SEARCH_URL` (default: `https://www.fussball.de/suche`)
+- `ADAPTER_CLUB_SEARCH_TIMEOUT_MS` (default: `12000`)
+- `ADAPTER_CLUB_SEARCH_MAX_LIMIT` (default: `20`)
   - zum Deaktivieren explizit leer setzen (`ADAPTER_EXPORT_COMMAND=`)
 - `ADAPTER_WEEK_COMMAND_TIMEOUT_MS` (default: `30000`)
 - `CORS_ORIGIN` (default: `*`)

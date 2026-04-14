@@ -74,11 +74,58 @@ function toAbsoluteFussballUrl(urlOrPath) {
     return "";
   }
 
+  if (text.startsWith("//")) {
+    return `https:${text}`;
+  }
+
   if (text.startsWith("http://") || text.startsWith("https://")) {
     return text;
   }
 
   return `https://www.fussball.de${text.startsWith("/") ? "" : "/"}${text}`;
+}
+
+function extractClubSearchResults(html, limit = 8) {
+  const section = String(html || "").match(/<section id="club-search-results">([\s\S]*?)<\/section>/i)?.[1] || "";
+  if (!section) {
+    return [];
+  }
+
+  const safeLimit = Math.max(1, Number(limit) || 8);
+  const entries = [...section.matchAll(/<a[^>]*href="([^"]+)"[^>]*class="[^"]*\bimage-wrapper\b[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const seen = new Set();
+  const clubs = [];
+
+  for (const entry of entries) {
+    const block = String(entry[2] || "");
+    const name = stripTags(block.match(/<p[^>]*class="[^"]*\bname\b[^"]*"[^>]*>([\s\S]*?)<\/p>/i)?.[1] || "");
+    if (!name) {
+      continue;
+    }
+
+    const key = normalizeLookup(name);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    const location = stripTags(block.match(/<p[^>]*class="[^"]*\bsub\b[^"]*"[^>]*>([\s\S]*?)<\/p>/i)?.[1] || "");
+    const logo = toAbsoluteFussballUrl(block.match(/<img[^>]*src="([^"]+)"/i)?.[1] || "");
+    const link = toAbsoluteFussballUrl(entry[1] || "");
+
+    clubs.push({
+      name,
+      location,
+      logoUrl: logo,
+      link,
+    });
+
+    if (clubs.length >= safeLimit) {
+      break;
+    }
+  }
+
+  return clubs;
 }
 
 function extractStaffelId(competitionUrl) {
@@ -468,6 +515,7 @@ export {
   KREIS_AREA_KEYWORDS,
   buildDateRange,
   extractCompetitionEntries,
+  extractClubSearchResults,
   extractKickoffFromTeamPageHtml,
   extractMatchDetails,
   extractMatchesFromDatePage,

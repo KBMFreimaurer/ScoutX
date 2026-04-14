@@ -75,6 +75,8 @@ export function SetupPage() {
     availableJugendSubLevels,
     teamDraft,
     teamValidation,
+    adapterEndpoint,
+    adapterToken,
     fromDate,
     toDate,
     canBuild,
@@ -472,6 +474,8 @@ export function SetupPage() {
             onNormalizeTeams={onNormalizeTeamField}
             onRemoveTeam={onRemoveTeamField}
             onClearAll={onClearAllTeams}
+            adapterEndpoint={adapterEndpoint}
+            adapterToken={adapterToken}
           />
         );
       case 4:
