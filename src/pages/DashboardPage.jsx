@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GhostButton } from "../components/Buttons";
 import { useScoutX } from "../context/ScoutXContext";
@@ -50,6 +50,14 @@ function formatPeriod(fromDateKey, toDateKey) {
   return formatDateKey(fromDateKey || toDateKey);
 }
 
+function formatMonthKey(monthKey) {
+  const text = String(monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(text)) {
+    return "–";
+  }
+  return `${text.slice(5)}.${text.slice(0, 4)}`;
+}
+
 function StatCard({ label, value, hint, tone = "default" }) {
   const valueColor = tone === "ok" ? C.greenLight : tone === "warn" ? C.warn : C.white;
 
@@ -73,12 +81,24 @@ function StatCard({ label, value, hint, tone = "default" }) {
 export function DashboardPage() {
   const navigate = useNavigate();
   const { planHistory, onOpenPlanHistory, isMobile } = useScoutX();
-  const model = useMemo(() => buildDashboardModel(planHistory), [planHistory]);
+  const [selectedMonthKey, setSelectedMonthKey] = useState("");
+  const model = useMemo(
+    () => buildDashboardModel(planHistory, { monthKey: selectedMonthKey, monthLimit: 6 }),
+    [planHistory, selectedMonthKey],
+  );
+
+  useEffect(() => {
+    const nextMonth = String(model.activeMonthKey || "");
+    if (nextMonth !== selectedMonthKey) {
+      setSelectedMonthKey(nextMonth);
+    }
+  }, [model.activeMonthKey, selectedMonthKey]);
+
   const hasReports = model.summary.reportCount > 0;
 
   const topTeams = model.topTeams.slice(0, 6);
   const weekdayActivity = model.weekdayActivity;
-  const monthActivity = model.monthActivity.slice(-6);
+  const monthActivity = model.monthActivity;
   const latestReports = model.latestReports.slice(0, 6);
 
   const maxTeamCount = Math.max(1, ...topTeams.map((item) => item.count));
@@ -91,6 +111,11 @@ export function DashboardPage() {
         <p style={{ margin: "7px 0 0", color: C.gray, fontSize: 13, lineHeight: 1.5, maxWidth: 860 }}>
           Additive Übersicht aus der Plan-Historie: Aktivität, Team-Abdeckung und Fahrkosten-Trends, ohne den bestehenden Setup/Games/Plan-Flow zu verändern.
         </p>
+        {model.monthFilterEnabled ? (
+          <p style={{ margin: "8px 0 0", color: C.grayLight, fontSize: 12 }}>
+            Aktive Monatsansicht: <strong style={{ color: C.offWhite }}>{formatMonthKey(model.activeMonthKey)}</strong>
+          </p>
+        ) : null}
       </div>
 
       {!hasReports ? (
@@ -226,29 +251,39 @@ export function DashboardPage() {
               marginBottom: 14,
             }}
           >
-            <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Monatsverteilung (letzte 6 Monate)</div>
+            <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Monatsverteilung & Monatswechsel</div>
+            <div style={{ color: C.gray, fontSize: 11, marginBottom: 10 }}>
+              Bis zu 6 Monate aus der Historie. Beim Wechsel werden alle Kennzahlen und Listen auf den gewählten Monat gefiltert.
+            </div>
             {monthActivity.length === 0 ? (
               <div style={{ color: C.gray, fontSize: 12 }}>Keine Datumswerte vorhanden.</div>
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {monthActivity.map((item) => {
-                  const label = `${item.monthKey.slice(5)}.${item.monthKey.slice(0, 4)}`;
+                  const label = formatMonthKey(item.monthKey);
+                  const active = item.monthKey === model.activeMonthKey;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={item.monthKey}
+                      onClick={() => setSelectedMonthKey(item.monthKey)}
+                      aria-pressed={active}
+                      aria-label={`Monat ${label} anzeigen`}
                       style={{
-                        border: `1px solid ${C.border}`,
+                        border: active ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
                         borderRadius: 999,
                         padding: "6px 10px",
                         display: "flex",
                         alignItems: "center",
                         gap: 8,
-                        background: "rgba(255,255,255,0.02)",
+                        background: active ? C.greenDim : "rgba(255,255,255,0.02)",
+                        cursor: "pointer",
+                        color: C.offWhite,
                       }}
                     >
-                      <span style={{ color: C.grayLight, fontSize: 11 }}>{label}</span>
+                      <span style={{ color: active ? C.greenLight : C.grayLight, fontSize: 11 }}>{label}</span>
                       <span style={{ color: C.offWhite, fontSize: 12, fontWeight: 700 }}>{formatNumber(item.count)}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -264,7 +299,9 @@ export function DashboardPage() {
               padding: 14,
             }}
           >
-            <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Letzte Reports</div>
+            <div style={{ color: C.offWhite, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+              Letzte Reports ({model.monthFilterEnabled ? formatMonthKey(model.activeMonthKey) : "gesamt"})
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {latestReports.map((report) => (
                 <div

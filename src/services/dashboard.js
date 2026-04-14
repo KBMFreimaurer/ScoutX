@@ -67,6 +67,16 @@ function toGameDateKey(game) {
   return toIsoDateKey(game?.date) || toIsoDateKey(game?.dateObj);
 }
 
+function toGameMonthKey(game) {
+  const dateKey = toGameDateKey(game);
+  return dateKey ? dateKey.slice(0, 7) : "";
+}
+
+function normalizeMonthKey(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}$/.test(text) ? text : "";
+}
+
 function normalizeTeamName(value) {
   return String(value || "").trim();
 }
@@ -107,14 +117,14 @@ export function resolveGameDistanceKm(game) {
   return null;
 }
 
-function buildReportEntry(entry, defaultKmRate) {
-  const games = Array.isArray(entry?.games) ? entry.games : [];
+function buildReportEntry(entry, defaultKmRate, games) {
+  const scopedGames = Array.isArray(games) ? games : [];
   const rate = resolveEntryKmRate(entry, defaultKmRate);
 
   let totalDistanceKm = 0;
   let gamesWithDistance = 0;
 
-  for (const game of games) {
+  for (const game of scopedGames) {
     const oneWayDistance = resolveGameDistanceKm(game);
     if (!Number.isFinite(oneWayDistance)) {
       continue;
@@ -123,14 +133,14 @@ function buildReportEntry(entry, defaultKmRate) {
     totalDistanceKm += oneWayDistance * 2;
   }
 
-  const dateKeys = games.map((game) => toGameDateKey(game)).filter(Boolean).sort((left, right) => left.localeCompare(right));
+  const dateKeys = scopedGames.map((game) => toGameDateKey(game)).filter(Boolean).sort((left, right) => left.localeCompare(right));
   const fromDateKey = dateKeys[0] || "";
   const toDateKey = dateKeys[dateKeys.length - 1] || "";
 
   return {
     id: String(entry?.id || ""),
     createdAt: String(entry?.createdAt || ""),
-    gameCount: games.length,
+    gameCount: scopedGames.length,
     gamesWithDistance,
     totalDistanceKm: roundTo(totalDistanceKm, 1),
     estimatedCostEur: roundTo(totalDistanceKm * rate, 2),
@@ -146,15 +156,34 @@ export function buildDashboardModel(planHistory, options = {}) {
     ? Number(options.defaultKmRate)
     : 0.3;
   const topTeamLimit = Number.isFinite(options?.topTeamLimit) ? Math.max(1, Number(options.topTeamLimit)) : 8;
+  const monthLimit = Number.isFinite(options?.monthLimit) ? Math.max(1, Number(options.monthLimit)) : 6;
+  const requestedMonthKey = normalizeMonthKey(options?.monthKey);
   const entries = (Array.isArray(planHistory) ? planHistory : [])
     .filter((entry) => entry && typeof entry === "object")
     .sort((left, right) => String(right?.createdAt || "").localeCompare(String(left?.createdAt || "")));
+
+  const fullMonthCounts = {};
+  for (const entry of entries) {
+    const games = Array.isArray(entry?.games) ? entry.games : [];
+    for (const game of games) {
+      const monthKey = toGameMonthKey(game);
+      if (!monthKey) {
+        continue;
+      }
+      fullMonthCounts[monthKey] = (fullMonthCounts[monthKey] || 0) + 1;
+    }
+  }
+
+  const fullMonthKeys = Object.keys(fullMonthCounts).sort((left, right) => left.localeCompare(right));
+  const scopedMonthKeys = fullMonthKeys.slice(Math.max(0, fullMonthKeys.length - monthLimit));
+  const latestMonthKey = scopedMonthKeys[scopedMonthKeys.length - 1] || "";
+  const activeMonthKey = scopedMonthKeys.includes(requestedMonthKey) ? requestedMonthKey : latestMonthKey;
+  const hasMonthFilter = Boolean(activeMonthKey);
 
   const allTeams = new Set();
   const manualTeamCounts = {};
   const venueSet = new Set();
   const weekdayCounts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-  const monthCounts = {};
   const allDateKeys = [];
   const latestReports = [];
 
@@ -166,14 +195,19 @@ export function buildDashboardModel(planHistory, options = {}) {
 
   for (const entry of entries) {
     const games = Array.isArray(entry.games) ? entry.games : [];
-    const report = buildReportEntry(entry, defaultKmRate);
+    const scopedGames = hasMonthFilter ? games.filter((game) => toGameMonthKey(game) === activeMonthKey) : games;
+    if (scopedGames.length === 0) {
+      continue;
+    }
+
+    const report = buildReportEntry(entry, defaultKmRate, scopedGames);
     latestReports.push(report);
     totalDistanceKm += report.totalDistanceKm;
     estimatedCostEur += report.estimatedCostEur;
     withDistanceCount += report.gamesWithDistance;
     withoutDistanceCount += Math.max(0, report.gameCount - report.gamesWithDistance);
 
-    for (const game of games) {
+    for (const game of scopedGames) {
       gameCount += 1;
 
       const home = normalizeTeamName(game?.home);
@@ -196,7 +230,6 @@ export function buildDashboardModel(planHistory, options = {}) {
       }
 
       allDateKeys.push(dateKey);
-      monthCounts[dateKey.slice(0, 7)] = (monthCounts[dateKey.slice(0, 7)] || 0) + 1;
 
       const parsed = parseDateInput(dateKey);
       if (!parsed) {
@@ -207,7 +240,9 @@ export function buildDashboardModel(planHistory, options = {}) {
       weekdayCounts[day] = (weekdayCounts[day] || 0) + 1;
     }
 
-    const manualSelectedGames = getEntryManualSelectedGames(entry);
+    const manualSelectedGames = getEntryManualSelectedGames(entry).filter((game) =>
+      hasMonthFilter ? toGameMonthKey(game) === activeMonthKey : true,
+    );
     for (const game of manualSelectedGames) {
       const home = normalizeTeamName(game?.home);
       const away = normalizeTeamName(game?.away);
@@ -222,7 +257,7 @@ export function buildDashboardModel(planHistory, options = {}) {
   }
 
   const sortedDateKeys = [...allDateKeys].sort((left, right) => left.localeCompare(right));
-  const reportCount = entries.length;
+  const reportCount = latestReports.length;
 
   const topTeams = Object.entries(manualTeamCounts)
     .map(([team, count]) => ({ team, count }))
@@ -240,11 +275,13 @@ export function buildDashboardModel(planHistory, options = {}) {
     count: weekdayCounts[weekday] || 0,
   }));
 
-  const monthActivity = Object.entries(monthCounts)
-    .map(([monthKey, count]) => ({ monthKey, count }))
-    .sort((left, right) => left.monthKey.localeCompare(right.monthKey));
+  const monthActivity = scopedMonthKeys
+    .map((monthKey) => ({ monthKey, count: fullMonthCounts[monthKey] || 0 }))
+    .sort((left, right) => right.monthKey.localeCompare(left.monthKey));
 
   return {
+    activeMonthKey,
+    monthFilterEnabled: hasMonthFilter,
     summary: {
       reportCount,
       gameCount,

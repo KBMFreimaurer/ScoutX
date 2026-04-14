@@ -92,6 +92,7 @@ describe("buildDashboardModel", () => {
       { team: "FC C", count: 1 },
       { team: "TSV A", count: 1 },
     ]);
+    expect(model.activeMonthKey).toBe("2026-04");
     expect(model.monthActivity).toEqual([{ monthKey: "2026-04", count: 3 }]);
     expect(model.weekdayActivity).toEqual([
       { weekday: 1, label: "Mo", count: 1 },
@@ -105,6 +106,64 @@ describe("buildDashboardModel", () => {
 
     expect(model.latestReports[0].id).toBe("plan-new");
     expect(model.latestReports[1].id).toBe("plan-old");
+  });
+
+  it("filters metrics by selected month and falls back to latest month", () => {
+    const history = [
+      {
+        id: "plan-may",
+        createdAt: "2026-05-12T10:00:00.000Z",
+        selectedGameIds: ["g-m1"],
+        games: [
+          {
+            id: "g-m1",
+            date: "2026-05-11",
+            home: "Team May A",
+            away: "Team May B",
+            venue: "Platz May",
+            distanceKm: 11,
+          },
+        ],
+      },
+      {
+        id: "plan-apr",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        selectedGameIds: ["g-a1"],
+        games: [
+          {
+            id: "g-a1",
+            date: "2026-04-11",
+            home: "Team Apr A",
+            away: "Team Apr B",
+            venue: "Platz Apr",
+            distanceKm: 8,
+          },
+        ],
+      },
+    ];
+
+    const mayModel = buildDashboardModel(history, { monthKey: "2026-05" });
+    expect(mayModel.activeMonthKey).toBe("2026-05");
+    expect(mayModel.summary.gameCount).toBe(1);
+    expect(mayModel.summary.totalDistanceKm).toBe(22);
+    expect(mayModel.topTeams).toEqual([
+      { team: "Team May A", count: 1 },
+      { team: "Team May B", count: 1 },
+    ]);
+    expect(mayModel.latestReports.map((entry) => entry.id)).toEqual(["plan-may"]);
+
+    const aprModel = buildDashboardModel(history, { monthKey: "2026-04" });
+    expect(aprModel.activeMonthKey).toBe("2026-04");
+    expect(aprModel.summary.gameCount).toBe(1);
+    expect(aprModel.summary.totalDistanceKm).toBe(16);
+    expect(aprModel.topTeams).toEqual([
+      { team: "Team Apr A", count: 1 },
+      { team: "Team Apr B", count: 1 },
+    ]);
+    expect(aprModel.latestReports.map((entry) => entry.id)).toEqual(["plan-apr"]);
+
+    const fallbackModel = buildDashboardModel(history, { monthKey: "2026-01" });
+    expect(fallbackModel.activeMonthKey).toBe("2026-05");
   });
 
   it("uses default km rate when entry kmPauschale is invalid", () => {
