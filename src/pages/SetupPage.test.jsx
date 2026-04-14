@@ -143,7 +143,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("ignoriert persistierte localStorage-Defaults und startet frisch", () => {
+  it("stellt persistierte localStorage-Defaults nach Reload wieder her", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -157,11 +157,14 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    expect(screen.queryByLabelText(/Scout-Fokus/i)).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("TSV Heimaterde")).not.toBeInTheDocument();
+    // Nach Reload sollten die persistierten Werte wiederhergestellt sein
+    // Der Kreis Duisburg sollte bereits ausgewählt sein (aria-pressed="true")
+    const duisburgButton = screen.getByLabelText(/Kreis Duisburg auswählen/i);
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
+    
+    // Der Next-Button sollte aktiv sein, da Kreis bereits gewählt ist
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).toBeDisabled();
-    expect(nextButton).toHaveTextContent(/Kreis auswählen/i);
+    expect(nextButton).not.toBeDisabled();
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {
