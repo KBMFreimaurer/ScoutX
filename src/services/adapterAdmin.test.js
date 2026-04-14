@@ -5,6 +5,7 @@ describe("adapterAdmin URL resolver", () => {
   it("builds relative admin URL from /api/games", () => {
     expect(resolveAdapterAdminUrl("/api/games", "status")).toBe("/api/admin/status");
     expect(resolveAdapterAdminUrl("/api/games", "refresh")).toBe("/api/admin/refresh");
+    expect(resolveAdapterAdminUrl("/api/games", "clubs/import")).toBe("/api/admin/clubs/import");
   });
 
   it("builds absolute admin URL from absolute adapter endpoint", () => {

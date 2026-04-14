@@ -1,4 +1,5 @@
 const ABSOLUTE_HTTP_RE = /^https?:\/\//i;
+const RELATIVE_PATH_RE = /^(\/|\.{1,2}\/)/;
 const CLUB_SEARCH_TIMEOUT_MS = Number(import.meta.env?.VITE_CLUB_SEARCH_TIMEOUT_MS || 4500);
 const LOCAL_CATALOG_URL = String(import.meta.env?.VITE_LOCAL_CLUB_CATALOG_URL || "/data/clubs.catalog.json").trim();
 
@@ -97,7 +98,30 @@ function normalizeLogoUrl(value) {
     return text;
   }
 
+  if (RELATIVE_PATH_RE.test(text)) {
+    return text;
+  }
+
   return "";
+}
+
+function toLocalLogoUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const normalized = text
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\/+/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  const fileName = segments[segments.length - 1] || "";
+  if (!fileName || fileName === "." || fileName === ".." || fileName.includes("..")) {
+    return "";
+  }
+
+  return `/api/clubs/logo/${encodeURIComponent(fileName)}`;
 }
 
 function normalizeClubSuggestion(item) {
@@ -113,7 +137,7 @@ function normalizeClubSuggestion(item) {
   return {
     name,
     location: String(item.location || "").trim(),
-    logoUrl: normalizeLogoUrl(item.logoUrl || item.logo || ""),
+    logoUrl: normalizeLogoUrl(item.logoUrl || item.logo || toLocalLogoUrl(item.logoLocal || item.logo_local || "")),
     link: String(item.link || "").trim(),
   };
 }
@@ -245,11 +269,7 @@ export async function fetchClubSuggestions(adapterEndpoint, adapterToken, query,
     return [];
   }
 
-  const localCatalog = await loadLocalCatalog();
-  const localMatches = findLocalSuggestions(localCatalog, normalizedQuery, safeLimit);
-  if (localMatches.length >= safeLimit) {
-    return localMatches;
-  }
+  const localCatalogPromise = loadLocalCatalog();
 
   const url = buildRequestUrl(resolveClubSearchUrl(adapterEndpoint), normalizedQuery, safeLimit);
   const headers = { Accept: "application/json" };
@@ -269,19 +289,22 @@ export async function fetchClubSuggestions(adapterEndpoint, adapterToken, query,
       CLUB_SEARCH_TIMEOUT_MS,
     );
   } catch {
+    const localCatalog = await localCatalogPromise;
+    const localMatches = findLocalSuggestions(localCatalog, normalizedQuery, safeLimit);
     return localMatches;
   }
 
   const payload = await parseJsonSafe(response);
   if (!response.ok) {
+    const localCatalog = await localCatalogPromise;
+    const localMatches = findLocalSuggestions(localCatalog, normalizedQuery, safeLimit);
     return localMatches;
   }
 
   const remoteClubs = Array.isArray(payload?.clubs) ? payload.clubs : [];
   const remoteMatches = dedupeSuggestions(remoteClubs);
-  if (remoteMatches.length === 0) {
-    return localMatches;
-  }
+  const localCatalog = await localCatalogPromise;
+  const localMatches = findLocalSuggestions(localCatalog, normalizedQuery, safeLimit);
 
   return mergeSuggestions(remoteMatches, localMatches, safeLimit);
 }

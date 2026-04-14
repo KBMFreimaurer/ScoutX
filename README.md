@@ -25,6 +25,7 @@ Der Adapter kann dann die angefragte Woche automatisch aktualisieren:
 - Optionales Frontend-Override: `VITE_ADAPTER_ENDPOINT=https://dein-host/api/games`
 - Teamauswahl in ScoutX wird beim Live-Adapter als Such-Hinweis genutzt (nicht als harter Filter): passende Vereins-Spiele werden priorisiert, aber weitere Kreis/Jugend-Spiele bleiben im Plan/PDF enthalten.
 - Frisch exportierte Wochen-Daten ersetzen für diese Woche vorhandene Store-Daten (inkl. Sample), damit PDFs reale Ergebnisse enthalten.
+- Für große Vereinskataloge inkl. lokaler Vereinslogos: `npm run adapter:clubs:scrape` (schreibt `adapter-service/data/clubs.catalog.json` + `adapter-service/data/logos/`).
 
 Dadurch ist kein manueller Import vor jeder Planung nötig.
 

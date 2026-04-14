@@ -90,9 +90,33 @@ ADAPTER_WEEK_SOURCE_TOKEN="..."
 - `GET /health`
 - `POST /api/games`
 - `GET /api/clubs/search?q=<Vereinsname>&limit=8`
+- `GET /api/clubs/logo/<filename>`
 - `POST /api/admin/refresh`
 - `POST /api/admin/import`
+- `POST /api/admin/clubs/import`
 - `GET /api/admin/status`
+
+### Vereinskatalog Import
+
+`POST /api/admin/clubs/import` erwartet JSON:
+
+```json
+{
+  "replace": true,
+  "clubs": [
+    {
+      "name": "Duisburger SV",
+      "location": "Duisburg",
+      "logoUrl": "https://...",
+      "logoLocal": "logos/duisburger-sv.png",
+      "kreisIds": ["duisburg"],
+      "link": "https://..."
+    }
+  ]
+}
+```
+
+Wenn `logoLocal` gesetzt ist und die Datei unter `ADAPTER_CLUB_LOGOS_DIR` existiert, liefert der Adapter in der Suche automatisch eine lokale Logo-URL aus (`/api/clubs/logo/<filename>`).
 
 ## Auth
 
@@ -105,6 +129,8 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_HOST` (default: `0.0.0.0`)
 - `ADAPTER_PORT` (default: `8787`)
 - `ADAPTER_STORE_FILE` (default: `adapter-service/data/games.store.json`)
+- `ADAPTER_CLUB_CATALOG_FILE` (default: `adapter-service/data/clubs.catalog.json`)
+- `ADAPTER_CLUB_LOGOS_DIR` (default: `adapter-service/data/logos`)
 - `ADAPTER_IMPORT_DIR` (default: `adapter-service/imports`)
 - `ADAPTER_DATA_FILE` (default: `adapter-service/data/games.sample.json`)
 - `ADAPTER_ALIASES_FILE` (default: `adapter-service/data/team-aliases.json`)
@@ -138,3 +164,16 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 ```bash
 node adapter-service/server.mjs
 ```
+
+## Vereinskatalog neu scrapen
+
+Das Projekt enthält einen wiederverwendbaren Scraper:
+
+```bash
+npm run adapter:clubs:scrape
+```
+
+Er schreibt:
+
+- `adapter-service/data/clubs.catalog.json`
+- `adapter-service/data/logos/*.png`

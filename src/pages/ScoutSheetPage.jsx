@@ -37,6 +37,10 @@ function normalizeLogoUrl(value) {
     return text;
   }
 
+  if (/^(\/|\.{1,2}\/)/.test(text)) {
+    return text;
+  }
+
   return "";
 }
 

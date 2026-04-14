@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
 import { extractClubSearchResults } from "./lib/fussballde.js";
@@ -30,6 +32,10 @@ const SAMPLE_FILE =
   process.env.ADAPTER_DATA_FILE || fileURLToPath(new URL("./data/games.sample.json", import.meta.url));
 const STORE_FILE =
   process.env.ADAPTER_STORE_FILE || fileURLToPath(new URL("./data/games.store.json", import.meta.url));
+const CLUB_CATALOG_FILE =
+  process.env.ADAPTER_CLUB_CATALOG_FILE || fileURLToPath(new URL("./data/clubs.catalog.json", import.meta.url));
+const CLUB_LOGOS_DIR =
+  process.env.ADAPTER_CLUB_LOGOS_DIR || fileURLToPath(new URL("./data/logos", import.meta.url));
 const IMPORT_DIR =
   process.env.ADAPTER_IMPORT_DIR || fileURLToPath(new URL("./imports", import.meta.url));
 const ALIASES_FILE =
@@ -55,6 +61,14 @@ const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
 const CLUB_SEARCH_URL = process.env.ADAPTER_CLUB_SEARCH_URL || "https://www.fussball.de/suche";
 const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS || 12000);
 const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
+const LOGO_CONTENT_TYPES = Object.freeze({
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+});
 
 const rateLimitStore = new Map();
 
@@ -84,6 +98,7 @@ setInterval(() => {
 
 const state = {
   games: [],
+  clubs: [],
   meta: null,
   aliasMap: {},
   lastRefreshReason: "startup",
@@ -147,6 +162,252 @@ function normalizeSearchQuery(value) {
     .replace(/\s+/g, " ");
 }
 
+function toLookupKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeLogoLocalFileName(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const normalized = text
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\/+/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  const fileName = segments[segments.length - 1] || "";
+  if (!fileName || fileName === "." || fileName === ".." || fileName.includes("..")) {
+    return "";
+  }
+  return fileName;
+}
+
+function normalizeKreisIds(value) {
+  const source = Array.isArray(value) ? value : String(value || "").split(/[;,|]/);
+  const unique = new Set();
+
+  for (const entry of source) {
+    const normalized = String(entry || "").trim().toLowerCase();
+    if (normalized) {
+      unique.add(normalized);
+    }
+  }
+
+  return [...unique];
+}
+
+function normalizeClubEntry(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const name = String(raw.name || "").trim();
+  if (!name) {
+    return null;
+  }
+
+  const logoUrl = String(raw.logoUrl || raw.logo || "").trim();
+  const logoLocal = normalizeLogoLocalFileName(raw.logoLocal || raw.localLogo || raw.logoPath || "");
+  const link = String(raw.link || "").trim();
+  const location = String(raw.location || "").trim();
+  const kreisIds = normalizeKreisIds(raw.kreisIds || raw.kreis || raw.kreise || []);
+
+  return {
+    name,
+    location,
+    logoUrl: logoUrl.startsWith("//") ? `https:${logoUrl}` : logoUrl,
+    logoLocal,
+    link,
+    kreisIds,
+  };
+}
+
+function dedupeClubEntries(items) {
+  const merged = new Map();
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const normalized = normalizeClubEntry(item);
+    if (!normalized) {
+      continue;
+    }
+
+    const key = toLookupKey(normalized.name);
+    if (!key) {
+      continue;
+    }
+
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, normalized);
+      continue;
+    }
+
+    merged.set(key, {
+      ...existing,
+      location: existing.location || normalized.location,
+      logoUrl: existing.logoUrl || normalized.logoUrl,
+      logoLocal: existing.logoLocal || normalized.logoLocal,
+      link: existing.link || normalized.link,
+      kreisIds: normalizeKreisIds([...(existing.kreisIds || []), ...(normalized.kreisIds || [])]),
+    });
+  }
+
+  return [...merged.values()];
+}
+
+function scoreClubMatch(name, queryKey) {
+  const key = toLookupKey(name);
+  if (!key || !queryKey || !key.includes(queryKey)) {
+    return -1;
+  }
+
+  if (key === queryKey) {
+    return 4;
+  }
+  if (key.startsWith(queryKey)) {
+    return 3;
+  }
+  if (key.split(" ").some((token) => token.startsWith(queryKey))) {
+    return 2;
+  }
+  return 1;
+}
+
+function searchLocalClubCatalog(catalog, query, limit) {
+  const queryKey = toLookupKey(query);
+  if (!queryKey) {
+    return [];
+  }
+
+  const scored = [];
+  for (const item of Array.isArray(catalog) ? catalog : []) {
+    const score = scoreClubMatch(item?.name, queryKey);
+    if (score < 0) {
+      continue;
+    }
+    scored.push({ score, item });
+  }
+
+  scored.sort((left, right) => {
+    if (left.score !== right.score) {
+      return right.score - left.score;
+    }
+    return String(left.item?.name || "").localeCompare(String(right.item?.name || ""), "de-DE");
+  });
+
+  return scored.slice(0, limit).map((entry) => entry.item);
+}
+
+function mergeClubResults(primary, fallback, limit) {
+  const merged = dedupeClubEntries([...(Array.isArray(primary) ? primary : []), ...(Array.isArray(fallback) ? fallback : [])]);
+  return merged.slice(0, Math.max(1, Number(limit) || 8));
+}
+
+function getRequestBaseUrl(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = forwardedHost || String(req.headers.host || "localhost");
+  const proto = forwardedProto === "https" ? "https" : "http";
+  return `${proto}://${host}`;
+}
+
+function buildLocalLogoUrl(req, logoLocal) {
+  const fileName = normalizeLogoLocalFileName(logoLocal);
+  if (!fileName) {
+    return "";
+  }
+
+  const relativePath = `/api/clubs/logo/${encodeURIComponent(fileName)}`;
+  try {
+    return new URL(relativePath, getRequestBaseUrl(req)).toString();
+  } catch {
+    return relativePath;
+  }
+}
+
+function toPublicClubEntry(req, item) {
+  const normalized = normalizeClubEntry(item);
+  if (!normalized) {
+    return null;
+  }
+
+  const localLogoUrl = buildLocalLogoUrl(req, normalized.logoLocal);
+  return {
+    name: normalized.name,
+    location: normalized.location,
+    logoUrl: localLogoUrl || normalized.logoUrl,
+    link: normalized.link,
+  };
+}
+
+function toPublicClubEntries(req, items) {
+  const response = [];
+  for (const item of dedupeClubEntries(items)) {
+    const entry = toPublicClubEntry(req, item);
+    if (entry) {
+      response.push(entry);
+    }
+  }
+  return response;
+}
+
+function resolveLogoFilePath(fileName) {
+  const safeFileName = normalizeLogoLocalFileName(fileName);
+  if (!safeFileName) {
+    return "";
+  }
+
+  const root = resolve(CLUB_LOGOS_DIR);
+  const target = resolve(root, safeFileName);
+  if (target !== root && !target.startsWith(`${root}${sep}`)) {
+    return "";
+  }
+  return target;
+}
+
+function detectLogoContentType(filePath) {
+  const extension = extname(String(filePath || "")).toLowerCase();
+  return LOGO_CONTENT_TYPES[extension] || "application/octet-stream";
+}
+
+async function readClubCatalogFile(filePath) {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    const clubs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.clubs) ? parsed.clubs : [];
+    return dedupeClubEntries(clubs);
+  } catch {
+    return [];
+  }
+}
+
+async function writeClubCatalogFile(filePath, clubs) {
+  const normalized = dedupeClubEntries(clubs);
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    count: normalized.length,
+    withLogo: normalized.filter((item) => Boolean(item.logoLocal || item.logoUrl)).length,
+    clubs: normalized,
+  };
+
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
+  return normalized;
+}
+
 async function fetchTextWithTimeout(url, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -175,7 +436,7 @@ async function fetchTextWithTimeout(url, timeoutMs) {
   }
 }
 
-async function fetchClubSuggestions(query, limit) {
+async function fetchRemoteClubSuggestions(query, limit) {
   const text = normalizeSearchQuery(query);
   if (text.length < 2) {
     return [];
@@ -186,7 +447,7 @@ async function fetchClubSuggestions(query, limit) {
   searchUrl.searchParams.set("cat", "CLUB_AND_TEAM");
 
   const html = await fetchTextWithTimeout(searchUrl.toString(), CLUB_SEARCH_TIMEOUT_MS);
-  return extractClubSearchResults(html, limit);
+  return dedupeClubEntries(extractClubSearchResults(html, limit));
 }
 
 let refreshPromise = null;
@@ -502,6 +763,7 @@ function getHealthPayload() {
     service: "scoutplan-adapter",
     timestamp: new Date().toISOString(),
     count: state.games.length,
+    clubsCount: state.clubs.length,
     lastRefreshReason: state.lastRefreshReason,
     lastError: state.lastError,
     remoteConfigured: Boolean(REMOTE_URL),
@@ -516,6 +778,7 @@ function getHealthPayload() {
 function buildAdminMeta() {
   return {
     count: state.games.length,
+    clubsCount: state.clubs.length,
     lastRefreshReason: state.lastRefreshReason,
     lastError: state.lastError,
     meta: state.meta,
@@ -541,6 +804,39 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, getHealthPayload(), origin);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/api/clubs/logo/")) {
+    const encodedName = url.pathname.slice("/api/clubs/logo/".length);
+    let decodedName = "";
+    try {
+      decodedName = decodeURIComponent(encodedName);
+    } catch {
+      decodedName = "";
+    }
+
+    const logoPath = resolveLogoFilePath(decodedName);
+    if (!logoPath) {
+      setCorsHeaders(res, origin);
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Logo not found");
+      return;
+    }
+
+    try {
+      const logoBuffer = await readFile(logoPath);
+      setCorsHeaders(res, origin);
+      res.writeHead(200, {
+        "Content-Type": detectLogoContentType(logoPath),
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(logoBuffer);
+    } catch {
+      setCorsHeaders(res, origin);
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Logo not found");
+    }
     return;
   }
 
@@ -612,12 +908,21 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const localMatchesRaw = searchLocalClubCatalog(state.clubs, query, limit);
+    const localMatches = toPublicClubEntries(req, localMatchesRaw);
+
+    if (localMatches.length >= limit) {
+      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog" }, origin);
+      return;
+    }
+
     try {
-      const clubs = await fetchClubSuggestions(query, limit);
-      sendJson(res, 200, { ok: true, query, clubs }, origin);
+      const remoteMatches = await fetchRemoteClubSuggestions(query, limit);
+      const clubs = toPublicClubEntries(req, mergeClubResults(remoteMatches, localMatchesRaw, limit));
+      sendJson(res, 200, { ok: true, query, clubs, source: "remote+local" }, origin);
     } catch (error) {
       console.error("[adapter] /api/clubs/search error:", error.message || error);
-      sendJson(res, 502, { ok: false, error: "Vereinssuche fehlgeschlagen.", clubs: [] }, origin);
+      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog-fallback" }, origin);
     }
 
     return;
@@ -689,6 +994,44 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/admin/clubs/import") {
+    if (!isAuthorized(req)) {
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      if (!Array.isArray(payload.clubs)) {
+        throw new Error("`clubs` muss ein Array sein.");
+      }
+
+      const replace = Boolean(payload.replace);
+      const importedClubs = dedupeClubEntries(payload.clubs);
+      const merged = replace ? importedClubs : dedupeClubEntries([...state.clubs, ...importedClubs]);
+      const persisted = await writeClubCatalogFile(CLUB_CATALOG_FILE, merged);
+
+      state.clubs = persisted;
+
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          imported: importedClubs.length,
+          total: persisted.length,
+          replace,
+        },
+        origin,
+      );
+    } catch (error) {
+      console.error("[adapter] /api/admin/clubs/import error:", error.message || error);
+      sendJson(res, 400, { ok: false, error: "Vereinskatalog-Import fehlgeschlagen." }, origin);
+    }
+
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/status") {
     if (!isAuthorized(req)) {
       sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
@@ -701,6 +1044,12 @@ const server = createServer(async (req, res) => {
 
   sendJson(res, 404, { ok: false, error: "Not Found" }, origin);
 });
+
+try {
+  state.clubs = await readClubCatalogFile(CLUB_CATALOG_FILE);
+} catch {
+  state.clubs = [];
+}
 
 try {
   await refreshData("startup");
@@ -720,6 +1069,8 @@ server.listen(PORT, HOST, () => {
   const tokenInfo = AUTH_TOKEN ? "enabled" : "disabled";
   console.log(`[adapter] running on http://${HOST}:${PORT} (auth: ${tokenInfo})`);
   console.log(`[adapter] store: ${STORE_FILE}`);
+  console.log(`[adapter] club-catalog: ${CLUB_CATALOG_FILE} (${state.clubs.length})`);
+  console.log(`[adapter] club-logos: ${CLUB_LOGOS_DIR}`);
   console.log(`[adapter] imports: ${IMPORT_DIR}`);
   console.log(`[adapter] remote: ${REMOTE_URL || "disabled"}`);
   if (REMOTE_URL) {

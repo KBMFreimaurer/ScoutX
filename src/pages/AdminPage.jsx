@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { useScoutX } from "../context/ScoutXContext";
-import { fetchAdapterAdminStatus, fetchAdapterHealth, resolveAdapterAdminUrl, triggerAdapterAdminRefresh } from "../services/adapterAdmin";
+import {
+  fetchAdapterAdminStatus,
+  fetchAdapterHealth,
+  importAdapterClubCatalog,
+  resolveAdapterAdminUrl,
+  triggerAdapterAdminRefresh,
+} from "../services/adapterAdmin";
+import { parseClubCatalogFile } from "../services/clubCatalogImport";
 import { C } from "../styles/theme";
 
 function formatDateTime(value) {
@@ -51,6 +58,9 @@ export function AdminPage() {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [importingClubs, setImportingClubs] = useState(false);
+  const [replaceClubs, setReplaceClubs] = useState(true);
+  const [importSummary, setImportSummary] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -101,6 +111,59 @@ export function AdminPage() {
       setError(`Adapter-Refresh fehlgeschlagen: ${String(refreshError?.message || refreshError || "Unbekannter Fehler")}`);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const onImportClubFile = async (event) => {
+    const file = event.target?.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (importingClubs) {
+      return;
+    }
+
+    setImportingClubs(true);
+    setError("");
+    setNotice("");
+    setImportSummary(null);
+
+    try {
+      const parsed = await parseClubCatalogFile(file);
+      if (!Array.isArray(parsed.clubs) || parsed.clubs.length === 0) {
+        throw new Error("Die Datei enthält keine gültigen Vereinsdatensätze.");
+      }
+
+      const result = await importAdapterClubCatalog(adapterEndpoint, adapterToken, parsed.clubs, replaceClubs);
+      setImportSummary({
+        fileName: String(file.name || ""),
+        parsed: parsed.stats || null,
+        imported: Number(result?.imported || 0),
+        total: Number(result?.total || 0),
+      });
+      setNotice(
+        `Vereinskatalog importiert: ${Number(result?.imported || 0)} Datensätze verarbeitet, ${Number(
+          result?.total || 0,
+        )} Vereine im Adapter.`,
+      );
+
+      const [nextStatus, nextHealth] = await Promise.all([
+        fetchAdapterAdminStatus(adapterEndpoint, adapterToken).catch(() => null),
+        fetchAdapterHealth(adapterEndpoint).catch(() => null),
+      ]);
+      if (nextStatus) {
+        setStatus(nextStatus);
+      }
+      if (nextHealth) {
+        setHealth(nextHealth);
+      }
+    } catch (importError) {
+      setError(`Vereinskatalog-Import fehlgeschlagen: ${String(importError?.message || importError || "Unbekannter Fehler")}`);
+    } finally {
+      setImportingClubs(false);
     }
   };
 
@@ -207,6 +270,9 @@ export function AdminPage() {
               Spiele im Store: <strong style={{ color: C.offWhite }}>{renderMetaValue(status?.count)}</strong>
             </div>
             <div>
+              Vereine im Katalog: <strong style={{ color: C.offWhite }}>{renderMetaValue(status?.clubsCount)}</strong>
+            </div>
+            <div>
               Letzter Refresh-Grund: <strong style={{ color: C.offWhite }}>{renderMetaValue(status?.lastRefreshReason)}</strong>
             </div>
             <div>
@@ -245,6 +311,78 @@ export function AdminPage() {
               Refresh aktiv: <strong style={{ color: refreshing ? C.warn : C.grayLight }}>{refreshing ? "Ja" : "Nein"}</strong>
             </div>
           </div>
+        </section>
+
+        <section
+          className="fu2"
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <div style={{ color: C.offWhite, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Vereinskatalog Import (JSON/CSV)</div>
+          <div style={{ color: C.gray, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+            Importiere eine JSON- oder CSV-Datei mit Vereinsdaten, damit die Vorschlagslisten vollständig werden.
+            Felder: <code style={{ color: C.offWhite }}>name</code>, optional{" "}
+            <code style={{ color: C.offWhite }}>location</code>, <code style={{ color: C.offWhite }}>logoUrl</code>,{" "}
+            <code style={{ color: C.offWhite }}>logoLocal</code>, <code style={{ color: C.offWhite }}>kreisIds</code>,{" "}
+            <code style={{ color: C.offWhite }}>link</code>.
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: C.grayLight, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={replaceClubs}
+              onChange={(event) => setReplaceClubs(Boolean(event.target.checked))}
+              disabled={importingClubs}
+            />
+            Import ersetzt bestehenden Katalog (deaktiviert = zusammenführen)
+          </label>
+
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.03)",
+              color: C.offWhite,
+              padding: "8px 10px",
+              minHeight: 36,
+              cursor: importingClubs ? "not-allowed" : "pointer",
+              fontSize: 12,
+            }}
+          >
+            <input
+              type="file"
+              accept=".json,.csv,text/csv,application/json"
+              onChange={(event) => void onImportClubFile(event)}
+              disabled={importingClubs}
+              style={{ display: "none" }}
+            />
+            {importingClubs ? "Import läuft..." : "Datei auswählen und importieren"}
+          </label>
+
+          {importSummary ? (
+            <div style={{ marginTop: 10, color: C.gray, fontSize: 12, lineHeight: 1.5 }}>
+              <div>
+                Datei: <strong style={{ color: C.offWhite }}>{importSummary.fileName || "-"}</strong>
+              </div>
+              <div>
+                Gelesene Zeilen: <strong style={{ color: C.offWhite }}>{renderMetaValue(importSummary.parsed?.totalRows)}</strong>
+              </div>
+              <div>
+                Gültige Vereine: <strong style={{ color: C.offWhite }}>{renderMetaValue(importSummary.parsed?.validRows)}</strong>
+              </div>
+              <div>
+                Importiert: <strong style={{ color: C.offWhite }}>{renderMetaValue(importSummary.imported)}</strong> · Gesamt im Adapter:{" "}
+                <strong style={{ color: C.offWhite }}>{renderMetaValue(importSummary.total)}</strong>
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

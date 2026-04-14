@@ -122,6 +122,38 @@ async function callAdapterApi({ url, method = "GET", token = "" }) {
   return payload || {};
 }
 
+async function callAdapterApiJson({ url, method = "POST", token = "", body = null }) {
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+
+  const authToken = String(token || "").trim();
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error(`Adapter nicht erreichbar (${url}).`);
+  }
+
+  const payload = await parseJsonSafe(response);
+
+  if (!response.ok) {
+    const details = String(payload?.error || `HTTP ${response.status}`).trim();
+    throw new Error(details || "Unbekannter Adapter-Fehler");
+  }
+
+  return payload || {};
+}
+
 export async function fetchAdapterAdminStatus(adapterEndpoint, adapterToken) {
   const url = resolveAdapterAdminUrl(adapterEndpoint, "status");
   return callAdapterApi({
@@ -146,5 +178,18 @@ export async function fetchAdapterHealth(adapterEndpoint) {
     url,
     method: "GET",
     token: "",
+  });
+}
+
+export async function importAdapterClubCatalog(adapterEndpoint, adapterToken, clubs, replace = true) {
+  const url = resolveAdapterAdminUrl(adapterEndpoint, "clubs/import");
+  return callAdapterApiJson({
+    url,
+    method: "POST",
+    token: adapterToken,
+    body: {
+      clubs: Array.isArray(clubs) ? clubs : [],
+      replace: Boolean(replace),
+    },
   });
 }

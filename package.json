@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "adapter:dev": "node adapter-service/server.mjs",
     "adapter:refresh": "curl -X POST http://127.0.0.1:8787/api/admin/refresh",
+    "adapter:clubs:scrape": "node adapter-service/scripts/scrape-clubs.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

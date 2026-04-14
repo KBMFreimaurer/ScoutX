@@ -102,4 +102,32 @@ describe("fetchClubSuggestions", () => {
       },
     ]);
   });
+
+  it("keeps adapter-local logo paths", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+      const target = String(url || "");
+      if (target.includes("/data/clubs.catalog.json")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ clubs: [] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          clubs: [{ name: "Duisburger FV 08", logoUrl: "/api/clubs/logo/duisburger-fv-08.png", location: "Duisburg" }],
+        }),
+      });
+    });
+
+    const result = await fetchClubSuggestions("/api/games", "", "duis", 8);
+    expect(result).toEqual([
+      {
+        name: "Duisburger FV 08",
+        logoUrl: "/api/clubs/logo/duisburger-fv-08.png",
+        location: "Duisburg",
+        link: "",
+      },
+    ]);
+  });
 });

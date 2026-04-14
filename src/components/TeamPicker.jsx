@@ -33,7 +33,10 @@ function normalizeLogoUrl(value) {
   if (text.startsWith("//")) {
     return `https:${text}`;
   }
-  return isAbsoluteUrl(text) ? text : "";
+  if (isAbsoluteUrl(text)) {
+    return text;
+  }
+  return /^(\/|\.{1,2}\/)/.test(text) ? text : "";
 }
 
 function initials(value) {
