@@ -6,4 +6,6 @@ export const STORAGE_KEYS = {
   abrechnungMeta: "scoutplan.abrechnung.v1",
   presence: "scoutplan.presence.v1",
   planHistory: "scoutplan.planHistory.v1",
+  playerSheets: "scoutplan.playerSheets.v1",
+  scheduleWatch: "scoutplan.scheduleWatch.v1",
 };

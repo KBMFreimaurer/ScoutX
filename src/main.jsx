@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./app";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { registerServiceWorker } from "./pwa/registerServiceWorker";
+
+registerServiceWorker();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

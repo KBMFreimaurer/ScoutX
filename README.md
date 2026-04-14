@@ -91,6 +91,9 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-14: Scout-Bewertungsbogen ergänzt (`/scout-sheet`), mobil-optimiert mit lokal gespeicherten Spielerprofilen (Name, Geburtsdatum, Position, manuelle Stärken-Notiz).
+- 2026-04-14: Benachrichtigungen bei Spielplanänderungen ergänzt: In-App-Hinweis bei erkannten Adapter-Planänderungen plus optionale Browser-Benachrichtigung nach Freigabe.
+- 2026-04-14: PWA-Grundlage ergänzt (`manifest.webmanifest`, Service Worker, Produktions-Registrierung), sodass ScoutX installierbar ist und bestehende Pläne/Plan-Historie nach Erstladung auch offline lesbar bleiben.
 - 2026-04-14: Neues additives `Dashboard v1` (`/dashboard`) mit Kennzahlen aus der Plan-Historie (Reports, Spiele, Team-Abdeckung, Wochentags-/Monatsaktivität, geschätzte Fahrtkosten) und Direkt-Öffnen historischer Reports.
 - 2026-04-14: Neue additive Adapter-Admin-Seite (`/admin`) mit Status-Check und manuellem Refresh (`/api/admin/status`, `/api/admin/refresh`), ohne Änderungen am Setup/Games/Plan-Hauptfluss.
 - 2026-04-12: Google Maps API-Key ist direkt im Projekt hinterlegt; ENV/Compose bleibt als optionaler Override aktiv.

@@ -7,11 +7,13 @@ import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
 import { SetupProvider } from "./context/SetupContext";
 import { GamesProvider } from "./context/GamesContext";
 import { PlanProvider } from "./context/PlanContext";
+import { useScheduleChangeNotifications } from "./hooks/useScheduleChangeNotifications";
 
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ default: module.GamesPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const ScoutSheetPage = lazy(() => import("./pages/ScoutSheetPage").then((module) => ({ default: module.ScoutSheetPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
@@ -83,6 +85,24 @@ const RAIL_ICONS = {
       <rect x="3" y="16" width="7" height="5" rx="1.5" />
     </svg>
   ),
+  sheet: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
+      <line x1="9" y1="17" x2="15" y2="17" />
+      <line x1="9" y1="9" x2="10" y2="9" />
+    </svg>
+  ),
   admin: (
     <svg
       width="16"
@@ -119,11 +139,49 @@ function RouteFallback() {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { width, isMobile, games, plan, planHistory, err, loadingGames, enrichingGames, clearErr, onResetSoft } = useScoutX();
+  const {
+    width,
+    isMobile,
+    games,
+    plan,
+    planHistory,
+    err,
+    loadingGames,
+    enrichingGames,
+    dataSourceUsed,
+    kreisId,
+    jugendId,
+    fromDate,
+    toDate,
+    kreis,
+    jugend,
+    clearErr,
+    onResetSoft,
+  } = useScoutX();
   const hasPlanHistory = Array.isArray(planHistory) && planHistory.length > 0;
   const canAccessPlan = Boolean(plan) || hasPlanHistory;
+  const {
+    latestNotice: latestScheduleNotice,
+    dismissLatestNotice,
+    browserSupported,
+    browserPermission,
+    requestBrowserPermission,
+  } = useScheduleChangeNotifications({
+    games,
+    dataSourceUsed,
+    kreisId,
+    jugendId,
+    fromDate,
+    toDate,
+    kreisLabel: kreis?.label,
+    jugendLabel: jugend?.label,
+  });
 
   const currentStep = useMemo(() => {
+    if (location.pathname.startsWith("/scout-sheet")) {
+      return "sheet";
+    }
+
     if (location.pathname.startsWith("/dashboard")) {
       return "dashboard";
     }
@@ -152,6 +210,7 @@ function AppLayout() {
     { id: "setup", label: "Konfiguration", onClick: () => navigate("/setup") },
     ...(games.length > 0 ? [{ id: "games", label: "Spiele", onClick: () => navigate("/games") }] : []),
     ...(canAccessPlan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
+    { id: "sheet", label: "Bewertungsbogen", onClick: () => navigate("/scout-sheet") },
     { id: "dashboard", label: "Dashboard", onClick: () => navigate("/dashboard") },
     { id: "admin", label: "Adapter-Admin", onClick: () => navigate("/admin") },
   ];
@@ -273,6 +332,65 @@ function AppLayout() {
           </div>
         </header>
 
+        {!isDesktopShell ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              padding: "10px 12px",
+              borderBottom: `1px solid ${C.border}`,
+              background: "rgba(6,6,9,0.85)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => navigate("/scout-sheet")}
+              style={{
+                border: currentStep === "sheet" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                borderRadius: 8,
+                minHeight: 34,
+                padding: "6px 10px",
+                fontSize: 12,
+                background: currentStep === "sheet" ? C.greenDim : "rgba(255,255,255,0.03)",
+                color: currentStep === "sheet" ? C.greenLight : C.offWhite,
+              }}
+            >
+              Bewertungsbogen
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard")}
+              style={{
+                border: currentStep === "dashboard" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                borderRadius: 8,
+                minHeight: 34,
+                padding: "6px 10px",
+                fontSize: 12,
+                background: currentStep === "dashboard" ? C.greenDim : "rgba(255,255,255,0.03)",
+                color: currentStep === "dashboard" ? C.greenLight : C.offWhite,
+              }}
+            >
+              Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/admin")}
+              style={{
+                border: currentStep === "admin" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                borderRadius: 8,
+                minHeight: 34,
+                padding: "6px 10px",
+                fontSize: 12,
+                background: currentStep === "admin" ? C.greenDim : "rgba(255,255,255,0.03)",
+                color: currentStep === "admin" ? C.greenLight : C.offWhite,
+              }}
+            >
+              Admin
+            </button>
+          </div>
+        ) : null}
+
         <main className="workspace">
           <div
             aria-live="polite"
@@ -344,6 +462,66 @@ function AppLayout() {
             </div>
           ) : null}
 
+          {latestScheduleNotice ? (
+            <div
+              className="fu2"
+              style={{
+                background: C.warnDim,
+                border: "1px solid rgba(251,191,36,0.3)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                color: C.offWhite,
+                fontSize: 12,
+                marginBottom: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 10,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: C.warn, fontWeight: 700, marginBottom: 2 }}>Spielplanänderung erkannt</div>
+                <div style={{ color: C.offWhite }}>{latestScheduleNotice.message}</div>
+                <div style={{ color: C.grayLight, marginTop: 2 }}>{latestScheduleNotice.detail}</div>
+                {browserSupported && browserPermission === "default" ? (
+                  <button
+                    type="button"
+                    onClick={() => void requestBrowserPermission()}
+                    style={{
+                      marginTop: 8,
+                      border: `1px solid ${C.borderHi}`,
+                      borderRadius: 8,
+                      minHeight: 32,
+                      padding: "4px 10px",
+                      fontSize: 11,
+                      background: "rgba(255,255,255,0.06)",
+                      color: C.offWhite,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Browser-Benachrichtigungen aktivieren
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={dismissLatestNotice}
+                aria-label="Hinweis schließen"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: C.gray,
+                  fontSize: 18,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                x
+              </button>
+            </div>
+          ) : null}
+
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/setup" element={<SetupPage />} />
@@ -352,6 +530,7 @@ function AppLayout() {
                 path="/plan"
                 element={canAccessPlan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
               />
+              <Route path="/scout-sheet" element={<ScoutSheetPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Navigate to="/setup" replace />} />

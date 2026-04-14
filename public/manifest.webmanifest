@@ -1,0 +1,29 @@
+{
+  "name": "ScoutX",
+  "short_name": "ScoutX",
+  "description": "ScoutX ist dein Scouting-Cockpit fuer Jugendspiele inklusive Plan-Historie und Dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#060609",
+  "theme_color": "#060609",
+  "lang": "de-DE",
+  "icons": [
+    {
+      "src": "/scoutx-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/scoutx-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/scoutx-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ]
+}
