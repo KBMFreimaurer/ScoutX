@@ -319,12 +319,11 @@ export function FahrtkostenTabelle({
                           const next = normalizePresenceMinutes(event.target.value);
                           onPresenceChange?.(row.id, next);
                         }}
-                        placeholder="Min"
+                        placeholder=""
                         style={inputStyle}
                         inputMode="numeric"
                         aria-label={`Vor-Ort-Minuten für Spiel ${index + 1}`}
                       />
-                      <span style={{ color: C.gray, fontSize: 12 }}>Min</span>
                     </div>
                   </div>
                 </div>
@@ -387,12 +386,11 @@ export function FahrtkostenTabelle({
                                 const next = normalizePresenceMinutes(event.target.value);
                                 onPresenceChange?.(row.id, next);
                               }}
-                              placeholder="Min"
+                              placeholder=""
                               style={inputStyle}
                               inputMode="numeric"
                               aria-label={`Vor-Ort-Minuten für Spiel ${index + 1}`}
                             />
-                            <span style={{ color: C.gray, fontSize: 12 }}>Min</span>
                           </div>
                           <div style={{ fontSize: 11, color: isRecorded ? C.green : C.gray }}>
                             {isRecorded ? formatPresenceMinutes(normalized) : "nicht erfasst"}
