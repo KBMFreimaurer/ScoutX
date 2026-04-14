@@ -11,6 +11,8 @@ import { PlanProvider } from "./context/PlanContext";
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ default: module.GamesPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
 
@@ -64,6 +66,38 @@ const RAIL_ICONS = {
       <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
   ),
+  dashboard: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="9" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </svg>
+  ),
+  admin: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
 };
 
 function RouteFallback() {
@@ -90,6 +124,14 @@ function AppLayout() {
   const canAccessPlan = Boolean(plan) || hasPlanHistory;
 
   const currentStep = useMemo(() => {
+    if (location.pathname.startsWith("/dashboard")) {
+      return "dashboard";
+    }
+
+    if (location.pathname.startsWith("/admin")) {
+      return "admin";
+    }
+
     if (location.pathname.startsWith("/games")) {
       return "games";
     }
@@ -110,6 +152,8 @@ function AppLayout() {
     { id: "setup", label: "Konfiguration", onClick: () => navigate("/setup") },
     ...(games.length > 0 ? [{ id: "games", label: "Spiele", onClick: () => navigate("/games") }] : []),
     ...(canAccessPlan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
+    { id: "dashboard", label: "Dashboard", onClick: () => navigate("/dashboard") },
+    { id: "admin", label: "Adapter-Admin", onClick: () => navigate("/admin") },
   ];
 
   const liveStatus = err
@@ -187,20 +231,31 @@ function AppLayout() {
           />
 
           <div className="top-strip-actions">
-            <div className="icon-dot">
+            <button
+              type="button"
+              className="icon-dot"
+              onClick={() => navigate("/admin")}
+              aria-label="Adapter-Admin öffnen"
+              style={{
+                color: currentStep === "admin" ? C.green : C.gray,
+                borderColor: currentStep === "admin" ? C.greenBorder : undefined,
+                background: currentStep === "admin" ? C.greenDim : undefined,
+              }}
+            >
               <svg
                 width="14"
                 height="14"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke={C.gray}
+                stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
-            </div>
+            </button>
             <div className="icon-dot">
               <svg
                 width="14"
@@ -297,6 +352,8 @@ function AppLayout() {
                 path="/plan"
                 element={canAccessPlan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
               />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Navigate to="/setup" replace />} />
             </Routes>
           </Suspense>

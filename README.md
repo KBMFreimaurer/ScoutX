@@ -91,6 +91,8 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-14: Neues additives `Dashboard v1` (`/dashboard`) mit Kennzahlen aus der Plan-Historie (Reports, Spiele, Team-Abdeckung, Wochentags-/Monatsaktivität, geschätzte Fahrtkosten) und Direkt-Öffnen historischer Reports.
+- 2026-04-14: Neue additive Adapter-Admin-Seite (`/admin`) mit Status-Check und manuellem Refresh (`/api/admin/status`, `/api/admin/refresh`), ohne Änderungen am Setup/Games/Plan-Hauptfluss.
 - 2026-04-12: Google Maps API-Key ist direkt im Projekt hinterlegt; ENV/Compose bleibt als optionaler Override aktiv.
 - 2026-04-12: Routing nutzt jetzt primär Google Routes API (v2), Legacy-Directions nur noch als Fallback; Geocoding-Fehler zeigen jetzt konkrete Google-Statusmeldungen (z. B. `REQUEST_DENIED`).
 - 2026-04-11: Google-Routing-Scaffolding ergänzt: sichtbarer API-Status im Setup, ENV-Vorlage bereinigt, Dokumentation für Key-Setup ergänzt.
