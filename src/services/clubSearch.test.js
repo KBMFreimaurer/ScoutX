@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchClubSuggestions, resolveClubSearchUrl } from "./clubSearch";
+import { __resetClubSearchCacheForTests, fetchClubSuggestions, resolveClubSearchUrl } from "./clubSearch";
 
 describe("clubSearch resolver", () => {
   it("builds relative club search URL from /api/games", () => {
@@ -22,18 +22,30 @@ describe("clubSearch resolver", () => {
 describe("fetchClubSuggestions", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    __resetClubSearchCacheForTests();
   });
 
-  it("returns normalized unique suggestions", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        clubs: [
-          { name: "MSV Duisburg", logoUrl: "//www.fussball.de/export.media/msv.png", location: "47055 Duisburg" },
-          { name: "MSV Duisburg", logoUrl: "//www.fussball.de/export.media/msv2.png", location: "Dupe" },
-          { name: "Duisburger FV 08", logoUrl: "https://www.fussball.de/export.media/dfv.png" },
-        ],
-      }),
+  it("returns normalized unique suggestions and merges local fallback", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+      const target = String(url || "");
+      if (target.includes("/data/clubs.catalog.json")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clubs: [{ name: "Duisburger Atlas", logoUrl: "", location: "47000 Duisburg" }],
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          clubs: [
+            { name: "MSV Duisburg", logoUrl: "//www.fussball.de/export.media/msv.png", location: "47055 Duisburg" },
+            { name: "MSV Duisburg", logoUrl: "//www.fussball.de/export.media/msv2.png", location: "Dupe" },
+            { name: "Duisburger FV 08", logoUrl: "https://www.fussball.de/export.media/dfv.png" },
+          ],
+        }),
+      });
     });
 
     const result = await fetchClubSuggestions("/api/games", "", "duisburg", 10);
@@ -50,6 +62,12 @@ describe("fetchClubSuggestions", () => {
         location: "",
         link: "",
       },
+      {
+        name: "Duisburger Atlas",
+        logoUrl: "",
+        location: "47000 Duisburg",
+        link: "",
+      },
     ]);
   });
 
@@ -61,8 +79,27 @@ describe("fetchClubSuggestions", () => {
   });
 
   it("returns [] on network error", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+      const target = String(url || "");
+      if (target.includes("/data/clubs.catalog.json")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clubs: [{ name: "Duisburger SV 1900", logoUrl: "", location: "" }],
+          }),
+        });
+      }
+      return Promise.reject(new Error("offline"));
+    });
+
     const result = await fetchClubSuggestions("/api/games", "", "duisburg");
-    expect(result).toEqual([]);
+    expect(result).toEqual([
+      {
+        name: "Duisburger SV 1900",
+        logoUrl: "",
+        location: "",
+        link: "",
+      },
+    ]);
   });
 });

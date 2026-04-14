@@ -1,0 +1,311 @@
+{
+  "updatedAt": "2026-04-14T14:53:41.935Z",
+  "clubs": [
+    {
+      "name": "1. FC Kleve",
+      "location": "47519 Kleve",
+      "logoUrl": "https://www.fussball.de/export.media/-/action/getLogo/format/7/id/00ES8GN8UK0000AHVV0AG08LVUPGND5I",
+      "link": "https://www.fussball.de/verein/1-fc-kleve-63-03-niederrhein/-/id/00ES8GN8UK0000AHVV0AG08LVUPGND5I"
+    },
+    {
+      "name": "Borussia Mönchengladbach (U)",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "DJK Agon 08",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "DJK Lösort-Meiderich",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "DSC Preußen Duisburg",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Duisburger FV 08",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Duisburger SV",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Eintracht Emmerich",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "ETB SW Essen",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Büderich",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Hamminkeln",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Holzheim",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Kray",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Krefeld-Fischeln",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Nettetal",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Sterkrade-Nord",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Tönisvorst",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "FC Viersen",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Fortuna Düsseldorf (U)",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "MSV Duisburg (U)",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Neusser SC",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Rot-Weiss Essen (U)",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "RW Oberhausen (U)",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SC Frintrop",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SC Kalkar",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SC Unterbach",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SF 97/30 Lowick",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SF Hamborn 07",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SG Schermbeck",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Amern",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Büttgen",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Hamborn 07",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Hilden-Nord",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Odenkirchen",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Sonsbeck",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Straelen",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "SV Uedesheim",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TSV Bockum",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TSV Heimaterde",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TuS Hochemmerich",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TuS Korschenbroich",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TuS Osterfeld",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TuS Weeze",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "TuS Xanten",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Uerdingen 05",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "VfB 03 Hilden",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "VfB Bottrop",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "VfB Homberg",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "VfL Rheydt",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "VfL Tönisberg",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    },
+    {
+      "name": "Viktoria Buchholz",
+      "location": "",
+      "logoUrl": "",
+      "link": ""
+    }
+  ]
+}
