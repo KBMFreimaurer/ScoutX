@@ -339,7 +339,7 @@ export function FahrtkostenTabelle({
                   <th style={TH}>Datum</th>
                   <th style={TH}>Spiel</th>
                   <th style={TH}>Status</th>
-                  <th style={{ ...TH, textAlign: "right" }}>Vor Ort</th>
+                  <th style={{ ...TH, textAlign: "right" }}>Vor Ort in Min</th>
                 </tr>
               </thead>
               <tbody>
