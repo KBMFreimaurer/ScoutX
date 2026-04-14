@@ -8,6 +8,7 @@ import { getWeekRange, normalizeAdapterEndpoint, normalizeTeamParameters } from 
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
+const HARD_CODED_ADAPTER_TOKEN = "scoutx-internal-2026";
 const ROMAN_TO_ARABIC = {
   I: "1",
   II: "2",
@@ -132,7 +133,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       fromDate: initialRange.fromDate,
       toDate: initialRange.toDate,
       jugendSubLevels: [],
-      adapterToken: "",
       startLocation: null,
       favorites: [],
       todayIso,
@@ -152,7 +152,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
         fromDate: String(parsed?.fromDate || initialRange.fromDate),
         toDate: String(parsed?.toDate || initialRange.toDate),
         jugendSubLevels: Array.isArray(parsed?.jugendSubLevels) ? parsed.jugendSubLevels : [],
-        adapterToken: String(parsed?.adapterToken || ""),
         startLocation: parsed?.startLocation || null,
         favorites: Array.isArray(parsed?.favorites) ? parsed.favorites : [],
         todayIso,
@@ -177,10 +176,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
     [defaultAdapterEndpoint],
   );
-  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || "").trim();
-  const [adapterToken, setAdapterToken] = useState(() =>
-    String(setupDefaults.adapterToken || adapterTokenDefault).trim(),
-  );
+  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || HARD_CODED_ADAPTER_TOKEN).trim();
+  const [adapterToken, setAdapterToken] = useState(adapterTokenDefault);
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
   const [locationError, setLocationError] = useState("");
@@ -225,7 +222,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
         fromDate,
         toDate,
         jugendSubLevels,
-        adapterToken,
         startLocation,
         favorites: favoriteTeams,
       };
@@ -233,7 +229,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     } catch {
       // localStorage-Fehler sollen Setup nicht blockieren
     }
-  }, [kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, adapterToken, startLocation, favoriteTeams]);
+  }, [kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
@@ -542,7 +538,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onClearAllTeams,
       onSetFromDate,
       onSetToDate,
-      onAdapterTokenChange: setAdapterToken,
       onSetLocationDraft: setLocationDraft,
       onResolveLocation,
       onUseCurrentLocation,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ScoutXProvider } from "../context/ScoutXContext";
@@ -223,18 +223,11 @@ describe("SetupPage", () => {
     expect(screen.getByRole("button", { name: /Spielplan generieren/i })).toBeInTheDocument();
   });
 
-  it("speichert Adapter-Token in Schritt 7 lokal", async () => {
+  it("zeigt in Schritt 7 kein manuelles Adapter-Token-Feld", () => {
     renderSetupPage();
     goToStepWithRequiredSelections(7);
 
-    const tokenInput = screen.getByLabelText(/Adapter-Token/i);
-    fireEvent.change(tokenInput, { target: { value: "secret-123" } });
-    fireEvent.click(screen.getByRole("button", { name: /Token speichern/i }));
-
-    await waitFor(() => {
-      const raw = window.localStorage.getItem(STORAGE_KEYS.setup);
-      const parsed = raw ? JSON.parse(raw) : {};
-      expect(parsed.adapterToken).toBe("secret-123");
-    });
+    expect(screen.queryByLabelText(/Adapter-Token/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Token speichern/i })).not.toBeInTheDocument();
   });
 });

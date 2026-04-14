@@ -454,7 +454,7 @@ describe("data provider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns actionable 401 message when adapter token is missing", async () => {
+  it("returns actionable 401 message for adapter auth mismatch", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -477,7 +477,7 @@ describe("data provider", () => {
         adapterToken: "",
         retryDelaysMs: [],
       }),
-    ).rejects.toThrow("Adapter HTTP 401 (Unauthorized). Bitte Adapter-Token in Schritt 7 setzen.");
+    ).rejects.toThrow("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
   });
 
   it("handles empty csv input gracefully", () => {
