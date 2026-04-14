@@ -13,6 +13,7 @@ services:
       - OLLAMA_HOST=http://localhost:11434/
       - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-}
       - VITE_GOOGLE_MAPS_STRICT=${VITE_GOOGLE_MAPS_STRICT:-true}
+      - VITE_ADAPTER_TOKEN=${ADAPTER_TOKEN:-}
     profiles:
       - dev
 
@@ -24,6 +25,7 @@ services:
       args:
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
         VITE_GOOGLE_MAPS_STRICT: ${VITE_GOOGLE_MAPS_STRICT:-true}
+        VITE_ADAPTER_TOKEN: ${ADAPTER_TOKEN:-}
     network_mode: "host"
     environment:
       - OLLAMA_HOST=http://localhost:11434/
@@ -51,9 +53,9 @@ services:
       - ADAPTER_AUTO_REFRESH_WEEK=true
       - ADAPTER_WEEK_REFRESH_TTL_SEC=300
       - ADAPTER_EXPORT_COMMAND=node /app/scripts/fetch-week.fussballde.mjs
+      - ADAPTER_TOKEN=${ADAPTER_TOKEN:-scoutx-internal-2026}
       # - ADAPTER_WEEK_SOURCE_URL_TEMPLATE=https://example.com/api/games?from={fromDate}&to={toDate}&kreis={kreisId}&jugend={jugendId}
       # - ADAPTER_WEEK_SOURCE_TOKEN=change-me
-      # - ADAPTER_TOKEN=change-me
       # - ADAPTER_REMOTE_URL=https://example.com/api/games
       # - ADAPTER_REMOTE_TOKEN=change-me
     volumes:
