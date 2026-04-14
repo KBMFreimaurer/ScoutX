@@ -49,6 +49,35 @@ const EXPORT_COMMAND =
 const WEEK_COMMAND_TIMEOUT_MS = Number(process.env.ADAPTER_WEEK_COMMAND_TIMEOUT_MS || 30000);
 const WEEK_EXTERNAL_TIMEOUT_MS = 30000;
 
+const RATE_LIMIT_WINDOW_MS = Number(process.env.ADAPTER_RATE_LIMIT_WINDOW_MS || 60000);
+const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
+
+const rateLimitStore = new Map();
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = rateLimitStore.get(ip);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    entry = { windowStart: now, count: 1 };
+    rateLimitStore.set(ip, entry);
+    return true;
+  }
+
+  entry.count += 1;
+  return entry.count <= RATE_LIMIT_MAX;
+}
+
+// Cleanup stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitStore) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitStore.delete(ip);
+    }
+  }
+}, 300000);
+
 const state = {
   games: [],
   meta: null,
@@ -415,8 +444,6 @@ function getHealthPayload() {
     count: state.games.length,
     lastRefreshReason: state.lastRefreshReason,
     lastError: state.lastError,
-    storeFile: STORE_FILE,
-    importDir: IMPORT_DIR,
     remoteConfigured: Boolean(REMOTE_URL),
     authEnabled: Boolean(AUTH_TOKEN),
     refreshIntervalSec: REFRESH_INTERVAL_SEC,
@@ -438,11 +465,17 @@ function buildAdminMeta() {
 const server = createServer(async (req, res) => {
   const origin = req.headers.origin || "";
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const clientIp = req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown";
 
   if (req.method === "OPTIONS") {
     setCorsHeaders(res, origin);
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  if (url.pathname !== "/health" && !checkRateLimit(clientIp)) {
+    sendJson(res, 429, { ok: false, error: "Zu viele Anfragen. Bitte später erneut versuchen." }, origin);
     return;
   }
 
@@ -498,7 +531,8 @@ const server = createServer(async (req, res) => {
         origin,
       );
     } catch (error) {
-      sendJson(res, 400, { ok: false, error: error.message || "Unbekannter Fehler" }, origin);
+      console.error("[adapter] /api/games error:", error.message || error);
+      sendJson(res, 400, { ok: false, error: "Ungültige Anfrage." }, origin);
     }
 
     return;
@@ -514,7 +548,8 @@ const server = createServer(async (req, res) => {
       await refreshData("admin-refresh");
       sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin);
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message || "Refresh fehlgeschlagen." }, origin);
+      console.error("[adapter] /api/admin/refresh error:", error.message || error);
+      sendJson(res, 500, { ok: false, error: "Refresh fehlgeschlagen." }, origin);
     }
     return;
   }
@@ -562,7 +597,8 @@ const server = createServer(async (req, res) => {
 
       sendJson(res, 200, { ok: true, imported: importedGames.length, total: merged.length }, origin);
     } catch (error) {
-      sendJson(res, 400, { ok: false, error: error.message || "Import fehlgeschlagen." }, origin);
+      console.error("[adapter] /api/admin/import error:", error.message || error);
+      sendJson(res, 400, { ok: false, error: "Import fehlgeschlagen." }, origin);
     }
 
     return;
