@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
@@ -126,7 +126,15 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     const todayIso = new Date().toISOString().split("T")[0];
     const initialRange = getWeekRange(todayIso);
 
-    const fallback = {
+    // Wizard startet bei jedem Reload mit leeren Feldern.
+    // Vorherige Eingaben aus dem localStorage werden bewusst nicht wiederhergestellt.
+    try {
+      window.localStorage.removeItem(STORAGE_KEYS.setup);
+    } catch {
+      // localStorage kann im Browser-Kontext blockiert sein.
+    }
+
+    return {
       kreisId: "",
       jugendId: "",
       selTeams: [],
@@ -137,28 +145,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       favorites: [],
       todayIso,
     };
-
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEYS.setup);
-      if (!raw) {
-        return fallback;
-      }
-
-      const parsed = JSON.parse(raw);
-      return {
-        kreisId: String(parsed?.kreisId || ""),
-        jugendId: String(parsed?.jugendId || ""),
-        selTeams: Array.isArray(parsed?.selTeams) ? parsed.selTeams : [],
-        fromDate: String(parsed?.fromDate || initialRange.fromDate),
-        toDate: String(parsed?.toDate || initialRange.toDate),
-        jugendSubLevels: Array.isArray(parsed?.jugendSubLevels) ? parsed.jugendSubLevels : [],
-        startLocation: parsed?.startLocation || null,
-        favorites: Array.isArray(parsed?.favorites) ? parsed.favorites : [],
-        todayIso,
-      };
-    } catch {
-      return fallback;
-    }
   });
 
   const width = useWindowWidth();
@@ -212,24 +198,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    try {
-      const persistData = {
-        kreisId,
-        jugendId,
-        selTeams: selectedTeams,
-        fromDate,
-        toDate,
-        jugendSubLevels,
-        startLocation,
-        favorites: favoriteTeams,
-      };
-      window.localStorage.setItem(STORAGE_KEYS.setup, JSON.stringify(persistData));
-    } catch {
-      // localStorage-Fehler sollen Setup nicht blockieren
-    }
-  }, [kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
   const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);

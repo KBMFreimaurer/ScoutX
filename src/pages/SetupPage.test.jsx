@@ -143,7 +143,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("stellt persistierte localStorage-Defaults nach Reload wieder her", () => {
+  it("ignoriert persistierte Wizard-Daten und startet bei Reload leer", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -157,14 +157,16 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    // Nach Reload sollten die persistierten Werte wiederhergestellt sein
-    // Der Kreis Duisburg sollte bereits ausgewählt sein (aria-pressed="true")
+    // Nach Reload darf kein Kreis vorausgewählt sein
     const duisburgButton = screen.getByLabelText(/Kreis Duisburg auswählen/i);
-    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
-    
-    // Der Next-Button sollte aktiv sein, da Kreis bereits gewählt ist
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "false");
+
+    // Der Next-Button muss deaktiviert sein, weil noch keine Auswahl getroffen wurde
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).not.toBeDisabled();
+    expect(nextButton).toBeDisabled();
+
+    // Der alte localStorage-Eintrag wurde geleert
+    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toBeNull();
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {
