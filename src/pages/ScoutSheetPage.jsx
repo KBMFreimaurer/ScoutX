@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { STORAGE_KEYS } from "../config/storage";
 import { useScoutX } from "../context/ScoutXContext";
 import { fetchClubSuggestions } from "../services/clubSearch";
+import { buildPlayersCsv, buildPlayersJson, triggerDownload } from "../services/playerExport";
 import { C } from "../styles/theme";
 
 const MAX_PROFILE_IMAGE_EDGE = 320;
@@ -390,6 +391,26 @@ function emptyForm() {
   };
 }
 
+function exportDateStamp() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function confirmAction(message) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") {
+    return true;
+  }
+
+  try {
+    return window.confirm(message);
+  } catch {
+    return true;
+  }
+}
+
 export function ScoutSheetPage() {
   const { isMobile, games, planHistory, activeTeams, favorites, adapterEndpoint, adapterToken } = useScoutX();
   const [entries, setEntries] = useState(() => readPlayerSheets());
@@ -673,10 +694,41 @@ export function ScoutSheetPage() {
   };
 
   const onDelete = (entryId) => {
+    const shouldDelete = confirmAction("Spieler wirklich löschen?");
+    if (!shouldDelete) {
+      return;
+    }
+
     setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
     setForm((prev) => (prev.id === entryId ? emptyForm() : prev));
     setError("");
     setNotice("Spieler wurde aus dem Bewertungsbogen entfernt.");
+  };
+
+  const onExportPlayers = (format) => {
+    if (entries.length === 0) {
+      setError("Es sind noch keine Spieler für den Export vorhanden.");
+      setNotice("");
+      return;
+    }
+
+    const dateStamp = exportDateStamp();
+    const isCsv = format === "csv";
+    const content = isCsv ? buildPlayersCsv(entries) : buildPlayersJson(entries);
+    const success = triggerDownload({
+      filename: isCsv ? `scoutx-spieler-${dateStamp}.csv` : `scoutx-spieler-${dateStamp}.json`,
+      content,
+      mimeType: isCsv ? "text/csv;charset=utf-8" : "application/json;charset=utf-8",
+    });
+
+    if (!success) {
+      setError("Export konnte nicht gestartet werden.");
+      setNotice("");
+      return;
+    }
+
+    setError("");
+    setNotice(isCsv ? "CSV-Export wurde gestartet." : "JSON-Export wurde gestartet.");
   };
 
   const onSelectProfileImage = async (event) => {
@@ -1121,8 +1173,33 @@ export function ScoutSheetPage() {
           padding: isMobile ? 12 : 16,
         }}
       >
-        <div style={{ color: C.offWhite, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
-          Angelegte Spieler · <span style={{ color: C.grayLight, fontWeight: 600 }}>{playerCountLabel}</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: isMobile ? "stretch" : "center",
+            gap: 8,
+            flexDirection: isMobile ? "column" : "row",
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ color: C.offWhite, fontSize: 14, fontWeight: 700 }}>
+            Angelegte Spieler · <span style={{ color: C.grayLight, fontWeight: 600 }}>{playerCountLabel}</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <GhostButton
+              onClick={() => onExportPlayers("csv")}
+              style={{ minHeight: 34, padding: "6px 10px", fontSize: 12, minWidth: isMobile ? "100%" : "auto" }}
+            >
+              CSV exportieren
+            </GhostButton>
+            <GhostButton
+              onClick={() => onExportPlayers("json")}
+              style={{ minHeight: 34, padding: "6px 10px", fontSize: 12, minWidth: isMobile ? "100%" : "auto" }}
+            >
+              JSON exportieren
+            </GhostButton>
+          </div>
         </div>
 
         {entries.length === 0 ? (

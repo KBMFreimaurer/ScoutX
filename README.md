@@ -92,6 +92,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-15: Scout-Bewertungsbogen mit CSV/JSON-Export erweitert, Löschaktionen (Spieler + Plan-Historie) um Bestätigungsdialoge abgesichert und Dashboard bei niedriger Distanz-Abdeckung um einen Warnhinweis ergänzt.
 - 2026-04-14: Scout-Bewertungsbogen ergänzt (`/scout-sheet`), mobil-optimiert mit lokal gespeicherten Spielerprofilen (Name, Geburtsdatum, Position, manuelle Stärken-Notiz).
 - 2026-04-14: Benachrichtigungen bei Spielplanänderungen ergänzt: In-App-Hinweis bei erkannten Adapter-Planänderungen plus optionale Browser-Benachrichtigung nach Freigabe.
 - 2026-04-14: PWA-Grundlage ergänzt (`manifest.webmanifest`, Service Worker, Produktions-Registrierung), sodass ScoutX installierbar ist und bestehende Pläne/Plan-Historie nach Erstladung auch offline lesbar bleiben.

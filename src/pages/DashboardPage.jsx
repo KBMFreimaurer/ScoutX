@@ -159,6 +159,24 @@ export function DashboardPage() {
             />
           </section>
 
+          {model.summary.lowDistanceCoverage ? (
+            <section
+              style={{
+                border: `1px solid ${C.warnBorder || "rgba(245,158,11,0.35)"}`,
+                borderRadius: 12,
+                background: C.warnDim || "rgba(245,158,11,0.12)",
+                padding: "10px 12px",
+                marginBottom: 14,
+              }}
+            >
+              <div style={{ color: C.warn, fontSize: 12, fontWeight: 700 }}>Hinweis zur Distanz-Abdeckung</div>
+              <div style={{ marginTop: 4, color: C.grayLight, fontSize: 12, lineHeight: 1.5 }}>
+                Nur {formatNumber(model.summary.distanceCoveragePct, 1)}% der Spiele haben Distanzdaten. Fahrkosten und
+                Gesamtkilometer sind deshalb nur eingeschränkt belastbar.
+              </div>
+            </section>
+          ) : null}
+
           <section
             style={{
               display: "grid",

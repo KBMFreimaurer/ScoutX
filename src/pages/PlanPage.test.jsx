@@ -52,6 +52,7 @@ function createBaseContext(overrides = {}) {
 describe("PlanPage", () => {
   beforeEach(() => {
     mockedUseScoutX.mockReset();
+    vi.restoreAllMocks();
   });
 
   it("zeigt den Plan-Text", () => {
@@ -177,5 +178,53 @@ describe("PlanPage", () => {
     fireEvent.click(openButton);
 
     expect(onOpenPlanHistory).toHaveBeenCalledWith("hist-1");
+  });
+
+  it("fragt vor dem Leeren der Historie nach Bestätigung", () => {
+    const onClearPlanHistory = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        planHistory: [
+          {
+            id: "hist-1",
+            createdAt: "2026-04-13T10:20:00.000Z",
+            meta: { kreisLabel: "Duisburg", jugendLabel: "D-Jugend", fromDate: "2026-04-10", toDate: "2026-04-13" },
+          },
+        ],
+        onClearPlanHistory,
+      }),
+    );
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Historie leeren/i }));
+
+    expect(onClearPlanHistory).not.toHaveBeenCalled();
+  });
+
+  it("fragt vor dem Entfernen eines historischen Plans nach Bestätigung", () => {
+    const onDeletePlanHistory = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        planHistory: [
+          {
+            id: "hist-1",
+            createdAt: "2026-04-13T10:20:00.000Z",
+            meta: { kreisLabel: "Duisburg", jugendLabel: "D-Jugend", fromDate: "2026-04-10", toDate: "2026-04-13" },
+          },
+        ],
+        onDeletePlanHistory,
+      }),
+    );
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Historischen Plan .* entfernen/i }));
+
+    expect(onDeletePlanHistory).not.toHaveBeenCalled();
   });
 });

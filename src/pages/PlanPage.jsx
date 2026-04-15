@@ -47,6 +47,18 @@ function isSamePresenceMap(left, right) {
   return true;
 }
 
+function confirmAction(message) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") {
+    return true;
+  }
+
+  try {
+    return window.confirm(message);
+  } catch {
+    return true;
+  }
+}
+
 export function PlanPage() {
   const {
     games,
@@ -118,6 +130,22 @@ export function PlanPage() {
   });
   const historyEntries = useMemo(() => (Array.isArray(planHistory) ? planHistory : []), [planHistory]);
   const activeHistoryMeta = activeHistoryEntry?.meta && typeof activeHistoryEntry.meta === "object" ? activeHistoryEntry.meta : null;
+
+  const handleClearPlanHistory = () => {
+    const shouldClear = confirmAction("Plan-Historie wirklich vollständig löschen?");
+    if (!shouldClear) {
+      return;
+    }
+    onClearPlanHistory();
+  };
+
+  const handleDeletePlanHistory = (entryId) => {
+    const shouldDelete = confirmAction("Diesen historischen Plan wirklich entfernen?");
+    if (!shouldDelete) {
+      return;
+    }
+    onDeletePlanHistory(entryId);
+  };
   const displayJugendLabel = String(activeHistoryMeta?.jugendLabel || jugend?.label || "").trim();
   const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreis?.label || "").trim();
   const effectiveScoutName = String(activeHistoryMeta?.scoutName || scoutName || "").trim();
@@ -422,7 +450,7 @@ export function PlanPage() {
             <div style={{ fontSize: 12, color: C.offWhite, fontWeight: 700 }}>Plan-Historie</div>
             <button
               type="button"
-              onClick={onClearPlanHistory}
+              onClick={handleClearPlanHistory}
               style={{
                 fontSize: 11,
                 border: "none",
@@ -486,7 +514,7 @@ export function PlanPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDeletePlanHistory(entry.id)}
+                    onClick={() => handleDeletePlanHistory(entry.id)}
                     aria-label={`Historischen Plan ${createdAtLabel} entfernen`}
                     style={{
                       border: "none",

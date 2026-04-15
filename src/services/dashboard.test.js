@@ -87,6 +87,7 @@ describe("buildDashboardModel", () => {
     expect(model.summary.withDistanceCount).toBe(2);
     expect(model.summary.withoutDistanceCount).toBe(1);
     expect(model.summary.distanceCoveragePct).toBe(66.7);
+    expect(model.summary.lowDistanceCoverage).toBe(false);
 
     expect(model.topTeams).toEqual([
       { team: "FC C", count: 1 },
@@ -200,8 +201,30 @@ describe("buildDashboardModel", () => {
     expect(model.summary.gameCount).toBe(0);
     expect(model.summary.totalDistanceKm).toBe(0);
     expect(model.summary.estimatedCostEur).toBe(0);
+    expect(model.summary.lowDistanceCoverage).toBe(false);
     expect(model.topTeams).toEqual([]);
     expect(model.latestReports).toEqual([]);
     expect(model.weekdayActivity).toHaveLength(7);
+  });
+
+  it("flags low distance coverage when less than 30 percent have distance", () => {
+    const history = [
+      {
+        id: "plan-1",
+        createdAt: "2026-04-01T12:00:00.000Z",
+        games: [
+          { id: "g-1", date: "2026-04-01", home: "A", away: "B", distanceKm: 10 },
+          { id: "g-2", date: "2026-04-02", home: "C", away: "D" },
+          { id: "g-3", date: "2026-04-03", home: "E", away: "F" },
+          { id: "g-4", date: "2026-04-04", home: "G", away: "H" },
+          { id: "g-5", date: "2026-04-05", home: "I", away: "J" },
+        ],
+      },
+    ];
+
+    const model = buildDashboardModel(history);
+
+    expect(model.summary.distanceCoveragePct).toBe(20);
+    expect(model.summary.lowDistanceCoverage).toBe(true);
   });
 });

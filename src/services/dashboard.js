@@ -157,6 +157,9 @@ export function buildDashboardModel(planHistory, options = {}) {
     : 0.3;
   const topTeamLimit = Number.isFinite(options?.topTeamLimit) ? Math.max(1, Number(options.topTeamLimit)) : 8;
   const monthLimit = Number.isFinite(options?.monthLimit) ? Math.max(1, Number(options.monthLimit)) : 6;
+  const lowCoverageThreshold = Number.isFinite(options?.lowCoverageThreshold)
+    ? Math.max(0, Math.min(100, Number(options.lowCoverageThreshold)))
+    : 30;
   const requestedMonthKey = normalizeMonthKey(options?.monthKey);
   const entries = (Array.isArray(planHistory) ? planHistory : [])
     .filter((entry) => entry && typeof entry === "object")
@@ -279,6 +282,8 @@ export function buildDashboardModel(planHistory, options = {}) {
     .map((monthKey) => ({ monthKey, count: fullMonthCounts[monthKey] || 0 }))
     .sort((left, right) => right.monthKey.localeCompare(left.monthKey));
 
+  const distanceCoveragePct = gameCount > 0 ? roundTo((withDistanceCount / gameCount) * 100, 1) : 0;
+
   return {
     activeMonthKey,
     monthFilterEnabled: hasMonthFilter,
@@ -294,7 +299,8 @@ export function buildDashboardModel(planHistory, options = {}) {
       estimatedCostEur: roundTo(estimatedCostEur, 2),
       withDistanceCount,
       withoutDistanceCount,
-      distanceCoveragePct: gameCount > 0 ? roundTo((withDistanceCount / gameCount) * 100, 1) : 0,
+      distanceCoveragePct,
+      lowDistanceCoverage: gameCount > 0 && distanceCoveragePct < lowCoverageThreshold,
     },
     topTeams,
     weekdayActivity,
