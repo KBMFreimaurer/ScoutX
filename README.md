@@ -92,6 +92,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-17: App-Robustheit/UX verbessert: `AppLayout` zusätzlich mit `ErrorBoundary` abgesichert, Lazy-Route-Fallback auf `SkeletonLoader` umgestellt und Service-Worker-Update-Erkennung mit Event-Hook (`scoutx:service-worker-update`) + optionaler Aktivierung ergänzt.
 - 2026-04-15: Scout-Bewertungsbogen mit CSV/JSON-Export erweitert, Löschaktionen (Spieler + Plan-Historie) um Bestätigungsdialoge abgesichert und Dashboard bei niedriger Distanz-Abdeckung um einen Warnhinweis ergänzt.
 - 2026-04-14: Scout-Bewertungsbogen ergänzt (`/scout-sheet`), mobil-optimiert mit lokal gespeicherten Spielerprofilen (Name, Geburtsdatum, Position, manuelle Stärken-Notiz).
 - 2026-04-14: Benachrichtigungen bei Spielplanänderungen ergänzt: In-App-Hinweis bei erkannten Adapter-Planänderungen plus optionale Browser-Benachrichtigung nach Freigabe.

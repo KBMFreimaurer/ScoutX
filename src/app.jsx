@@ -1,6 +1,8 @@
 import { Suspense, lazy, useMemo } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SkeletonLoader } from "./components/SkeletonLoader";
 import { StepNav } from "./components/StepNav";
 import { C, GCSS } from "./styles/theme";
 import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
@@ -121,19 +123,7 @@ const RAIL_ICONS = {
 };
 
 function RouteFallback() {
-  return (
-    <div
-      style={{
-        padding: "24px 0",
-        color: C.gray,
-        fontSize: 13,
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-      }}
-    >
-      Seite wird geladen...
-    </div>
-  );
+  return <SkeletonLoader rows={4} />;
 }
 
 function AppLayout() {
@@ -571,7 +561,9 @@ export default function App() {
         <GamesProvider>
           <PlanProvider>
             <ScoutXProvider>
-              <AppLayout />
+              <ErrorBoundary>
+                <AppLayout />
+              </ErrorBoundary>
             </ScoutXProvider>
           </PlanProvider>
         </GamesProvider>
