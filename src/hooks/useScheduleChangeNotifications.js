@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildScheduleFingerprint,
   buildScheduleScopeKey,
+  calculateScheduleDelta,
   readScheduleWatchState,
   writeScheduleWatchState,
 } from "../services/scheduleChanges";
@@ -114,6 +115,8 @@ export function useScheduleChangeNotifications({
       return;
     }
 
+    const scheduleDelta = calculateScheduleDelta(previousFingerprint, scheduleFingerprint);
+
     watchState[scopeKey] = scheduleFingerprint;
     watchStateRef.current = watchState;
     writeScheduleWatchState(watchState);
@@ -123,10 +126,13 @@ export function useScheduleChangeNotifications({
       createdAt: new Date().toISOString(),
       scopeKey,
       gameCount: safeGames.length,
+      delta: scheduleDelta,
       message: `Spielplanänderung erkannt für ${String(jugendLabel || "Jugend").trim() || "Jugend"} · ${String(
         kreisLabel || "Kreis",
       ).trim() || "Kreis"}`,
-      detail: `${formatDateText(fromDate)} bis ${formatDateText(toDate || fromDate)}`,
+      detail: `${formatDateText(fromDate)} bis ${formatDateText(toDate || fromDate)} · +${scheduleDelta.added} / -${
+        scheduleDelta.removed
+      } Spiele`,
     };
 
     setLatestNotice(notice);

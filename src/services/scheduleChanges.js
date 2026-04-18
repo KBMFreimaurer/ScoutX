@@ -2,6 +2,19 @@ import { STORAGE_KEYS } from "../config/storage";
 
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
+function isValidCalendarDateParts(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const candidate = new Date(year, month - 1, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day;
+}
+
 function normalizeLookup(value) {
   return String(value || "")
     .toLowerCase()
@@ -23,11 +36,18 @@ function normalizeIsoDate(value) {
   }
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const [year, month, day] = text.split("-").map(Number);
+    if (!isValidCalendarDateParts(year, month, day)) {
+      return "";
+    }
     return text;
   }
 
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
     const [day, month, year] = text.split(".").map(Number);
+    if (!isValidCalendarDateParts(year, month, day)) {
+      return "";
+    }
     return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
@@ -56,6 +76,39 @@ function normalizeGameSignature(game) {
     normalizeTime(game?.time),
     normalizeVenue(game?.venue),
   ].join("|");
+}
+
+function splitFingerprintLines(value) {
+  return String(value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+export function calculateScheduleDelta(previousFingerprint, nextFingerprint) {
+  const previousSet = new Set(splitFingerprintLines(previousFingerprint));
+  const nextSet = new Set(splitFingerprintLines(nextFingerprint));
+
+  let added = 0;
+  let removed = 0;
+
+  for (const line of nextSet) {
+    if (!previousSet.has(line)) {
+      added += 1;
+    }
+  }
+
+  for (const line of previousSet) {
+    if (!nextSet.has(line)) {
+      removed += 1;
+    }
+  }
+
+  return {
+    added,
+    removed,
+    changed: added > 0 || removed > 0,
+  };
 }
 
 export function buildScheduleFingerprint(games) {

@@ -92,6 +92,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-18: Spielplan-Änderungshinweise zeigen jetzt Delta-Werte (`+neu / -entfallen`) pro Scope, damit Änderungen schneller einordenbar sind; Schedule-Utils validieren Datumsgrenzen strikter.
 - 2026-04-18: Adapter-Datumsparser validiert Kalenderdaten jetzt strikt (z. B. `31.02.2026` wird verworfen statt still auf März zu rutschen), inkl. zusätzlicher Tests für ungültige Datumswerte.
 - 2026-04-17: App-Robustheit/UX verbessert: `AppLayout` zusätzlich mit `ErrorBoundary` abgesichert, Lazy-Route-Fallback auf `SkeletonLoader` umgestellt und Service-Worker-Update-Erkennung mit Event-Hook (`scoutx:service-worker-update`) + optionaler Aktivierung ergänzt.
 - 2026-04-15: Scout-Bewertungsbogen mit CSV/JSON-Export erweitert, Löschaktionen (Spieler + Plan-Historie) um Bestätigungsdialoge abgesichert und Dashboard bei niedriger Distanz-Abdeckung um einen Warnhinweis ergänzt.

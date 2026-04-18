@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScheduleFingerprint, buildScheduleScopeKey } from "./scheduleChanges";
+import { buildScheduleFingerprint, buildScheduleScopeKey, calculateScheduleDelta } from "./scheduleChanges";
 
 describe("buildScheduleFingerprint", () => {
   it("is stable regardless of game order and ignores non-schedule fields", () => {
@@ -84,5 +84,48 @@ describe("buildScheduleScopeKey", () => {
 
   it("returns empty string when required identifiers are missing", () => {
     expect(buildScheduleScopeKey({ kreisId: "", jugendId: "d-jugend", fromDate: "2026-04-20", toDate: "" })).toBe("");
+  });
+
+  it("rejects invalid fromDate and falls back invalid toDate to fromDate", () => {
+    expect(
+      buildScheduleScopeKey({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "31.02.2026",
+        toDate: "2026-04-26",
+      }),
+    ).toBe("");
+
+    expect(
+      buildScheduleScopeKey({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-04-20",
+        toDate: "31.02.2026",
+      }),
+    ).toBe("duisburg|d-jugend|2026-04-20|2026-04-20");
+  });
+});
+
+describe("calculateScheduleDelta", () => {
+  it("counts added and removed schedule signatures", () => {
+    const previous = ["a", "b", "b", ""].join("\n");
+    const next = ["b", "c"].join("\n");
+
+    expect(calculateScheduleDelta(previous, next)).toEqual({
+      added: 1,
+      removed: 1,
+      changed: true,
+    });
+  });
+
+  it("returns unchanged for identical fingerprints", () => {
+    const fingerprint = ["a", "b"].join("\n");
+
+    expect(calculateScheduleDelta(fingerprint, fingerprint)).toEqual({
+      added: 0,
+      removed: 0,
+      changed: false,
+    });
   });
 });
