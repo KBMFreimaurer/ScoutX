@@ -115,6 +115,65 @@ describe("data provider", () => {
     expect(result.games[0].home).toBe("Team X");
   });
 
+  it("faellt auf benachbarte Woche zurück, wenn der gewählte Zeitraum leer ist", async () => {
+    const fetchMock = vi.fn(async (_input, init) => {
+      const payload = JSON.parse(String(init?.body || "{}"));
+      const fromDate = String(payload.fromDate || "");
+      const toDate = String(payload.toDate || "");
+
+      if (fromDate === "2026-05-01" && toDate === "2026-05-01") {
+        return {
+          ok: true,
+          json: async () => ({ games: [] }),
+        };
+      }
+
+      if (fromDate === "2026-04-27" && toDate === "2026-05-03") {
+        return {
+          ok: true,
+          json: async () => ({
+            games: [
+              {
+                date: "2026-05-02",
+                time: "12:30",
+                home: "Team Fallback A",
+                away: "Team Fallback B",
+                venue: "Sportpark",
+                km: 11,
+                kreisId: "duesseldorf",
+                jugendId: "e-jugend",
+              },
+            ],
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ games: [] }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-01",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].home).toBe("Team Fallback A");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("matches adapter team names with fuzzy variants", async () => {
     vi.stubGlobal(
       "fetch",
