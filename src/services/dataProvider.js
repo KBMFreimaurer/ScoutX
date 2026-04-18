@@ -254,6 +254,40 @@ function normalizeRequestedDateRange(fromDate, toDate) {
   };
 }
 
+function appendUniqueRange(candidates, fromDate, toDate) {
+  const from = String(fromDate || "").trim();
+  const to = String(toDate || "").trim();
+  if (!from || !to) {
+    return;
+  }
+
+  const key = `${from}|${to}`;
+  if (candidates.some((entry) => `${entry.fromDate}|${entry.toDate}` === key)) {
+    return;
+  }
+
+  candidates.push({ fromDate: from, toDate: to });
+}
+
+function buildAdapterRangeCandidates(requestedRange) {
+  const safeRange = normalizeRequestedDateRange(requestedRange?.fromDate, requestedRange?.toDate);
+  const baseWeek = getWeekRange(safeRange.fromDate);
+  const candidates = [];
+
+  appendUniqueRange(candidates, safeRange.fromDate, safeRange.toDate);
+  appendUniqueRange(candidates, baseWeek.fromDate, baseWeek.toDate);
+
+  const previousWeekStart = toIsoDate(addDays(baseWeek.fromDate, -7));
+  const nextWeekStart = toIsoDate(addDays(baseWeek.fromDate, 7));
+  const previousWeek = getWeekRange(previousWeekStart);
+  const nextWeek = getWeekRange(nextWeekStart);
+
+  appendUniqueRange(candidates, previousWeek.fromDate, previousWeek.toDate);
+  appendUniqueRange(candidates, nextWeek.fromDate, nextWeek.toDate);
+
+  return candidates;
+}
+
 export function formatDate(dateValue) {
   return dateValue.toLocaleDateString("de-DE", {
     weekday: "short",
@@ -752,65 +786,78 @@ async function fetchGamesAdapter(params) {
   }
 
   const requestedRange = normalizeRequestedDateRange(params.fromDate, params.toDate);
+  const rangeCandidates = buildAdapterRangeCandidates(requestedRange);
   const endpointCandidates = buildAdapterEndpointCandidates(adapterEndpoint);
   let payload = null;
+  let usedRange = requestedRange;
   let connectionError = null;
+  let sawEmptyResponse = false;
 
-  for (let index = 0; index < endpointCandidates.length; index += 1) {
+  endpointLoop: for (let index = 0; index < endpointCandidates.length; index += 1) {
     const endpoint = endpointCandidates[index];
 
-    try {
-      const response = await fetchWithTimeout(
-        endpoint,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            kreisId: params.kreisId,
-            jugendId: params.jugendId,
-            fromDate: requestedRange.fromDate,
-            toDate: requestedRange.toDate,
-            teams: params.teams,
-            ensureWeekData: true,
-          }),
-        },
-        ADAPTER_TIMEOUT_MS,
-        "Adapter",
-      );
+    for (const candidateRange of rangeCandidates) {
+      try {
+        const response = await fetchWithTimeout(
+          endpoint,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              kreisId: params.kreisId,
+              jugendId: params.jugendId,
+              fromDate: candidateRange.fromDate,
+              toDate: candidateRange.toDate,
+              teams: params.teams,
+              ensureWeekData: true,
+            }),
+          },
+          ADAPTER_TIMEOUT_MS,
+          "Adapter",
+        );
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
+          }
+          throw new Error(`Adapter HTTP ${response.status}`);
         }
-        throw new Error(`Adapter HTTP ${response.status}`);
-      }
 
-      payload = await response.json();
-      connectionError = null;
-      break;
-    } catch (error) {
-      if (isAdapterConnectivityError(error) && index < endpointCandidates.length - 1) {
-        connectionError = error;
-        continue;
+        const nextPayload = await response.json();
+        const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
+
+        if (!nextRawGames.length) {
+          sawEmptyResponse = true;
+          continue;
+        }
+
+        payload = nextPayload;
+        usedRange = candidateRange;
+        connectionError = null;
+        break endpointLoop;
+      } catch (error) {
+        if (isAdapterConnectivityError(error) && index < endpointCandidates.length - 1) {
+          connectionError = error;
+          continue endpointLoop;
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
   if (!payload) {
+    if (sawEmptyResponse) {
+      throw new Error("Adapter lieferte keine Spiele.");
+    }
     const candidateInfo = endpointCandidates.length > 1 ? ` (getestet: ${endpointCandidates.join(", ")})` : "";
     throw new Error(`${connectionError?.message || "Adapter nicht erreichbar."}${candidateInfo}`);
   }
-
   const rawGames = Array.isArray(payload) ? payload : payload.games ?? [];
-  if (!rawGames.length) {
-    throw new Error("Adapter lieferte keine Spiele.");
-  }
 
   const report = parseUploadedGamesReport(JSON.stringify(rawGames), "adapter.json", {
     kreisId: params.kreisId,
     jugendId: params.jugendId,
-    fromDate: params.fromDate,
+    fromDate: usedRange.fromDate,
     turnier: params.turnier,
     allowUnknownTime: true,
     defaultFallbackTime: "--:--",
@@ -818,6 +865,8 @@ async function fetchGamesAdapter(params) {
 
   const broadFilteredGames = filterGamesBySelection(report.games, {
     ...params,
+    fromDate: usedRange.fromDate,
+    toDate: usedRange.toDate,
     teams: [],
   });
 
