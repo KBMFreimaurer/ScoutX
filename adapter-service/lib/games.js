@@ -1,6 +1,19 @@
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
 
+function isValidCalendarDateParts(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const candidate = new Date(year, month - 1, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day;
+}
+
 function parseDate(dateText) {
   if (!dateText || typeof dateText !== "string") {
     return null;
@@ -9,11 +22,18 @@ function parseDate(dateText) {
   const trimmed = dateText.trim();
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return new Date(`${trimmed}T00:00:00`);
+    const [year, month, day] = trimmed.split("-").map(Number);
+    if (!isValidCalendarDateParts(year, month, day)) {
+      return null;
+    }
+    return new Date(year, month - 1, day);
   }
 
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
     const [day, month, year] = trimmed.split(".").map(Number);
+    if (!isValidCalendarDateParts(year, month, day)) {
+      return null;
+    }
     return new Date(year, month - 1, day);
   }
 

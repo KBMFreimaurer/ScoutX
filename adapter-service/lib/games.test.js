@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames, normalizeTeam } from "./games";
+import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames, normalizeTeam, parseDate } from "./games";
 
 describe("adapter games lib", () => {
   it("normalizes mixed payloads", () => {
@@ -163,5 +163,21 @@ describe("adapter games lib", () => {
 
     expect(games).toHaveLength(1);
     expect(games[0].date).toBe("2026-04-07");
+  });
+
+  it("rejects invalid calendar dates", () => {
+    expect(parseDate("2026-02-31")).toBeNull();
+    expect(parseDate("31.02.2026")).toBeNull();
+
+    const games = normalizeGames([
+      {
+        home: "Team A",
+        away: "Team B",
+        date: "31.02.2026",
+        time: "11:00",
+      },
+    ]);
+
+    expect(games).toHaveLength(0);
   });
 });
