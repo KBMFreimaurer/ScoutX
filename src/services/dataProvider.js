@@ -217,6 +217,19 @@ function parseIsoDateStrict(isoDate) {
   return date;
 }
 
+function isValidCalendarDateParts(year, month, day) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const candidate = new Date(year, month - 1, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day;
+}
+
 function getWeekRange(isoDate) {
   const date = parseIsoDateStrict(isoDate);
   date.setHours(0, 0, 0, 0);
@@ -312,24 +325,33 @@ export function calcPriority(teamName) {
 }
 
 function normalizeDate(rawDate, fallbackIso) {
+  const fallbackParsed = parseIsoDateStrict(fallbackIso);
+
   if (!rawDate) {
-    return { value: new Date(`${fallbackIso}T00:00:00`), fallback: true };
+    return { value: fallbackParsed, fallback: true };
   }
 
   const dateText = String(rawDate).trim();
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
-    return { value: new Date(`${dateText}T00:00:00`), fallback: false };
+    const [year, month, day] = dateText.split("-").map(Number);
+    if (isValidCalendarDateParts(year, month, day)) {
+      return { value: new Date(year, month - 1, day), fallback: false };
+    }
+    return { value: fallbackParsed, fallback: true };
   }
 
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateText)) {
     const [day, month, year] = dateText.split(".").map(Number);
-    return { value: new Date(year, month - 1, day), fallback: false };
+    if (isValidCalendarDateParts(year, month, day)) {
+      return { value: new Date(year, month - 1, day), fallback: false };
+    }
+    return { value: fallbackParsed, fallback: true };
   }
 
   const parsed = new Date(dateText);
   if (Number.isNaN(parsed.getTime())) {
-    return { value: new Date(`${fallbackIso}T00:00:00`), fallback: true };
+    return { value: fallbackParsed, fallback: true };
   }
 
   return { value: parsed, fallback: false };

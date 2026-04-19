@@ -53,6 +53,22 @@ describe("data provider", () => {
     expect(report.stats.warnings.length).toBeGreaterThan(0);
   });
 
+  it("uses fallback date for invalid calendar values instead of JS date rollover", () => {
+    const report = parseUploadedGamesReport(`date,time,home,away\n31.02.2026,11:00,Team A,Team B`, "games.csv", {
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-04-01",
+      turnier: false,
+    });
+
+    expect(report.games).toHaveLength(1);
+    const dateObj = report.games[0].dateObj;
+    expect(dateObj.getFullYear()).toBe(2026);
+    expect(dateObj.getMonth()).toBe(3);
+    expect(dateObj.getDate()).toBe(1);
+    expect(report.stats.warnings.some((warning) => warning.includes("Datum ungültig/fehlend"))).toBe(true);
+  });
+
   it("uses csv provider in auto mode if matching games exist", async () => {
     const uploadedGames = parseUploadedGames(
       `date,time,home,away,venue,km,kreisId,jugendId\n2026-05-01,11:00,Team A,Team C,Platz 1,8,duesseldorf,e-jugend`,
