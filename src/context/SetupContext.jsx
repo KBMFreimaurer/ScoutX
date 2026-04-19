@@ -123,7 +123,7 @@ function toIsoDate(value) {
 
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
-    const todayIso = new Date().toISOString().split("T")[0];
+    const todayIso = toIsoDate(new Date());
     const initialRange = getWeekRange(todayIso);
 
     // Wizard startet bei jedem Reload mit leeren Feldern.
