@@ -453,7 +453,21 @@ async function fetchRemoteClubSuggestions(query, limit) {
 let refreshPromise = null;
 
 function setCorsHeaders(res, origin) {
-  const allowOrigin = ALLOWED_ORIGIN === "*" ? "*" : origin || ALLOWED_ORIGIN;
+  const allowedOrigins = String(ALLOWED_ORIGIN || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const normalizedOrigin = String(origin || "").trim();
+
+  let allowOrigin = "*";
+  if (!(allowedOrigins.length === 1 && allowedOrigins[0] === "*")) {
+    const fallbackOrigin = allowedOrigins[0] || "null";
+    allowOrigin =
+      normalizedOrigin && allowedOrigins.includes(normalizedOrigin)
+        ? normalizedOrigin
+        : fallbackOrigin;
+  }
+
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
