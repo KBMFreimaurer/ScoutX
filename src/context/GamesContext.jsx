@@ -468,6 +468,10 @@ export function GamesProvider({ children }) {
         turnier: Boolean(jugend?.turnier),
       });
 
+      if (buildRunRef.current !== runId) {
+        return;
+      }
+
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
       const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
@@ -500,6 +504,9 @@ export function GamesProvider({ children }) {
           }
         });
     } catch (error) {
+      if (buildRunRef.current !== runId) {
+        return;
+      }
       setEnrichingGames(false);
       setErr(`Spieldaten konnten nicht geladen werden: ${error.message}`);
     } finally {
