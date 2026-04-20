@@ -3,6 +3,8 @@ import { C, card, inp, lbl } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
 const WEEKDAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const CALENDAR_FULL_HEIGHT_PX = 520;
+const CALENDAR_VIEWPORT_MARGIN_PX = 32;
 const DISPLAY_DATE_FORMATTER = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
   month: "2-digit",
@@ -140,7 +142,10 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
         return;
       }
 
-      const preferredCalendarHeight = 390;
+      const preferredCalendarHeight = Math.min(
+        CALENDAR_FULL_HEIGHT_PX,
+        Math.max(280, window.innerHeight - CALENDAR_VIEWPORT_MARGIN_PX),
+      );
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       if (spaceBelow < preferredCalendarHeight && spaceAbove > spaceBelow) {
@@ -334,7 +339,7 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
               bottom: calendarPlacement === "top" ? "calc(100% + 10px)" : "auto",
               left: 0,
               width: "min(420px, calc(100vw - 56px))",
-              maxHeight: "min(420px, calc(100vh - 120px))",
+              maxHeight: `min(${CALENDAR_FULL_HEIGHT_PX}px, calc(100vh - ${CALENDAR_VIEWPORT_MARGIN_PX}px))`,
               overflowY: "auto",
               borderRadius: 14,
               border: `1px solid ${C.border}`,
