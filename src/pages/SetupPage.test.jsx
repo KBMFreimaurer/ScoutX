@@ -143,7 +143,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("ignoriert persistierte Wizard-Daten und startet bei Reload leer", () => {
+  it("stellt persistierte Wizard-Daten nach Reload wieder her", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -151,22 +151,27 @@ describe("SetupPage", () => {
         jugendId: "d-jugend",
         selTeams: ["TSV Heimaterde"],
         fromDate: "2026-05-12",
-        adapterEndpoint: "https://example.com/api/games",
+        toDate: "2026-05-13",
+        startLocation: { lat: 51.4351, lon: 6.7627, label: "Mülheim" },
+        favorites: ["TSV Heimaterde"],
       }),
     );
 
     renderSetupPage();
 
-    // Nach Reload darf kein Kreis vorausgewählt sein
+    // Persistierte Auswahl ist direkt wieder aktiv
     const duisburgButton = screen.getByLabelText(/Kreis Duisburg auswählen/i);
-    expect(duisburgButton).toHaveAttribute("aria-pressed", "false");
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
 
-    // Der Next-Button muss deaktiviert sein, weil noch keine Auswahl getroffen wurde
+    // Nächster Schritt ist direkt möglich
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).toBeDisabled();
+    expect(nextButton).toBeEnabled();
 
-    // Der alte localStorage-Eintrag wurde geleert
-    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toBeNull();
+    // Persistenz bleibt erhalten und wird nicht gelöscht
+    const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.setup) || "{}");
+    expect(persisted.kreisId).toBe("duisburg");
+    expect(persisted.jugendId).toBe("d-jugend");
+    expect(persisted.fromDate).toBe("2026-05-12");
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {

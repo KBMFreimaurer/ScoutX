@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
@@ -121,28 +121,66 @@ function toIsoDate(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function sanitizeStartLocation(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const lat = Number(value.lat);
+  const lon = Number(value.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  return {
+    lat,
+    lon,
+    label: String(value.label || "").trim() || `Startpunkt (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+  };
+}
+
+function readSetupStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.setup);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = toIsoDate(new Date());
     const initialRange = getWeekRange(todayIso);
+    const persisted = readSetupStorage();
 
-    // Wizard startet bei jedem Reload mit leeren Feldern.
-    // Vorherige Eingaben aus dem localStorage werden bewusst nicht wiederhergestellt.
-    try {
-      window.localStorage.removeItem(STORAGE_KEYS.setup);
-    } catch {
-      // localStorage kann im Browser-Kontext blockiert sein.
-    }
+    const persistedFromDate = parseIsoDate(persisted?.fromDate);
+    const normalizedFromDate = persistedFromDate ? toIsoDate(persistedFromDate) : initialRange.fromDate;
+    const normalizedFromDateParsed = parseIsoDate(normalizedFromDate);
+    const persistedToDate = parseIsoDate(persisted?.toDate);
+    const normalizedToDate =
+      persistedToDate && normalizedFromDateParsed && persistedToDate.getTime() >= normalizedFromDateParsed.getTime()
+        ? toIsoDate(persistedToDate)
+        : normalizedFromDate;
 
     return {
-      kreisId: "",
-      jugendId: "",
-      selTeams: [],
-      fromDate: initialRange.fromDate,
-      toDate: initialRange.toDate,
-      jugendSubLevels: [],
-      startLocation: null,
-      favorites: [],
+      kreisId: String(persisted?.kreisId || "").trim(),
+      jugendId: String(persisted?.jugendId || "").trim(),
+      selTeams: normalizeTeamParameters(persisted?.selTeams),
+      fromDate: normalizedFromDate,
+      toDate: normalizedToDate,
+      jugendSubLevels: normalizeTeamParameters(persisted?.jugendSubLevels),
+      startLocation: sanitizeStartLocation(persisted?.startLocation),
+      favorites: normalizeTeamParameters(persisted?.favorites),
       todayIso,
     };
   });
@@ -435,6 +473,29 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const onClearFavoriteTeams = useCallback(() => {
     setFavoriteTeams([]);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const payload = {
+      kreisId,
+      jugendId,
+      selTeams: normalizeTeamParameters(selectedTeams),
+      fromDate,
+      toDate,
+      jugendSubLevels: normalizeTeamParameters(jugendSubLevels),
+      startLocation: sanitizeStartLocation(startLocation),
+      favorites: normalizeTeamParameters(favoriteTeams),
+    };
+
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.setup, JSON.stringify(payload));
+    } catch {
+      // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
+    }
+  }, [kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
   const resetSetupState = useCallback(() => {
     setKreisId("");
