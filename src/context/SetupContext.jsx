@@ -14,6 +14,36 @@ const ROMAN_TO_ARABIC = {
   III: "3",
   IV: "4",
 };
+const KNOWN_KREIS_IDS = new Set(KREISE.map((item) => String(item.id || "").trim()).filter(Boolean));
+
+function normalizeKreisIds(values) {
+  const list = Array.isArray(values) ? values : [values];
+  const ids = [];
+  const seen = new Set();
+
+  for (const value of list) {
+    const id = String(value || "").trim();
+    if (!id || !KNOWN_KREIS_IDS.has(id) || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+
+  return KREISE.map((item) => item.id).filter((id) => ids.includes(id));
+}
+
+function buildKreisLabel(kreise) {
+  const labels = (Array.isArray(kreise) ? kreise : [])
+    .map((item) => String(item?.label || "").trim())
+    .filter(Boolean);
+
+  if (labels.length === 0) {
+    return "";
+  }
+
+  return labels.join(", ");
+}
 
 function humanizeGeolocationError(error) {
   const code = Number(error?.code);
@@ -171,8 +201,16 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
         ? toIsoDate(persistedToDate)
         : normalizedFromDate;
 
+    const normalizedKreisIds = normalizeKreisIds(
+      persisted?.kreisIds ||
+        persisted?.kreise ||
+        String(persisted?.kreisId || "").trim() ||
+        String(persisted?.kreis || "").trim(),
+    );
+
     return {
-      kreisId: String(persisted?.kreisId || "").trim(),
+      kreisIds: normalizedKreisIds,
+      kreisId: normalizedKreisIds[0] || "",
       jugendId: String(persisted?.jugendId || "").trim(),
       selTeams: normalizeTeamParameters(persisted?.selTeams),
       fromDate: normalizedFromDate,
@@ -187,7 +225,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const width = useWindowWidth();
   const isMobile = width < 600;
 
-  const [kreisId, setKreisId] = useState(setupDefaults.kreisId);
+  const [kreisIds, setKreisIds] = useState(() => normalizeKreisIds(setupDefaults.kreisIds || setupDefaults.kreisId));
   const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
   const [selectedTeams, setSelectedTeams] = useState(() => normalizeTeamParameters(setupDefaults.selTeams));
   const [teamDraft, setTeamDraft] = useState("");
@@ -236,7 +274,16 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     });
   }, []);
 
-  const kreis = useMemo(() => KREISE.find((item) => item.id === kreisId), [kreisId]);
+  const kreisId = useMemo(() => (Array.isArray(kreisIds) && kreisIds.length > 0 ? kreisIds[0] : ""), [kreisIds]);
+  const kreise = useMemo(
+    () =>
+      (Array.isArray(kreisIds) ? kreisIds : [])
+        .map((id) => KREISE.find((item) => item.id === id))
+        .filter(Boolean),
+    [kreisIds],
+  );
+  const kreis = useMemo(() => (kreise.length > 0 ? kreise[0] : null), [kreise]);
+  const kreisLabel = useMemo(() => buildKreisLabel(kreise), [kreise]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
   const availableJugendSubLevels = useMemo(() => buildJugendSubLevelOptions(jugend), [jugend]);
   const jugendSubLevelHints = useMemo(() => buildJugendSubLevelHints(jugendSubLevels), [jugendSubLevels]);
@@ -245,7 +292,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     [selectedTeams, jugendSubLevelHints],
   );
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
-  const canBuild = Boolean(kreisId && jugendId);
+  const canBuild = Boolean(kreisIds.length > 0 && jugendId);
   const hasLocation = Boolean(
     startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon),
   );
@@ -253,7 +300,16 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const clearErr = useCallback(() => setErr(""), []);
 
   const onSelectKreis = useCallback((id) => {
-    setKreisId(id);
+    const nextId = String(id || "").trim();
+    if (!nextId || !KNOWN_KREIS_IDS.has(nextId)) {
+      return;
+    }
+
+    setKreisIds((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const next = current.includes(nextId) ? current.filter((value) => value !== nextId) : [...current, nextId];
+      return normalizeKreisIds(next);
+    });
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
@@ -478,8 +534,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       return;
     }
 
+    const normalizedKreisIds = normalizeKreisIds(kreisIds);
     const payload = {
-      kreisId,
+      kreisIds: normalizedKreisIds,
+      kreisId: normalizedKreisIds[0] || "",
       jugendId,
       selTeams: normalizeTeamParameters(selectedTeams),
       fromDate,
@@ -494,10 +552,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     } catch {
       // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
     }
-  }, [kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
+  }, [kreisId, kreisIds, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
   const resetSetupState = useCallback(() => {
-    setKreisId("");
+    setKreisIds([]);
     setJugendId("");
     setSelectedTeams([]);
     setTeamDraft("");
@@ -526,9 +584,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     () => ({
       isMobile,
       width,
+      kreisIds,
       kreisId,
+      kreise,
       jugendId,
       kreis,
+      kreisLabel,
       jugend,
       selectedTeams,
       activeTeams,
@@ -586,9 +647,12 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     [
       isMobile,
       width,
+      kreisIds,
       kreisId,
+      kreise,
       jugendId,
       kreis,
+      kreisLabel,
       jugend,
       selectedTeams,
       activeTeams,

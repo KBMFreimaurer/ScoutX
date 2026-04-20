@@ -1,13 +1,15 @@
 import { C, card } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
-export function KreisSelector({ kreise, kreisId, onSelect, isMobile }) {
+export function KreisSelector({ kreise, kreisIds, onSelect, isMobile }) {
+  const selectedIds = Array.isArray(kreisIds) ? kreisIds : [];
+
   return (
     <div style={card}>
       <SectionHeader num="01">Region & Kreis</SectionHeader>
       <div className="kreis-grid">
         {kreise.map((kreis) => {
-          const selected = kreisId === kreis.id;
+          const selected = selectedIds.includes(kreis.id);
           const isLongLabel = String(kreis.label || "").length > 14;
           return (
             <button

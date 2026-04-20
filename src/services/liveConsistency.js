@@ -72,6 +72,59 @@ function parseIsoDate(isoDate) {
   return date;
 }
 
+function normalizeKreisIdsForSync(syncContext) {
+  const ids = [];
+  const seen = new Set();
+  const values = Array.isArray(syncContext?.kreisIds) ? syncContext.kreisIds : [];
+
+  for (const value of values) {
+    const id = String(value || "").trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+
+  const fallback = String(syncContext?.kreisId || "").trim();
+  if (ids.length === 0 && fallback) {
+    ids.push(fallback);
+  }
+
+  return ids;
+}
+
+function buildAuthoritativeMergeKey(game, fallbackIndex) {
+  const home = normalizeLookup(game?.home);
+  const away = normalizeLookup(game?.away);
+  const date = toIsoDate(game?.date) || toIsoDate(game?.dateObj);
+  const time = normalizeTime(game?.time);
+  const venue = normalizeLookup(game?.venue);
+
+  if (!home || !away || !date) {
+    return `fallback-${fallbackIndex}`;
+  }
+
+  return `${home}|${away}|${date}|${time}|${venue}`;
+}
+
+function mergeAuthoritativeGames(gamesByKreis) {
+  const mergedByKey = new Map();
+  let fallbackIndex = 0;
+
+  for (const games of Array.isArray(gamesByKreis) ? gamesByKreis : []) {
+    for (const game of Array.isArray(games) ? games : []) {
+      const key = buildAuthoritativeMergeKey(game, fallbackIndex);
+      fallbackIndex += 1;
+      if (!mergedByKey.has(key)) {
+        mergedByKey.set(key, game);
+      }
+    }
+  }
+
+  return Array.from(mergedByKey.values());
+}
+
 function getWeekRange(isoDate) {
   const date = parseIsoDate(isoDate);
   if (!date) {
@@ -221,35 +274,39 @@ export function applyAuthoritativeGameCorrections(games, authoritativeGames) {
 
 export async function fetchAuthoritativeGamesForSync(syncContext) {
   const adapterEndpoint = String(syncContext?.adapterEndpoint || "").trim();
-  const kreisId = String(syncContext?.kreisId || "").trim();
+  const kreisIds = normalizeKreisIdsForSync(syncContext);
   const jugendId = String(syncContext?.jugendId || "").trim();
   const fromDate = String(syncContext?.fromDate || "").trim();
   const toDate = String(syncContext?.toDate || "").trim();
   const adapterToken = String(syncContext?.adapterToken || "").trim();
   const teams = Array.isArray(syncContext?.teams) ? syncContext.teams : [];
 
-  if (!adapterEndpoint || !kreisId || !jugendId || !fromDate) {
+  if (!adapterEndpoint || kreisIds.length === 0 || !jugendId || !fromDate) {
     throw new Error("Live-Abgleich unvollständig konfiguriert (Adapter/Kreis/Jugend/Datum).");
   }
 
   const weekRange = getWeekRange(fromDate);
   const requestedToDate = toDate || weekRange.toDate;
 
-  const result = await fetchGamesWithProviders({
-    mode: "adapter",
-    kreisId,
-    jugendId,
-    fromDate,
-    toDate: requestedToDate,
-    teams,
-    uploadedGames: [],
-    adapterEndpoint,
-    adapterToken,
-    turnier: Boolean(syncContext?.turnier),
-    retryDelaysMs: [],
-  });
+  const results = await Promise.all(
+    kreisIds.map((kreisId) =>
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId,
+        jugendId,
+        fromDate,
+        toDate: requestedToDate,
+        teams,
+        uploadedGames: [],
+        adapterEndpoint,
+        adapterToken,
+        turnier: Boolean(syncContext?.turnier),
+        retryDelaysMs: [],
+      }),
+    ),
+  );
 
-  return Array.isArray(result?.games) ? result.games : [];
+  return mergeAuthoritativeGames(results.map((result) => (Array.isArray(result?.games) ? result.games : [])));
 }
 
 function withTimeout(promise, timeoutMs, fallbackValue) {

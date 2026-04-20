@@ -85,6 +85,28 @@ function splitFingerprintLines(value) {
     .filter(Boolean);
 }
 
+function normalizeScopeKreise(kreisIds, kreisId) {
+  const seen = new Set();
+  const list = [];
+  const values = Array.isArray(kreisIds) ? kreisIds : [];
+
+  for (const value of values) {
+    const id = String(value || "").trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    list.push(id);
+  }
+
+  const fallback = String(kreisId || "").trim();
+  if (list.length === 0 && fallback) {
+    list.push(fallback);
+  }
+
+  return list.sort((left, right) => left.localeCompare(right));
+}
+
 export function calculateScheduleDelta(previousFingerprint, nextFingerprint) {
   const previousSet = new Set(splitFingerprintLines(previousFingerprint));
   const nextSet = new Set(splitFingerprintLines(nextFingerprint));
@@ -124,17 +146,17 @@ export function buildScheduleFingerprint(games) {
     .join("\n");
 }
 
-export function buildScheduleScopeKey({ kreisId, jugendId, fromDate, toDate }) {
-  const kreis = String(kreisId || "").trim();
+export function buildScheduleScopeKey({ kreisIds, kreisId, jugendId, fromDate, toDate }) {
+  const kreise = normalizeScopeKreise(kreisIds, kreisId);
   const jugend = String(jugendId || "").trim();
   const from = normalizeIsoDate(fromDate);
   const to = normalizeIsoDate(toDate) || from;
 
-  if (!kreis || !jugend || !from) {
+  if (kreise.length === 0 || !jugend || !from) {
     return "";
   }
 
-  return `${kreis}|${jugend}|${from}|${to}`;
+  return `${kreise.join(",")}|${jugend}|${from}|${to}`;
 }
 
 export function readScheduleWatchState() {

@@ -43,30 +43,44 @@ function formatDateRangeLabel(fromDate, toDate) {
   return `${fromLabel} bis ${toLabel}`;
 }
 
-function buildStepCompletionMap({ kreisId, jugendId, fromDate, toDate, teamParameterCount, scoutName, kmPauschale }) {
+function buildKreisSelectionLabel(kreise) {
+  const safeKreise = Array.isArray(kreise) ? kreise.filter(Boolean) : [];
+  if (safeKreise.length === 0) {
+    return "Kein Kreis";
+  }
+
+  if (safeKreise.length === 1) {
+    return safeKreise[0].label;
+  }
+
+  return `${safeKreise.length} Kreise (${safeKreise.map((item) => item.kurz).join(", ")})`;
+}
+
+function buildStepCompletionMap({ kreisIds, jugendId, fromDate, toDate, teamParameterCount, scoutName, kmPauschale }) {
   const hasValidRange = Boolean(fromDate && toDate && String(toDate) >= String(fromDate));
   const hasScoutName = Boolean(String(scoutName || "").trim());
   const hasKmPauschale = Number(kmPauschale) > 0;
+  const hasKreisSelection = Array.isArray(kreisIds) && kreisIds.length > 0;
 
   return {
-    1: Boolean(kreisId),
+    1: hasKreisSelection,
     2: Boolean(jugendId),
     3: teamParameterCount >= 0,
     4: hasValidRange,
     5: true,
     6: hasScoutName && hasKmPauschale,
-    7: canBuildStepCompletion({ kreisId, jugendId, hasValidRange, hasScoutName, hasKmPauschale }),
+    7: canBuildStepCompletion({ hasKreisSelection, jugendId, hasValidRange, hasScoutName, hasKmPauschale }),
   };
 }
 
-function canBuildStepCompletion({ kreisId, jugendId, hasValidRange, hasScoutName, hasKmPauschale }) {
-  return Boolean(kreisId && jugendId && hasValidRange && hasScoutName && hasKmPauschale);
+function canBuildStepCompletion({ hasKreisSelection, jugendId, hasValidRange, hasScoutName, hasKmPauschale }) {
+  return Boolean(hasKreisSelection && jugendId && hasValidRange && hasScoutName && hasKmPauschale);
 }
 
 export function SetupPage() {
   const {
     isMobile,
-    kreisId,
+    kreisIds,
     jugendId,
     jugend,
     selectedTeams,
@@ -117,10 +131,14 @@ export function SetupPage() {
 
   const googleRouting = getGoogleRoutingConfig();
   const totalSteps = SETUP_STEPS.length;
-  const selectedKreis = KREISE.find((item) => item.id === kreisId) || null;
+  const selectedKreise = useMemo(
+    () => KREISE.filter((item) => (Array.isArray(kreisIds) ? kreisIds : []).includes(item.id)),
+    [kreisIds],
+  );
+  const selectedKreisLabel = useMemo(() => buildKreisSelectionLabel(selectedKreise), [selectedKreise]);
   const teamParameterCount = activeTeams.length || 0;
   const stepCompletionMap = buildStepCompletionMap({
-    kreisId,
+    kreisIds,
     jugendId,
     fromDate,
     toDate,
@@ -131,7 +149,7 @@ export function SetupPage() {
   const currentStepMeta = SETUP_STEPS[currentStep - 1];
   const nextStepMeta = SETUP_STEPS[currentStep] || null;
   const summaryParts = [
-    selectedKreis?.label || "Kein Kreis",
+    selectedKreisLabel,
     jugend?.label || "Keine Altersklasse",
     teamParameterCount > 0 ? `${teamParameterCount} Team-Parameter` : "Ohne Team-Parameter",
     hasLocation ? "Startpunkt gesetzt" : "Ohne Startpunkt",
@@ -146,8 +164,8 @@ export function SetupPage() {
   }, [currentStep, totalSteps, stepCompletionMap]);
 
   const nextButtonLabel = useMemo(() => {
-    if (currentStep === 1 && !kreisId) {
-      return "Kreis auswählen";
+    if (currentStep === 1 && (!Array.isArray(kreisIds) || kreisIds.length === 0)) {
+      return "Mindestens einen Kreis auswählen";
     }
     if (currentStep === 2 && !jugendId) {
       return "Altersklasse auswählen";
@@ -159,7 +177,7 @@ export function SetupPage() {
       return "Scout-Name eintragen";
     }
     return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
-  }, [currentStep, fromDate, toDate, jugendId, kreisId, scoutName, nextStepMeta]);
+  }, [currentStep, fromDate, toDate, jugendId, kreisIds, scoutName, nextStepMeta]);
 
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
@@ -415,7 +433,7 @@ export function SetupPage() {
       <div className="setup-summary-grid">
         <div className="setup-summary-item">
           <span className="setup-summary-label">Region & Kreis</span>
-          <span className="setup-summary-value">{selectedKreis?.label || "Nicht gesetzt"}</span>
+          <span className="setup-summary-value">{selectedKreisLabel || "Nicht gesetzt"}</span>
         </div>
         <div className="setup-summary-item">
           <span className="setup-summary-label">Altersklasse</span>
@@ -449,7 +467,7 @@ export function SetupPage() {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
-        return <KreisSelector kreise={KREISE} kreisId={kreisId} onSelect={onSelectKreis} isMobile={isMobile} />;
+        return <KreisSelector kreise={KREISE} kreisIds={kreisIds} onSelect={onSelectKreis} isMobile={isMobile} />;
       case 2:
         return (
           <AgeGroupSelector

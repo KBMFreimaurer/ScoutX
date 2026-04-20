@@ -10,7 +10,9 @@ vi.mock("./services/pdf", () => ({
 }));
 
 describe("ScoutX Integration", () => {
-  async function renderSetupAndSubmit(fetchMock) {
+  async function renderSetupAndSubmit(fetchMock, options = {}) {
+    const kreisIndices =
+      Array.isArray(options?.kreisIndices) && options.kreisIndices.length > 0 ? options.kreisIndices : [0];
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -25,7 +27,10 @@ describe("ScoutX Integration", () => {
     await screen.findByRole("heading", { name: /Scouting-Plan konfigurieren/i }, { timeout: 5000 });
 
     const kreisButtons = await screen.findAllByRole("button", { name: /Kreis .* auswählen/i }, { timeout: 5000 });
-    fireEvent.click(kreisButtons[0]);
+    kreisIndices.forEach((index) => {
+      const button = kreisButtons[index] || kreisButtons[0];
+      fireEvent.click(button);
+    });
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 
     const jugendButtons = await screen.findAllByRole("button", { name: /Jugend auswählen/i }, { timeout: 5000 });
@@ -285,5 +290,61 @@ describe("ScoutX Integration", () => {
     fireEvent.click(screen.getByRole("button", { name: /Historischen Plan .* öffnen/i }));
     await screen.findByText(/Historischer Plantext/i, { timeout: 5000 });
     expect(screen.getByText(/Keine Spiele verfügbar/i)).toBeInTheDocument();
+  });
+
+  it("fragt bei Mehrfach-Kreis-Auswahl alle Kreise beim Adapter ab", async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url.includes("/api/games")) {
+        const payload = JSON.parse(String(init?.body || "{}"));
+        const requestedDate = String(payload.fromDate || "2026-04-01");
+        const requestedKreisId = String(payload.kreisId || "duisburg");
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            games: [
+              {
+                date: requestedDate,
+                time: "14:00",
+                home: `Team ${requestedKreisId} A`,
+                away: `Team ${requestedKreisId} B`,
+                venue: "Sportanlage Mitte",
+                km: 8,
+                kreisId: requestedKreisId,
+                jugendId: String(payload.jugendId || "d-jugend"),
+                priority: 4,
+              },
+            ],
+            teamFilter: {
+              requested: false,
+              requestedCount: 0,
+              matchedCount: 0,
+              matchedTeamCount: 0,
+              matchedTeams: [],
+              missingTeams: [],
+              binding: false,
+              fallbackToUnfiltered: false,
+            },
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    await renderSetupAndSubmit(fetchMock, { kreisIndices: [0, 1] });
+    await screen.findByRole("button", { name: /Plan öffnen/i }, { timeout: 12000 });
+
+    const adapterCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/games"));
+    const requestedKreise = adapterCalls
+      .map(([, init]) => JSON.parse(String(init?.body || "{}")).kreisId)
+      .filter(Boolean)
+      .sort();
+
+    expect(adapterCalls).toHaveLength(2);
+    expect(requestedKreise).toEqual(["duesseldorf", "duisburg"]);
   });
 });

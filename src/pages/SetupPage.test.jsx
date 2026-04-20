@@ -109,6 +109,20 @@ describe("SetupPage", () => {
     expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
   });
 
+  it("erlaubt die Auswahl mehrerer Kreise", () => {
+    renderSetupPage();
+
+    const duisburgButton = screen.getByRole("button", { name: /Kreis Duisburg auswählen/i });
+    const essenButton = screen.getByRole("button", { name: /Kreis Essen auswählen/i });
+
+    fireEvent.click(duisburgButton);
+    fireEvent.click(essenButton);
+
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
+    expect(essenButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i })).toBeEnabled();
+  });
+
   it("zeigt nur den Startpunkt-Block ohne Favoriten-Eingabe", () => {
     renderSetupPage();
     goToStepWithRequiredSelections(5);

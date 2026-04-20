@@ -6,6 +6,7 @@ import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDi
 import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
+const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function toIsoDate(value) {
   if (value instanceof Date) {
@@ -162,8 +163,132 @@ function estimateMinutesFromDistance(distanceKm) {
 
 function toDateTimeSortValue(game) {
   const dateMs = game?.dateObj instanceof Date ? game.dateObj.getTime() : Number.MAX_SAFE_INTEGER;
-  const timeText = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(game?.time || "").trim()) ? String(game.time) : "99:99";
+  const timeText = KNOWN_TIME_RE.test(String(game?.time || "").trim()) ? String(game.time) : "99:99";
   return `${String(dateMs).padStart(16, "0")}|${timeText}`;
+}
+
+function normalizeRequestedKreise(kreisIds, fallbackKreisId = "") {
+  const ids = [];
+  const seen = new Set();
+
+  for (const value of Array.isArray(kreisIds) ? kreisIds : []) {
+    const id = String(value || "").trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+
+  const fallback = String(fallbackKreisId || "").trim();
+  if (!ids.length && fallback) {
+    ids.push(fallback);
+  }
+
+  return ids;
+}
+
+function buildGameMergeKey(game, fallbackIndex) {
+  const home = normalizeLookup(game?.home);
+  const away = normalizeLookup(game?.away);
+  const date = toIsoDate(game?.date) || toIsoDate(game?.dateObj);
+  const timeText = String(game?.time || "").trim();
+  const time = KNOWN_TIME_RE.test(timeText) ? timeText : "--:--";
+  const venue = normalizeLookup(game?.venue || "");
+
+  if (!home || !away || !date) {
+    return `fallback-${fallbackIndex}`;
+  }
+
+  return `${home}|${away}|${date}|${time}|${venue}`;
+}
+
+function mergeGamesAcrossKreise(gamesByKreis) {
+  const mergedByKey = new Map();
+  let fallbackIndex = 0;
+
+  for (const games of Array.isArray(gamesByKreis) ? gamesByKreis : []) {
+    for (const game of Array.isArray(games) ? games : []) {
+      const key = buildGameMergeKey(game, fallbackIndex);
+      fallbackIndex += 1;
+      const existing = mergedByKey.get(key);
+
+      if (!existing) {
+        mergedByKey.set(key, game);
+        continue;
+      }
+
+      mergedByKey.set(key, {
+        ...existing,
+        ...game,
+        priority: Math.max(Number(existing.priority || 0), Number(game.priority || 0)),
+        selectedTeamMatch: Boolean(existing.selectedTeamMatch || game.selectedTeamMatch),
+      });
+    }
+  }
+
+  return Array.from(mergedByKey.values());
+}
+
+function buildTeamFilterMetaFromGames(games, teams) {
+  const requestedTeams = Array.isArray(teams)
+    ? teams.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+
+  if (requestedTeams.length === 0) {
+    return {
+      requested: false,
+      requestedCount: 0,
+      matchedCount: 0,
+      matchedTeamCount: 0,
+      matchedTeams: [],
+      missingTeams: [],
+      binding: false,
+      fallbackToUnfiltered: false,
+    };
+  }
+
+  const matchedTeams = [];
+  const missingTeams = [];
+  let matchedCount = 0;
+
+  for (const team of requestedTeams) {
+    const teamLookup = normalizeLookup(team);
+    const hasMatch = (Array.isArray(games) ? games : []).some((game) => {
+      const home = normalizeLookup(game?.home);
+      const away = normalizeLookup(game?.away);
+      return Boolean(teamLookup) && (home.includes(teamLookup) || away.includes(teamLookup));
+    });
+
+    if (hasMatch) {
+      matchedTeams.push(team);
+    } else {
+      missingTeams.push(team);
+    }
+  }
+
+  for (const game of Array.isArray(games) ? games : []) {
+    const home = normalizeLookup(game?.home);
+    const away = normalizeLookup(game?.away);
+    const hasRequestedMatch = requestedTeams.some((team) => {
+      const teamLookup = normalizeLookup(team);
+      return Boolean(teamLookup) && (home.includes(teamLookup) || away.includes(teamLookup));
+    });
+    if (hasRequestedMatch) {
+      matchedCount += 1;
+    }
+  }
+
+  return {
+    requested: true,
+    requestedCount: requestedTeams.length,
+    matchedCount,
+    matchedTeamCount: matchedTeams.length,
+    matchedTeams,
+    missingTeams,
+    binding: false,
+    fallbackToUnfiltered: false,
+  };
 }
 
 async function applyExactStartRoute(games, startLocation) {
@@ -306,6 +431,7 @@ export function GamesProvider({ children }) {
   const navigate = useNavigate();
   const setup = useSetup();
   const {
+    kreisIds,
     kreisId,
     jugendId,
     fromDate,
@@ -480,8 +606,9 @@ export function GamesProvider({ children }) {
   }, []);
 
   const onBuildAndGo = useCallback(async () => {
-    if (!kreisId) {
-      setErr("Bitte einen Kreis wählen.");
+    const requestedKreise = normalizeRequestedKreise(kreisIds, kreisId);
+    if (requestedKreise.length === 0) {
+      setErr("Bitte mindestens einen Kreis wählen.");
       return;
     }
 
@@ -499,23 +626,33 @@ export function GamesProvider({ children }) {
     buildRunRef.current = runId;
 
     try {
-      const { games: fetchedGames, source, meta } = await fetchGamesWithProviders({
-        mode: "adapter",
-        kreisId,
-        jugendId,
-        fromDate,
-        toDate,
-        teams: activeTeams,
-        uploadedGames: [],
-        adapterEndpoint,
-        adapterToken,
-        turnier: Boolean(jugend?.turnier),
-      });
+      const providerRuns = await Promise.all(
+        requestedKreise.map((selectedKreisId) =>
+          fetchGamesWithProviders({
+            mode: "adapter",
+            kreisId: selectedKreisId,
+            jugendId,
+            fromDate,
+            toDate,
+            teams: activeTeams,
+            uploadedGames: [],
+            adapterEndpoint,
+            adapterToken,
+            turnier: Boolean(jugend?.turnier),
+          }).then((result) => ({
+            ...result,
+            selectedKreisId,
+          })),
+        ),
+      );
 
       if (buildRunRef.current !== runId) {
         return;
       }
 
+      const source = providerRuns[0]?.source || "adapter";
+      const fetchedGames = mergeGamesAcrossKreise(providerRuns.map((run) => run?.games || []));
+      const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
       const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
@@ -541,7 +678,7 @@ export function GamesProvider({ children }) {
         return next;
       });
       setDataSourceUsed(source);
-      setTeamValidation(meta?.teamFilter || null);
+      setTeamValidation(teamFilterMeta);
       navigate("/games");
 
       if (initialGames.length === 0) {
@@ -577,6 +714,7 @@ export function GamesProvider({ children }) {
       }
     }
   }, [
+    kreisIds,
     kreisId,
     jugendId,
     fromDate,

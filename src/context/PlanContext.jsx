@@ -179,14 +179,14 @@ export function PlanProvider({ children }) {
 
   const cfg = useMemo(
     () => ({
-      kreisLabel: setup.kreis?.label ?? "",
+      kreisLabel: setup.kreisLabel ?? setup.kreis?.label ?? "",
       jugendLabel: setup.jugend?.label ?? "",
       jugendAlter: setup.jugend?.alter ?? "",
       fromDate: setup.fromDate,
       toDate: setup.toDate,
       startLocationLabel: setup.startLocation?.label ?? "",
     }),
-    [setup.kreis, setup.jugend, setup.fromDate, setup.toDate, setup.startLocation],
+    [setup.kreisLabel, setup.kreis, setup.jugend, setup.fromDate, setup.toDate, setup.startLocation],
   );
 
   const effectivePlannedGames = useMemo(() => {
@@ -393,7 +393,7 @@ export function PlanProvider({ children }) {
       const manualPlan = buildManualScoutPlan({
         games: effectivePlannedGames,
         jugendLabel: setup.jugend?.label,
-        kreisLabel: setup.kreis?.label,
+        kreisLabel: setup.kreisLabel || setup.kreis?.label,
         isTurnier: Boolean(setup.jugend?.turnier),
         usedFallbackAll,
       });
@@ -407,7 +407,7 @@ export function PlanProvider({ children }) {
         games: effectivePlannedGames.map(serializeGameForHistory),
         selectedGameIds: usedFallbackAll ? [] : selectedGames.map((game) => String(game?.id || "").trim()).filter(Boolean),
         meta: {
-          kreisLabel: setup.kreis?.label || "",
+          kreisLabel: setup.kreisLabel || setup.kreis?.label || "",
           jugendLabel: setup.jugend?.label || "",
           fromDate: setup.fromDate || "",
           toDate: setup.toDate || "",
@@ -420,6 +420,7 @@ export function PlanProvider({ children }) {
           adapterEndpoint: String(setup.adapterEndpoint || ""),
           adapterToken: String(setup.adapterToken || ""),
           kreisId: String(setup.kreisId || ""),
+          kreisIds: Array.isArray(setup.kreisIds) ? setup.kreisIds : [],
           jugendId: String(setup.jugendId || ""),
           fromDate: String(setup.fromDate || ""),
           toDate: String(setup.toDate || ""),

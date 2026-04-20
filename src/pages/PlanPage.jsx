@@ -65,6 +65,8 @@ export function PlanPage() {
     plannedGames,
     plan,
     kreis,
+    kreisLabel,
+    kreisIds,
     kreisId,
     jugend,
     jugendId,
@@ -147,7 +149,7 @@ export function PlanPage() {
     onDeletePlanHistory(entryId);
   };
   const displayJugendLabel = String(activeHistoryMeta?.jugendLabel || jugend?.label || "").trim();
-  const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreis?.label || "").trim();
+  const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreisLabel || kreis?.label || "").trim();
   const effectiveScoutName = String(activeHistoryMeta?.scoutName || scoutName || "").trim();
   const effectiveKmPauschale = Number(activeHistoryMeta?.kmPauschale);
   const kmPauschaleForPdf = Number.isFinite(effectiveKmPauschale) && effectiveKmPauschale > 0 ? effectiveKmPauschale : kmPauschale;
@@ -164,6 +166,7 @@ export function PlanPage() {
         adapterEndpoint,
         adapterToken,
         kreisId,
+        kreisIds,
         jugendId,
         fromDate,
         toDate,
@@ -376,6 +379,7 @@ export function PlanPage() {
               adapterEndpoint,
               adapterToken,
               kreisId,
+              kreisIds,
               jugendId,
               fromDate,
               toDate,

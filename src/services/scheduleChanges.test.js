@@ -86,6 +86,17 @@ describe("buildScheduleScopeKey", () => {
     expect(buildScheduleScopeKey({ kreisId: "", jugendId: "d-jugend", fromDate: "2026-04-20", toDate: "" })).toBe("");
   });
 
+  it("supports multiple kreise in stable order", () => {
+    expect(
+      buildScheduleScopeKey({
+        kreisIds: ["wesel", "duisburg", "wesel"],
+        jugendId: "d-jugend",
+        fromDate: "2026-04-20",
+        toDate: "2026-04-26",
+      }),
+    ).toBe("duisburg,wesel|d-jugend|2026-04-20|2026-04-26");
+  });
+
   it("rejects invalid fromDate and falls back invalid toDate to fromDate", () => {
     expect(
       buildScheduleScopeKey({

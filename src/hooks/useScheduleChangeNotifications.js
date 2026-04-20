@@ -38,6 +38,7 @@ function formatDateText(value) {
 export function useScheduleChangeNotifications({
   games,
   dataSourceUsed,
+  kreisIds,
   kreisId,
   jugendId,
   fromDate,
@@ -54,12 +55,13 @@ export function useScheduleChangeNotifications({
   const scopeKey = useMemo(
     () =>
       buildScheduleScopeKey({
+        kreisIds,
         kreisId,
         jugendId,
         fromDate,
         toDate,
       }),
-    [kreisId, jugendId, fromDate, toDate],
+    [kreisIds, kreisId, jugendId, fromDate, toDate],
   );
   const scheduleFingerprint = useMemo(() => buildScheduleFingerprint(games), [games]);
 

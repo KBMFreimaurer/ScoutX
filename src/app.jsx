@@ -149,11 +149,13 @@ function AppLayout() {
     loadingGames,
     enrichingGames,
     dataSourceUsed,
+    kreisIds,
     kreisId,
     jugendId,
     fromDate,
     toDate,
     kreis,
+    kreisLabel,
     jugend,
     clearErr,
     onResetSoft,
@@ -169,11 +171,12 @@ function AppLayout() {
   } = useScheduleChangeNotifications({
     games,
     dataSourceUsed,
+    kreisIds,
     kreisId,
     jugendId,
     fromDate,
     toDate,
-    kreisLabel: kreis?.label,
+    kreisLabel: kreisLabel || kreis?.label,
     jugendLabel: jugend?.label,
   });
 
