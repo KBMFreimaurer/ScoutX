@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 function Boom() {
@@ -7,10 +7,14 @@ function Boom() {
 }
 
 describe("ErrorBoundary", () => {
-  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  let consoleErrorSpy;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("rendert Kinder ohne Fehler", () => {
