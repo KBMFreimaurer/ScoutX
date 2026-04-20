@@ -125,6 +125,34 @@ function ensureGameIds(games) {
   });
 }
 
+function readSelectedGameIds() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEYS.selectedGames);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    return Object.entries(parsed).reduce((acc, [gameId, selected]) => {
+      const id = String(gameId || "").trim();
+      if (id && selected) {
+        acc[id] = true;
+      }
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
 function estimateMinutesFromDistance(distanceKm) {
   if (!Number.isFinite(distanceKm)) {
     return null;
@@ -311,7 +339,7 @@ export function GamesProvider({ children }) {
       return {};
     }
   });
-  const [selectedGameIds, setSelectedGameIds] = useState({});
+  const [selectedGameIds, setSelectedGameIds] = useState(() => readSelectedGameIds());
   const buildRunRef = useRef(0);
   const favoritesRef = useRef(favorites);
   const gameNotesRef = useRef(gameNotes);
@@ -335,6 +363,22 @@ export function GamesProvider({ children }) {
       // Ignore sessionStorage write errors.
     }
   }, [gameNotes]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      if (Object.keys(selectedGameIds || {}).length === 0) {
+        window.sessionStorage.removeItem(STORAGE_KEYS.selectedGames);
+      } else {
+        window.sessionStorage.setItem(STORAGE_KEYS.selectedGames, JSON.stringify(selectedGameIds));
+      }
+    } catch {
+      // Ignore sessionStorage write errors.
+    }
+  }, [selectedGameIds]);
 
   const prioritized = useMemo(
     () => [...games].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0)).slice(0, 5),
@@ -477,7 +521,25 @@ export function GamesProvider({ children }) {
       const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
       const initialGames = ensureGameIds(withNotes(boostedGames, noteSnapshot));
       setGames(initialGames);
-      setSelectedGameIds({});
+      setSelectedGameIds((prev) => {
+        const knownGameIds = new Set(
+          initialGames
+            .map((game) => String(game?.id || "").trim())
+            .filter(Boolean),
+        );
+
+        if (knownGameIds.size === 0) {
+          return {};
+        }
+
+        const next = {};
+        for (const [gameId, selected] of Object.entries(prev || {})) {
+          if (selected && knownGameIds.has(gameId)) {
+            next[gameId] = true;
+          }
+        }
+        return next;
+      });
       setDataSourceUsed(source);
       setTeamValidation(meta?.teamFilter || null);
       navigate("/games");

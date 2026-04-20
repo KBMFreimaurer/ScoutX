@@ -111,6 +111,66 @@ describe("ScoutX Integration", () => {
     15000,
   );
 
+  it("stellt persistierte Spielauswahl in Games nach Reload wieder her", async () => {
+    const persistedSelectionId = "csv-0-Duis-Tusp";
+
+    window.sessionStorage.setItem(
+      STORAGE_KEYS.selectedGames,
+      JSON.stringify({ [persistedSelectionId]: true }),
+    );
+    expect(window.sessionStorage.getItem(STORAGE_KEYS.selectedGames)).toContain(persistedSelectionId);
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url.includes("/api/games")) {
+        const payload = JSON.parse(String(init?.body || "{}"));
+        const requestedDate = String(payload.fromDate || "2026-04-01");
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            games: [
+              {
+                date: requestedDate,
+                time: "14:00",
+                home: "Duisburger FV 08",
+                away: "Tuspo Saarn",
+                venue: "Sportanlage Mitte",
+                km: 8,
+                kreisId: String(payload.kreisId || "duisburg"),
+                jugendId: String(payload.jugendId || "d-jugend"),
+                priority: 4,
+              },
+            ],
+            teamFilter: {
+              requested: false,
+              requestedCount: 0,
+              matchedCount: 0,
+              matchedTeamCount: 0,
+              matchedTeams: [],
+              missingTeams: [],
+              binding: false,
+              fallbackToUnfiltered: false,
+            },
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    await renderSetupAndSubmit(fetchMock);
+
+    expect(window.sessionStorage.getItem(STORAGE_KEYS.selectedGames)).toContain(persistedSelectionId);
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: /Spiel auswählen: Duisburger FV 08 gegen Tuspo Saarn/i,
+    });
+    expect(checkbox).toBeChecked();
+  });
+
   it("zeigt Adapter-Timeout im Setup als Fehlermeldung", async () => {
     const abortError = new Error("aborted");
     abortError.name = "AbortError";

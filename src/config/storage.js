@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   location: "scoutplan.location.v1",
   favorites: "scoutplan.favorites.v1",
   notes: "scoutplan.notes.v1",
+  selectedGames: "scoutplan.selectedGames.v1",
   abrechnungMeta: "scoutplan.abrechnung.v1",
   presence: "scoutplan.presence.v1",
   planHistory: "scoutplan.planHistory.v1",

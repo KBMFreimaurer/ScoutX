@@ -92,6 +92,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-20: Spielauswahl in `Games` wird jetzt in `sessionStorage` persistiert und bei erneutem Laden passender Spiele automatisch wiederhergestellt.
 - 2026-04-20: Setup-Wizard stellt persistierte Eingaben beim Reload wieder her (`kreisId`, `jugendId`, Team-Parameter, Datumsbereich, Startort, Favoriten) statt den `scoutplan.setup.v1`-Stand pauschal zu löschen.
 - 2026-04-18: Spielplan-Änderungshinweise zeigen jetzt Delta-Werte (`+neu / -entfallen`) pro Scope, damit Änderungen schneller einordenbar sind; Schedule-Utils validieren Datumsgrenzen strikter.
 - 2026-04-18: Adapter-Datumsparser validiert Kalenderdaten jetzt strikt (z. B. `31.02.2026` wird verworfen statt still auf März zu rutschen), inkl. zusätzlicher Tests für ungültige Datumswerte.
