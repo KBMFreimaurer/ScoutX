@@ -92,6 +92,7 @@ docker compose --profile prod up --build
 
 ## Letzte Änderungen
 
+- 2026-04-20: Hardcoded Secrets entfernt: kein eingebauter Adapter-Token mehr in `SetupContext`, kein eingebauter Google-Maps-Key mehr in `geo.js` (nur noch Env/Runtime-Key).
 - 2026-04-20: ErrorBoundary zeigt jetzt einen klickbaren "Seite neu laden"-Button und protokolliert abgefangene Laufzeitfehler über `console.error` (inkl. neuem Component-Test).
 - 2026-04-20: Spielauswahl in `Games` wird jetzt in `sessionStorage` persistiert und bei erneutem Laden passender Spiele automatisch wiederhergestellt.
 - 2026-04-20: Setup-Wizard stellt persistierte Eingaben beim Reload wieder her (`kreisId`, `jugendId`, Team-Parameter, Datumsbereich, Startort, Favoriten) statt den `scoutplan.setup.v1`-Stand pauschal zu löschen.
