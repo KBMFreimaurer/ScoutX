@@ -5,6 +5,7 @@ export class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, message: "" };
+    this.handleReload = this.handleReload.bind(this);
   }
 
   static getDerivedStateFromError(error) {
@@ -12,8 +13,21 @@ export class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    console.error("ScoutX ErrorBoundary captured an error", error, info);
+
     if (this.props.onError) {
       this.props.onError(error, info);
+    }
+  }
+
+  handleReload() {
+    if (typeof this.props.onReload === "function") {
+      this.props.onReload();
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.location?.reload) {
+      window.location.reload();
     }
   }
 
@@ -71,6 +85,23 @@ export class ErrorBoundary extends React.Component {
             >
               {this.state.message}
             </pre>
+            <button
+              type="button"
+              onClick={this.handleReload}
+              style={{
+                marginTop: 14,
+                borderRadius: 8,
+                border: `1px solid rgba(252,165,165,0.35)`,
+                background: "rgba(239,68,68,0.12)",
+                color: "#fecaca",
+                minHeight: 36,
+                padding: "8px 12px",
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Seite neu laden
+            </button>
           </div>
         </div>
       );
