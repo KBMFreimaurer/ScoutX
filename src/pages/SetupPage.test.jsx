@@ -112,7 +112,7 @@ describe("SetupPage", () => {
   it("erlaubt die Auswahl mehrerer Kreise", () => {
     renderSetupPage();
 
-    const duisburgButton = screen.getByRole("button", { name: /Kreis Duisburg auswählen/i });
+    const duisburgButton = screen.getByRole("button", { name: /Kreis Duisburg (auswählen|abwählen)/i });
     const essenButton = screen.getByRole("button", { name: /Kreis Essen auswählen/i });
 
     fireEvent.click(duisburgButton);
@@ -174,7 +174,7 @@ describe("SetupPage", () => {
     renderSetupPage();
 
     // Nach Reload darf kein Kreis vorausgewählt sein
-    const duisburgButton = screen.getByLabelText(/Kreis Duisburg auswählen/i);
+    const duisburgButton = screen.getByLabelText(/Kreis Duisburg (auswählen|abwählen)/i);
     expect(duisburgButton).toHaveAttribute("aria-pressed", "false");
 
     // Nächster Schritt darf ohne neue Auswahl nicht möglich sein

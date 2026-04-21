@@ -11,6 +11,7 @@ export function GamesPage() {
     games,
     jugend,
     kreis,
+    kreisLabel,
     activeTeams,
     startLocation,
     teamValidation,
@@ -133,7 +134,7 @@ export function GamesPage() {
               whiteSpace: "nowrap",
             }}
           >
-            {jugend?.label} · {kreis?.label}
+            {jugend?.label} · {String(kreisLabel || kreis?.label || "").trim()}
             {jugend?.turnier ? (
               <span
                 style={{

@@ -140,21 +140,23 @@ export function GameTable({
         marginBottom: 16,
       }}
     >
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          tableLayout: "fixed",
-        }}
-      >
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            minWidth: selectionEnabled ? 980 : 900,
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
             {selectionEnabled ? (
               <th
                 scope="col"
                 style={{
-                  width: "11%",
-                  textAlign: "left",
+                  width: "8%",
+                  textAlign: "center",
                   padding: "10px 12px",
                   fontSize: 10,
                   color: C.grayDark,
@@ -166,13 +168,13 @@ export function GameTable({
                 Auswahl
               </th>
             ) : null}
-            <th scope="col" style={{ width: "27%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
-            <th scope="col" style={{ width: "13%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
-            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
-            <th scope="col" style={{ width: "17%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
+            <th scope="col" style={{ width: "26%", textAlign: "left", padding: "10px 16px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Begegnung</th>
+            <th scope="col" style={{ width: "12%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Datum</th>
+            <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Anstoß</th>
+            <th scope="col" style={{ width: "24%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Spielort</th>
             <th scope="col" style={{ width: "8%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Entfernung</th>
-            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Link</th>
-            <th scope="col" style={{ width: "9%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
+            <th scope="col" style={{ width: "7%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Link</th>
+            <th scope="col" style={{ width: "7%", textAlign: "left", padding: "10px 8px", fontSize: 10, color: C.grayDark, letterSpacing: "0.8px", textTransform: "uppercase", fontWeight: 600 }}>Notiz</th>
           </tr>
         </thead>
 
@@ -192,12 +194,12 @@ export function GameTable({
                   }}
                 >
                   {selectionEnabled ? (
-                    <td style={{ padding: "11px 12px", fontSize: 12, color: C.gray }}>
+                    <td style={{ padding: "11px 12px", fontSize: 12, color: C.gray, textAlign: "center" }}>
                       <label
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          justifyContent: "flex-start",
+                          justifyContent: "center",
                           gap: 6,
                           cursor: "pointer",
                           userSelect: "none",
@@ -290,7 +292,8 @@ export function GameTable({
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

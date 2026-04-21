@@ -6,7 +6,24 @@ export function KreisSelector({ kreise, kreisIds, onSelect, isMobile }) {
 
   return (
     <div style={card}>
-      <SectionHeader num="01">Region & Kreis</SectionHeader>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+        <SectionHeader num="01">Region & Kreis</SectionHeader>
+        <div
+          style={{
+            border: `1px solid ${selectedIds.length > 0 ? C.greenBorder : C.border}`,
+            borderRadius: 999,
+            padding: "4px 10px",
+            fontSize: 11,
+            color: selectedIds.length > 0 ? C.green : C.gray,
+            background: selectedIds.length > 0 ? C.greenDim : "rgba(255,255,255,0.03)",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+          aria-live="polite"
+        >
+          {selectedIds.length} ausgewählt
+        </div>
+      </div>
       <div className="kreis-grid">
         {kreise.map((kreis) => {
           const selected = selectedIds.includes(kreis.id);
@@ -18,7 +35,7 @@ export function KreisSelector({ kreise, kreisIds, onSelect, isMobile }) {
               className="item-btn"
               onClick={() => onSelect(kreis.id)}
               aria-pressed={selected}
-              aria-label={`Kreis ${kreis.label} auswählen`}
+              aria-label={`Kreis ${kreis.label} ${selected ? "abwählen" : "auswählen"}`}
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,
