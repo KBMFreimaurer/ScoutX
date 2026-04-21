@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { C, card, inp, lbl } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
 
 const WEEKDAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const CALENDAR_FULL_HEIGHT_PX = 520;
 const CALENDAR_VIEWPORT_MARGIN_PX = 32;
+const CALENDAR_GAP_PX = 10;
+const CALENDAR_MIN_WIDTH_PX = 280;
+const CALENDAR_MAX_WIDTH_PX = 420;
 const DISPLAY_DATE_FORMATTER = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
   month: "2-digit",
@@ -110,12 +114,18 @@ function buildRangeLabel(fromDate, toDate) {
 
 export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
   const calendarRef = useRef(null);
+  const calendarPopupRef = useRef(null);
   const fromToggleRef = useRef(null);
   const toToggleRef = useRef(null);
   const today = useMemo(() => startOfDay(new Date()), []);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [activeField, setActiveField] = useState("from");
-  const [calendarPlacement, setCalendarPlacement] = useState("bottom");
+  const [calendarLayout, setCalendarLayout] = useState({
+    top: 0,
+    left: 0,
+    width: CALENDAR_MAX_WIDTH_PX,
+    maxHeight: CALENDAR_FULL_HEIGHT_PX,
+  });
 
   const selectedFromDate = useMemo(() => parseIsoDate(fromDate), [fromDate]);
   const selectedToDate = useMemo(() => parseIsoDate(toDate), [toDate]);
@@ -138,21 +148,40 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
       const activeRef = activeField === "to" ? toToggleRef.current : fromToggleRef.current;
       const rect = activeRef?.getBoundingClientRect();
       if (!rect) {
-        setCalendarPlacement("bottom");
         return;
       }
 
+      const viewportPadding = Math.round(CALENDAR_VIEWPORT_MARGIN_PX / 2);
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const availableWidth = Math.max(240, viewportWidth - viewportPadding * 2);
+      const preferredCalendarWidth = Math.max(
+        Math.min(CALENDAR_MAX_WIDTH_PX, availableWidth),
+        Math.min(CALENDAR_MIN_WIDTH_PX, availableWidth),
+      );
       const preferredCalendarHeight = Math.min(
         CALENDAR_FULL_HEIGHT_PX,
-        Math.max(280, window.innerHeight - CALENDAR_VIEWPORT_MARGIN_PX),
+        Math.max(280, viewportHeight - viewportPadding * 2),
       );
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      if (spaceBelow < preferredCalendarHeight && spaceAbove > spaceBelow) {
-        setCalendarPlacement("top");
-      } else {
-        setCalendarPlacement("bottom");
-      }
+      const spaceBelow = viewportHeight - rect.bottom - CALENDAR_GAP_PX;
+      const spaceAbove = rect.top - CALENDAR_GAP_PX;
+      const placement = spaceBelow < preferredCalendarHeight && spaceAbove > spaceBelow ? "top" : "bottom";
+
+      let left = rect.left;
+      left = Math.max(viewportPadding, left);
+      left = Math.min(left, viewportWidth - preferredCalendarWidth - viewportPadding);
+
+      const preferredTop =
+        placement === "top" ? rect.top - CALENDAR_GAP_PX - preferredCalendarHeight : rect.bottom + CALENDAR_GAP_PX;
+      const maxTop = Math.max(viewportPadding, viewportHeight - preferredCalendarHeight - viewportPadding);
+      const top = Math.min(Math.max(viewportPadding, preferredTop), maxTop);
+
+      setCalendarLayout({
+        top,
+        left,
+        width: preferredCalendarWidth,
+        maxHeight: preferredCalendarHeight,
+      });
     };
 
     updatePlacement();
@@ -172,7 +201,7 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
 
     const onDocPointerDown = (event) => {
       const target = event.target;
-      if (!calendarRef.current || calendarRef.current.contains(target)) {
+      if (calendarRef.current?.contains(target) || calendarPopupRef.current?.contains(target)) {
         return;
       }
       setIsCalendarOpen(false);
@@ -221,132 +250,26 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
     setIsCalendarOpen(false);
   };
 
-  return (
-    <div style={{ ...card, overflow: "visible", zIndex: isCalendarOpen ? 120 : "auto" }}>
-      <SectionHeader num="04">Zeitraum</SectionHeader>
-
-      <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
-        <div className="date-focus-row">
-          <div>
-            <label htmlFor="scouting-from-date" style={lbl}>
-              Scouting ab
-            </label>
-            <button
-              id="scouting-from-date"
-              ref={fromToggleRef}
-              type="button"
-              aria-label="Scouting-Datum auswählen"
-              aria-expanded={isCalendarOpen && activeField === "from"}
-              onClick={() => openCalendar("from")}
-              style={{
-                ...inp,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: 15,
-                padding: "12px 14px",
-                minHeight: 52,
-              }}
-            >
-              <span>{formatDisplayDate(fromDate)}</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-            </button>
-          </div>
-
-          <div>
-            <label htmlFor="scouting-to-date" style={lbl}>
-              Scouting bis
-            </label>
-            <button
-              id="scouting-to-date"
-              ref={toToggleRef}
-              type="button"
-              aria-label="Scouting-Bis-Datum auswählen"
-              aria-expanded={isCalendarOpen && activeField === "to"}
-              onClick={() => openCalendar("to")}
-              style={{
-                ...inp,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: 15,
-                padding: "12px 14px",
-                minHeight: 52,
-              }}
-            >
-              <span>{formatDisplayDate(toDate)}</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>
-          Zeitraum: {buildRangeLabel(fromDate, toDate)}
-        </div>
-
-        <input
-          type="date"
-          tabIndex={-1}
-          aria-hidden="true"
-          value={fromDate}
-          min={todayIso}
-          onChange={(event) => onFromDate(event.target.value)}
-          style={{
-            position: "absolute",
-            opacity: 0,
-            pointerEvents: "none",
-            width: 0,
-            height: 0,
-          }}
-        />
-        <input
-          type="date"
-          tabIndex={-1}
-          aria-hidden="true"
-          value={toDate}
-          min={minToDateIso}
-          onChange={(event) => onToDate(event.target.value)}
-          style={{
-            position: "absolute",
-            opacity: 0,
-            pointerEvents: "none",
-            width: 0,
-            height: 0,
-          }}
-        />
-
-        {isCalendarOpen ? (
+  const calendarDialog =
+    isCalendarOpen && typeof document !== "undefined"
+      ? createPortal(
           <div
+            ref={calendarPopupRef}
             role="dialog"
             aria-label="Kalenderauswahl"
             style={{
-              position: "absolute",
-              top: calendarPlacement === "bottom" ? "calc(100% + 10px)" : "auto",
-              bottom: calendarPlacement === "top" ? "calc(100% + 10px)" : "auto",
-              left: 0,
-              width: "min(420px, calc(100vw - 56px))",
-              maxHeight: `min(${CALENDAR_FULL_HEIGHT_PX}px, calc(100vh - ${CALENDAR_VIEWPORT_MARGIN_PX}px))`,
+              position: "fixed",
+              top: calendarLayout.top,
+              left: calendarLayout.left,
+              width: calendarLayout.width,
+              maxHeight: calendarLayout.maxHeight,
               overflowY: "auto",
               borderRadius: 14,
               border: `1px solid ${C.border}`,
               background: C.surfaceSolid,
               boxShadow: "0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset",
               padding: 14,
-              zIndex: 140,
+              zIndex: 240,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -504,8 +427,120 @@ export function DateFocusPanel({ fromDate, toDate, onFromDate, onToDate }) {
                 Heute wählen
               </button>
             </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div style={{ ...card, overflow: "visible", zIndex: isCalendarOpen ? 120 : "auto" }}>
+      <SectionHeader num="04">Zeitraum</SectionHeader>
+
+      <div ref={calendarRef} style={{ position: "relative", zIndex: isCalendarOpen ? 120 : "auto" }}>
+        <div className="date-focus-row">
+          <div>
+            <label htmlFor="scouting-from-date" style={lbl}>
+              Scouting ab
+            </label>
+            <button
+              id="scouting-from-date"
+              ref={fromToggleRef}
+              type="button"
+              aria-label="Scouting-Datum auswählen"
+              aria-expanded={isCalendarOpen && activeField === "from"}
+              onClick={() => openCalendar("from")}
+              style={{
+                ...inp,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: 15,
+                padding: "12px 14px",
+                minHeight: 52,
+              }}
+            >
+              <span>{formatDisplayDate(fromDate)}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
           </div>
-        ) : null}
+
+          <div>
+            <label htmlFor="scouting-to-date" style={lbl}>
+              Scouting bis
+            </label>
+            <button
+              id="scouting-to-date"
+              ref={toToggleRef}
+              type="button"
+              aria-label="Scouting-Bis-Datum auswählen"
+              aria-expanded={isCalendarOpen && activeField === "to"}
+              onClick={() => openCalendar("to")}
+              style={{
+                ...inp,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: 15,
+                padding: "12px 14px",
+                minHeight: 52,
+              }}
+            >
+              <span>{formatDisplayDate(toDate)}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>
+          Zeitraum: {buildRangeLabel(fromDate, toDate)}
+        </div>
+
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          value={fromDate}
+          min={todayIso}
+          onChange={(event) => onFromDate(event.target.value)}
+          style={{
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 0,
+            height: 0,
+          }}
+        />
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          value={toDate}
+          min={minToDateIso}
+          onChange={(event) => onToDate(event.target.value)}
+          style={{
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 0,
+            height: 0,
+          }}
+        />
+
+        {calendarDialog}
       </div>
     </div>
   );
