@@ -157,7 +157,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("stellt persistierte Wizard-Daten nach Reload wieder her", () => {
+  it("ignoriert persistierte Wizard-Daten und startet bei Reload leer", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -173,19 +173,16 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    // Persistierte Auswahl ist direkt wieder aktiv
+    // Nach Reload darf kein Kreis vorausgewählt sein
     const duisburgButton = screen.getByLabelText(/Kreis Duisburg auswählen/i);
-    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "false");
 
-    // Nächster Schritt ist direkt möglich
+    // Nächster Schritt darf ohne neue Auswahl nicht möglich sein
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).toBeEnabled();
+    expect(nextButton).toBeDisabled();
 
-    // Persistenz bleibt erhalten und wird nicht gelöscht
-    const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.setup) || "{}");
-    expect(persisted.kreisId).toBe("duisburg");
-    expect(persisted.jugendId).toBe("d-jugend");
-    expect(persisted.fromDate).toBe("2026-05-12");
+    // Alte Setup-Persistenz wird beim Start verworfen
+    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toBeNull();
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {
