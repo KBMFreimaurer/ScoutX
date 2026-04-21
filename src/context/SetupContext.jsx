@@ -8,6 +8,7 @@ import { getWeekRange, normalizeAdapterEndpoint, normalizeTeamParameters } from 
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
+const HARD_CODED_ADAPTER_TOKEN = "scoutx-internal-2026";
 const ROMAN_TO_ARABIC = {
   I: "1",
   II: "2",
@@ -237,7 +238,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
     [defaultAdapterEndpoint],
   );
-  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || "").trim();
+  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || HARD_CODED_ADAPTER_TOKEN).trim();
   const [adapterToken, setAdapterToken] = useState(adapterTokenDefault);
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");

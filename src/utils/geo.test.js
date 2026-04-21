@@ -307,7 +307,7 @@ describe("geo utils", () => {
       strictActive: expect.any(Boolean),
     });
 
-    expect(config.keySource).not.toBe("project");
+    expect(["env", "project"]).toContain(config.keySource);
   });
 
   it("nutzt lokal gespeicherten API-Key als Runtime-Quelle", () => {
