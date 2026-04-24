@@ -1262,7 +1262,7 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
         : "";
       const isReturn = normalizeRouteNodeLabel(to) === normalizedStartLabel;
       const isStartLeg = normalizeRouteNodeLabel(from) === normalizedStartLabel;
-      const stage = isReturn ? "Rueckfahrt" : isStartLeg ? "Anfahrt" : "Zwischenfahrt";
+      const stage = isReturn ? "Rückfahrt" : isStartLeg ? "Anfahrt" : "Zwischenfahrt";
       const segment = isReturn
         ? `${truncatePlain(from, 38)} -> Start`
         : isStartLeg
@@ -1315,14 +1315,14 @@ export function drawFahrtkostenPage(doc, state, games, cfg) {
   state.y += 2;
 
   if (routeRows.length > 0) {
-    writeText(doc, state, `Routenfolge fuer die Abrechnung (Start: ${startLocationLabel})`, {
+    writeText(doc, state, `Routenfolge für die Abrechnung (Start: ${startLocationLabel})`, {
       fontSize: 9,
       style: "bold",
       color: COLORS.text,
       lineHeight: 4.3,
       sectionOnNewPage: "Fahrtkosten",
     });
-    writeText(doc, state, "Nur Fahrten am selben Datum werden verknuepft. Rueckfahrt zum Start ist pro Spieltag enthalten.", {
+    writeText(doc, state, "Nur Fahrten am selben Datum werden verknüpft. Rückfahrt zum Start ist pro Spieltag enthalten.", {
       fontSize: 8.3,
       color: COLORS.muted,
       lineHeight: 4,

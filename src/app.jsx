@@ -4,11 +4,13 @@ import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
 import { C, GCSS } from "./styles/theme";
 import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
+import { ScoutXProductProvider } from "./context/ScoutXProductContext";
 import { SetupProvider } from "./context/SetupContext";
 import { GamesProvider } from "./context/GamesContext";
 import { PlanProvider } from "./context/PlanContext";
 import { useScheduleChangeNotifications } from "./hooks/useScheduleChangeNotifications";
 
+const ScoutingHubPage = lazy(() => import("./pages/ScoutingHubPage").then((module) => ({ default: module.ScoutingHubPage })));
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ default: module.GamesPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
@@ -19,6 +21,21 @@ const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ def
 const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
 
 const RAIL_ICONS = {
+  hub: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12h6l2-7 4 14 2-7h4" />
+      <circle cx="12" cy="12" r="10" opacity="0.35" />
+    </svg>
+  ),
   setup: (
     <svg
       width="16"
@@ -181,6 +198,10 @@ function AppLayout() {
   });
 
   const currentStep = useMemo(() => {
+    if (location.pathname.startsWith("/hub") || location.pathname === "/") {
+      return "hub";
+    }
+
     if (location.pathname.startsWith("/scout-sheet")) {
       return "sheet";
     }
@@ -210,6 +231,7 @@ function AppLayout() {
   };
 
   const railItems = [
+    { id: "hub", label: "Cockpit", onClick: () => navigate("/hub") },
     { id: "setup", label: "Konfiguration", onClick: () => navigate("/setup") },
     ...(games.length > 0 ? [{ id: "games", label: "Spiele", onClick: () => navigate("/games") }] : []),
     ...(canAccessPlan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
@@ -346,6 +368,21 @@ function AppLayout() {
               background: "rgba(6,6,9,0.85)",
             }}
           >
+            <button
+              type="button"
+              onClick={() => navigate("/hub")}
+              style={{
+                border: currentStep === "hub" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                borderRadius: 8,
+                minHeight: 34,
+                padding: "6px 10px",
+                fontSize: 12,
+                background: currentStep === "hub" ? C.greenDim : "rgba(255,255,255,0.03)",
+                color: currentStep === "hub" ? C.greenLight : C.offWhite,
+              }}
+            >
+              Cockpit
+            </button>
             <button
               type="button"
               onClick={() => navigate("/scout-sheet")}
@@ -527,6 +564,7 @@ function AppLayout() {
 
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              <Route path="/hub" element={<ScoutingHubPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
               <Route
@@ -536,7 +574,7 @@ function AppLayout() {
               <Route path="/scout-sheet" element={<ScoutSheetPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
-              <Route path="*" element={<Navigate to="/setup" replace />} />
+              <Route path="*" element={<Navigate to="/hub" replace />} />
             </Routes>
           </Suspense>
         </main>
@@ -573,9 +611,11 @@ export default function App() {
       <SetupProvider defaultAdapterEndpoint={DEFAULT_ADAPTER_ENDPOINT}>
         <GamesProvider>
           <PlanProvider>
-            <ScoutXProvider>
-              <AppLayout />
-            </ScoutXProvider>
+            <ScoutXProductProvider>
+              <ScoutXProvider>
+                <AppLayout />
+              </ScoutXProvider>
+            </ScoutXProductProvider>
           </PlanProvider>
         </GamesProvider>
       </SetupProvider>

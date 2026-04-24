@@ -41,7 +41,14 @@ export default [
         "warn",
         {
           allowConstantExport: true,
-          allowExportNames: ["useScoutX", "useSetup", "useGames", "usePlan", "resolveGameWeatherDate"],
+          allowExportNames: [
+            "useScoutX",
+            "useSetup",
+            "useGames",
+            "usePlan",
+            "useScoutXProduct",
+            "resolveGameWeatherDate",
+          ],
         },
       ],
       "react/react-in-jsx-scope": "off",

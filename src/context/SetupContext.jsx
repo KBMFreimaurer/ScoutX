@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
@@ -8,7 +8,6 @@ import { getWeekRange, normalizeAdapterEndpoint, normalizeTeamParameters } from 
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
-const HARD_CODED_ADAPTER_TOKEN = "scoutx-internal-2026";
 const ROMAN_TO_ARABIC = {
   I: "1",
   II: "2",
@@ -151,19 +150,66 @@ function toIsoDate(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function normalizeStartLocation(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const lat = Number(value.lat);
+  const lon = Number(value.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return {
+    lat,
+    lon,
+    label: String(value.label || `Startpunkt (${lat.toFixed(4)}, ${lon.toFixed(4)})`).trim(),
+  };
+}
+
+function readPersistedSetup(fallback) {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.setup);
+    if (!raw) {
+      return fallback;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return fallback;
+    }
+
+    const fromParsed = parseIsoDate(parsed.fromDate);
+    const toParsed = parseIsoDate(parsed.toDate);
+    const safeFromDate = fromParsed ? toIsoDate(fromParsed) : fallback.fromDate;
+    const safeToDate = toParsed && (!fromParsed || toParsed.getTime() >= fromParsed.getTime())
+      ? toIsoDate(toParsed)
+      : fallback.toDate;
+
+    return {
+      ...fallback,
+      kreisIds: normalizeKreisIds(parsed.kreisIds || parsed.kreisId),
+      kreisId: String(parsed.kreisId || "").trim(),
+      jugendId: JUGEND_KLASSEN.some((item) => item.id === parsed.jugendId) ? parsed.jugendId : "",
+      selTeams: normalizeTeamParameters(parsed.selTeams),
+      fromDate: safeFromDate,
+      toDate: safeToDate,
+      jugendSubLevels: normalizeTeamParameters(parsed.jugendSubLevels),
+      startLocation: normalizeStartLocation(parsed.startLocation),
+      favorites: normalizeTeamParameters(parsed.favorites),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = toIsoDate(new Date());
     const initialRange = getWeekRange(todayIso);
-
-    // Setup-Wizard soll bei Reload immer leer starten und keine alte Auswahl vorauswählen.
-    try {
-      window.localStorage.removeItem(STORAGE_KEYS.setup);
-    } catch {
-      // localStorage kann im Browser-Kontext blockiert sein.
-    }
-
-    return {
+    const fallback = {
       kreisIds: [],
       kreisId: "",
       jugendId: "",
@@ -175,6 +221,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       favorites: [],
       todayIso,
     };
+
+    return readPersistedSetup(fallback);
   });
 
   const width = useWindowWidth();
@@ -192,7 +240,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
     [defaultAdapterEndpoint],
   );
-  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || HARD_CODED_ADAPTER_TOKEN).trim();
+  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || "").trim();
   const [adapterToken, setAdapterToken] = useState(adapterTokenDefault);
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
@@ -253,6 +301,31 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   );
 
   const clearErr = useCallback(() => setErr(""), []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.setup,
+        JSON.stringify({
+          kreisIds,
+          kreisId,
+          jugendId,
+          selTeams: selectedTeams,
+          fromDate,
+          toDate,
+          jugendSubLevels,
+          startLocation,
+          favorites: favoriteTeams,
+        }),
+      );
+    } catch {
+      // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
+    }
+  }, [kreisIds, kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
   const onSelectKreis = useCallback((id) => {
     const nextId = String(id || "").trim();

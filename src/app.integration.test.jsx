@@ -57,8 +57,22 @@ describe("ScoutX Integration", () => {
     vi.restoreAllMocks();
   });
 
+  it("startet auf der Scouting-Cockpit-Ansicht", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    expect(screen.getByLabelText(/Aktive Rolle/i)).toBeInTheDocument();
+  });
+
   it(
-    "durchlaeuft Setup -> Games -> Plan mit schnellem PDF-Flow",
+    "durchläuft Setup -> Games -> Plan mit schnellem PDF-Flow",
     async () => {
       const fetchMock = vi.fn(async (input, init) => {
         const url = String(input);
@@ -239,7 +253,7 @@ describe("ScoutX Integration", () => {
     expect(matches.length).toBeGreaterThan(0);
   });
 
-  it("laedt historischen Plan nach Reload und erlaubt erneuten PDF-Export", async () => {
+  it("lädt historischen Plan nach Reload und erlaubt erneuten PDF-Export", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({

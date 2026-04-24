@@ -2,12 +2,28 @@ import { STEPS } from "../config/navigation";
 import { C } from "../styles/theme";
 
 const STEP_LABELS = {
+  hub: "Cockpit",
   setup: "Konfiguration",
   games: "Spiele",
   plan: "Plan",
 };
 
 const STEP_ICONS = {
+  hub: (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12h6l2-7 4 14 2-7h4" />
+      <circle cx="12" cy="12" r="10" opacity="0.35" />
+    </svg>
+  ),
   setup: (
     <svg
       width="14"
@@ -55,7 +71,10 @@ const STEP_ICONS = {
 };
 
 export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPlan, isMobile }) {
+  const inConfigurationFlow = STEPS.includes(currentStep);
+  const visibleSteps = inConfigurationFlow ? ["hub", ...STEPS] : ["hub", "setup"];
   const canAccessStep = (step) => {
+    if (step === "hub") return true;
     if (step === "setup") return true;
     if (step === "games") return canAccessGames;
     return canAccessPlan;
@@ -73,7 +92,7 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
         padding: 3,
       }}
     >
-      {STEPS.map((step) => {
+      {visibleSteps.map((step) => {
         const active = currentStep === step;
         const clickable = canAccessStep(step) && !active;
         const unlocked = canAccessStep(step);

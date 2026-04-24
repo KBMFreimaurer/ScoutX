@@ -84,7 +84,7 @@ describe("SetupPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("setzt Vereins-Parameter bei Kreiswechsel zurueck", () => {
+  it("setzt Vereins-Parameter bei Kreiswechsel zurück", () => {
     renderSetupPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
@@ -133,7 +133,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /Favorit \+/i })).not.toBeInTheDocument();
   });
 
-  it("zeigt Unterstufen-Auswahl fuer Jugendklassen ausser Bambini", () => {
+  it("zeigt Unterstufen-Auswahl für Jugendklassen ausser Bambini", () => {
     renderSetupPage();
     fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
     clickNextStep();
@@ -157,7 +157,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("ignoriert persistierte Wizard-Daten und startet bei Reload leer", () => {
+  it("stellt persistierte Wizard-Daten bei Reload wieder her", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -173,16 +173,13 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    // Nach Reload darf kein Kreis vorausgewählt sein
     const duisburgButton = screen.getByLabelText(/Kreis Duisburg (auswählen|abwählen)/i);
-    expect(duisburgButton).toHaveAttribute("aria-pressed", "false");
+    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
 
-    // Nächster Schritt darf ohne neue Auswahl nicht möglich sein
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).toBeDisabled();
+    expect(nextButton).toBeEnabled();
 
-    // Alte Setup-Persistenz wird beim Start verworfen
-    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain("duisburg");
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {

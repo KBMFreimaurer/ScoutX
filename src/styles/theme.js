@@ -355,7 +355,7 @@ select option{background:#18181B;color:#e4e4e7}
 .setup-action-bar{
   position:sticky;
   bottom:12px;
-  z-index:10;
+  z-index:30;
   margin-top:6px;
   display:flex;
   align-items:center;
@@ -364,9 +364,20 @@ select option{background:#18181B;color:#e4e4e7}
   padding:12px;
   border-radius:12px;
   border:1px solid rgba(62,74,62,0.15);
-  background:rgba(10,10,10,0.88);
-  backdrop-filter:blur(18px);
-  -webkit-backdrop-filter:blur(18px);
+  background:#08090a;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.015) inset, 0 18px 42px rgba(0,0,0,0.55);
+}
+.setup-action-bar::after{
+  content:'';
+  position:absolute;
+  left:-1px;
+  right:-1px;
+  bottom:-14px;
+  height:16px;
+  background:#08090a;
+  border-left:1px solid rgba(62,74,62,0.15);
+  border-right:1px solid rgba(62,74,62,0.15);
+  pointer-events:none;
 }
 .setup-action-meta{
   display:flex;

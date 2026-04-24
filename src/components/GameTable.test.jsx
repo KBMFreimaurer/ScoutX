@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GameTable } from "./GameTable";
 
 describe("GameTable", () => {
-  it("sortiert Spiele nach Prioritaet", () => {
+  it("sortiert Spiele nach Priorität", () => {
     const games = [
       {
         id: "game-low",

@@ -9,4 +9,5 @@ export const STORAGE_KEYS = {
   planHistory: "scoutplan.planHistory.v1",
   playerSheets: "scoutplan.playerSheets.v1",
   scheduleWatch: "scoutplan.scheduleWatch.v1",
+  productDomain: "scoutx.product.v1",
 };

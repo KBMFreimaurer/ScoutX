@@ -42,7 +42,7 @@ describe("TeamPicker", () => {
     vi.clearAllMocks();
   });
 
-  it("zeigt Live-Vereinsvorschlaege und uebernimmt Auswahl", async () => {
+  it("zeigt Live-Vereinsvorschläge und übernimmt Auswahl", async () => {
     fetchClubSuggestions.mockResolvedValue([
       {
         name: "Duisburger SV 1900",
