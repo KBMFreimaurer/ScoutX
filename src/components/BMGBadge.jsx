@@ -1,20 +1,39 @@
 export function BMGBadge({ size = 36, variant = "mark" }) {
   const isFull = String(variant || "").toLowerCase() === "full";
-  const src = isFull ? "/scoutx-logo.png" : "/scoutx-icon.png";
-  const width = isFull ? Math.round(size * 3.2) : size;
+
+  if (isFull) {
+    return (
+      <span
+        aria-label="ScoutX Logo"
+        style={{
+          display: "inline-flex",
+          alignItems: "baseline",
+          color: "#f8fafc",
+          fontSize: size,
+          fontWeight: 900,
+          lineHeight: 1,
+          letterSpacing: 0,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Scout
+        <span style={{ color: "#00d060" }}>X</span>
+      </span>
+    );
+  }
 
   return (
     <img
-      src={src}
-      alt={isFull ? "ScoutX Logo" : "ScoutX Icon"}
-      width={width}
+      src="/scoutx-icon.png"
+      alt="ScoutX Icon"
+      width={size}
       height={size}
       style={{
-        width,
+        width: size,
         height: size,
         objectFit: "contain",
         display: "block",
-        borderRadius: isFull ? 0 : 8,
+        borderRadius: 8,
       }}
     />
   );
