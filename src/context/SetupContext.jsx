@@ -4,7 +4,7 @@ import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { STORAGE_KEYS } from "../config/storage";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
-import { getWeekRange, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
+import { getRangeToNextSunday, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
@@ -34,9 +34,7 @@ function normalizeKreisIds(values) {
 }
 
 function buildKreisLabel(kreise) {
-  const labels = (Array.isArray(kreise) ? kreise : [])
-    .map((item) => String(item?.label || "").trim())
-    .filter(Boolean);
+  const labels = (Array.isArray(kreise) ? kreise : []).map((item) => String(item?.label || "").trim()).filter(Boolean);
 
   if (labels.length === 0) {
     return "";
@@ -150,6 +148,19 @@ function toIsoDate(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function buildCurrentScoutingRange() {
+  return getRangeToNextSunday(toIsoDate(new Date()));
+}
+
+function isBeforeDay(left, right) {
+  const leftDate = parseIsoDate(left);
+  const rightDate = parseIsoDate(right);
+  if (!leftDate || !rightDate) {
+    return false;
+  }
+  return leftDate.getTime() < rightDate.getTime();
+}
+
 function normalizeStartLocation(value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -183,10 +194,15 @@ function readPersistedSetup(fallback) {
 
     const fromParsed = parseIsoDate(parsed.fromDate);
     const toParsed = parseIsoDate(parsed.toDate);
-    const safeFromDate = fromParsed ? toIsoDate(fromParsed) : fallback.fromDate;
-    const safeToDate = toParsed && (!fromParsed || toParsed.getTime() >= fromParsed.getTime())
-      ? toIsoDate(toParsed)
-      : fallback.toDate;
+    const parsedFromDate = fromParsed ? toIsoDate(fromParsed) : "";
+    const hasCurrentPersistedFrom = Boolean(parsedFromDate && !isBeforeDay(parsedFromDate, fallback.fromDate));
+    const safeFromDate = hasCurrentPersistedFrom ? parsedFromDate : fallback.fromDate;
+    const defaultToDate = getRangeToNextSunday(safeFromDate).toDate;
+    const parsedToDate = toParsed ? toIsoDate(toParsed) : "";
+    const safeToDate =
+      hasCurrentPersistedFrom && parsedToDate && !isBeforeDay(parsedToDate, safeFromDate)
+        ? parsedToDate
+        : defaultToDate;
 
     return {
       ...fallback,
@@ -208,7 +224,7 @@ function readPersistedSetup(fallback) {
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [setupDefaults] = useState(() => {
     const todayIso = toIsoDate(new Date());
-    const initialRange = getWeekRange(todayIso);
+    const initialRange = getRangeToNextSunday(todayIso);
     const fallback = {
       kreisIds: [],
       kreisId: "",
@@ -279,10 +295,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
 
   const kreisId = useMemo(() => (Array.isArray(kreisIds) && kreisIds.length > 0 ? kreisIds[0] : ""), [kreisIds]);
   const kreise = useMemo(
-    () =>
-      (Array.isArray(kreisIds) ? kreisIds : [])
-        .map((id) => KREISE.find((item) => item.id === id))
-        .filter(Boolean),
+    () => (Array.isArray(kreisIds) ? kreisIds : []).map((id) => KREISE.find((item) => item.id === id)).filter(Boolean),
     [kreisIds],
   );
   const kreis = useMemo(() => (kreise.length > 0 ? kreise[0] : null), [kreise]);
@@ -398,13 +411,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       return;
     }
 
-    setToDate((prevToDate) => {
-      const prevParsed = parseIsoDate(prevToDate);
-      if (!prevParsed || prevParsed.getTime() < fromParsed.getTime()) {
-        return toIsoDate(fromParsed);
-      }
-      return prevToDate;
-    });
+    setToDate(getRangeToNextSunday(toIsoDate(fromParsed)).toDate);
   }, []);
 
   const onSetToDate = useCallback(
@@ -558,6 +565,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   }, []);
 
   const resetSetupState = useCallback(() => {
+    const currentRange = buildCurrentScoutingRange();
     setKreisIds([]);
     setJugendId("");
     setSelectedTeams([]);
@@ -565,8 +573,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamValidation(null);
     setJugendSubLevels([]);
     setAdapterToken(adapterTokenDefault);
-    setFromDate(setupDefaults.fromDate);
-    setToDate(setupDefaults.toDate);
+    setFromDate(currentRange.fromDate);
+    setToDate(currentRange.toDate);
     setStartLocation(null);
     setLocationDraft("");
     setLocationError("");
@@ -581,7 +589,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       // Falls localStorage blockiert ist, bleibt nur der In-Memory-Reset aktiv.
     }
     setErr("");
-  }, [adapterTokenDefault, setupDefaults.fromDate, setupDefaults.toDate]);
+  }, [adapterTokenDefault]);
 
   const value = useMemo(
     () => ({

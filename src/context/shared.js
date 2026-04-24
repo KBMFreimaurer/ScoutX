@@ -69,6 +69,20 @@ export function getWeekRange(isoDate) {
   return { fromDate: toIso(weekStart), toDate: toIso(weekEnd) };
 }
 
+export function getRangeToNextSunday(isoDate) {
+  const fromDate = parseIsoDateStrict(isoDate);
+  fromDate.setHours(0, 0, 0, 0);
+
+  const daysUntilSunday = (7 - fromDate.getDay()) % 7;
+  const toDate = new Date(fromDate);
+  toDate.setDate(fromDate.getDate() + daysUntilSunday);
+
+  const toIso = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  return { fromDate: toIso(fromDate), toDate: toIso(toDate) };
+}
+
 export function normalizeTeamParameters(values) {
   const seen = new Set();
   const teams = [];
@@ -99,5 +113,9 @@ export function cleanScoutPlanText(rawText) {
     .filter((line) => !/^(?:VALIDIERUNG)$/i.test(line.trim()))
     .filter((line) => !/^(?:Wettbewerbsniveau|Scout-?Niveau)\s*:/i.test(line.trim()));
 
-  return lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return lines
+    .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

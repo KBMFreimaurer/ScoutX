@@ -84,7 +84,6 @@ export function SetupPage() {
     jugendId,
     jugend,
     selectedTeams,
-    activeTeams,
     jugendSubLevels,
     availableJugendSubLevels,
     teamDraft,
@@ -136,7 +135,7 @@ export function SetupPage() {
     [kreisIds],
   );
   const selectedKreisLabel = useMemo(() => buildKreisSelectionLabel(selectedKreise), [selectedKreise]);
-  const teamParameterCount = activeTeams.length || 0;
+  const teamParameterCount = selectedTeams.length || 0;
   const stepCompletionMap = buildStepCompletionMap({
     kreisIds,
     jugendId,
@@ -291,8 +290,7 @@ export function SetupPage() {
           {!googleRouting.googleConfigured ? (
             <div style={{ marginTop: 6 }}>
               <div>
-                Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional <code>VITE_GOOGLE_MAPS_STRICT=true</code>{" "}
-                ·{" "}
+                Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
                 <a
                   href="https://console.cloud.google.com/apis/credentials"
                   target="_blank"
@@ -338,7 +336,11 @@ export function SetupPage() {
           ) : (
             <div>
               Provider: <code>{googleRouting.routeProvider}</code>
-              {googleRouting.strictActive ? " · Strict aktiv" : googleRouting.strictRequested ? " · Strict angefordert" : ""}
+              {googleRouting.strictActive
+                ? " · Strict aktiv"
+                : googleRouting.strictRequested
+                  ? " · Strict angefordert"
+                  : ""}
               {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
               {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
               {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
@@ -460,7 +462,6 @@ export function SetupPage() {
           </span>
         </div>
       </div>
-
     </div>
   );
 
@@ -504,11 +505,7 @@ export function SetupPage() {
       case 6:
         return renderFahrtkostenCard();
       case 7:
-        return (
-          <>
-            {renderSummaryCard()}
-          </>
-        );
+        return <>{renderSummaryCard()}</>;
       default:
         return null;
     }

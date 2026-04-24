@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ScoutXProvider } from "../context/ScoutXContext";
 import { SetupProvider } from "../context/SetupContext";
@@ -10,10 +10,7 @@ import { STORAGE_KEYS } from "../config/storage";
 
 function renderSetupPage() {
   return render(
-    <MemoryRouter
-      initialEntries={["/setup"]}
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
+    <MemoryRouter initialEntries={["/setup"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <SetupProvider defaultAdapterEndpoint="/api/games">
         <GamesProvider>
           <PlanProvider>
@@ -75,6 +72,7 @@ function goToStepWithRequiredSelections(step) {
 
 describe("SetupPage", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     if (typeof window.localStorage?.clear === "function") {
       window.localStorage.clear();
     }
@@ -82,6 +80,10 @@ describe("SetupPage", () => {
       window.sessionStorage.clear();
     }
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("setzt Vereins-Parameter bei Kreiswechsel zurück", () => {
@@ -180,6 +182,54 @@ describe("SetupPage", () => {
     expect(nextButton).toBeEnabled();
 
     expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain("duisburg");
+  });
+
+  it("setzt den Zeitraum initial von heute bis zum nächsten Sonntag", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 24, 10, 0, 0));
+
+    renderSetupPage();
+    goToStepWithRequiredSelections(4);
+
+    expect(screen.getByRole("button", { name: /Scouting-Datum auswählen/i })).toHaveTextContent("24.04.2026");
+    expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toHaveTextContent("26.04.2026");
+  });
+
+  it("übernimmt keine veralteten Startdaten aus persistierten Setup-Daten", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 24, 10, 0, 0));
+    window.localStorage.setItem(
+      STORAGE_KEYS.setup,
+      JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-04-20",
+        toDate: "2026-04-26",
+      }),
+    );
+
+    renderSetupPage();
+    goToStepWithRequiredSelections(4);
+
+    expect(screen.getByRole("button", { name: /Scouting-Datum auswählen/i })).toHaveTextContent("24.04.2026");
+    expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toHaveTextContent("26.04.2026");
+  });
+
+  it("zählt Altersklassen-Unterstufen nicht als gesetzte Mannschaften", () => {
+    renderSetupPage();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    clickNextStep();
+    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+    fireEvent.click(screen.getByRole("button", { name: /D I auswählen/i }));
+    clickNextStep();
+    clickNextStep();
+    clickNextStep();
+    clickNextStep();
+    fireEvent.change(screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i), { target: { value: "Ayoub Kerbab" } });
+    clickNextStep();
+
+    expect(screen.getByText("Mannschaften").closest(".setup-summary-item")).toHaveTextContent("Keine Team-Parameter");
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {

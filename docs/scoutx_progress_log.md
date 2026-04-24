@@ -418,6 +418,35 @@
 - `npm run build`: bestanden.
 - Dev-Server erreichbar: `http://127.0.0.1:5173/hub` und `http://127.0.0.1:5173/setup`.
 
+## 2026-04-24 - Setup-Kalender und Mannschaften-Zählung korrigiert
+
+### Umgesetzte Arbeit
+
+- Setup-Zeitraum intelligenter gemacht:
+  - Initiales Von-Datum ist jetzt der reale heutige Tag.
+  - Bis-Datum läuft automatisch bis zum nächsten Sonntag.
+  - Persistierte Setup-Daten mit Startdatum in der Vergangenheit werden beim Laden auf heute bis nächsten Sonntag normalisiert.
+  - Bei Änderung des Von-Datums wird das Bis-Datum wieder auf den kommenden Sonntag dieses Startdatums gesetzt.
+- Zusammenfassung der optionalen Mannschaften korrigiert:
+  - Die Anzeige zählt nur noch explizit vom User eingetragene Mannschaften.
+  - Automatisch abgeleitete Unterstufen-Hinweise wie D I/D1 bleiben für die Plansuche nutzbar, erscheinen aber nicht mehr als gesetzte Mannschaften.
+
+### Geänderte Dateien
+
+- `src/context/shared.js`
+- `src/context/shared.test.js`
+- `src/context/SetupContext.jsx`
+- `src/pages/SetupPage.jsx`
+- `src/pages/SetupPage.test.jsx`
+- `docs/scoutx_progress_log.md`
+
+### Validierung
+
+- Gezielte Tests für Shared-Date-Logik und SetupPage: bestanden, 20 Tests.
+- `npm run lint`: bestanden.
+- `npm run build`: bestanden.
+- `npm run test`: bestanden, 33 Testdateien / 193 Tests.
+
 ## 2026-04-24 - Cockpit-Seed-Daten entfernt
 
 ### Umgesetzte Arbeit

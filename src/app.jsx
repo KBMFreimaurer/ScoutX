@@ -261,10 +261,7 @@ function AppLayout() {
         <aside className="left-rail">
           <div>
             <div className="left-rail-brand">
-              <BMGBadge size={28} />
-              <span>
-                Scout<span className="brand-accent">X</span>
-              </span>
+              <BMGBadge size={34} variant="full" />
             </div>
             <div className="left-rail-sub" style={{ marginTop: 4 }}>
               Scouting-Cockpit FVN Niederrhein
@@ -300,10 +297,12 @@ function AppLayout() {
       <div className="content-shell">
         <header className="top-strip">
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            {!isDesktopShell ? <BMGBadge size={26} /> : null}
-            <div className="top-strip-title">
-              Scout<span style={{ color: C.green }}>X</span>
-            </div>
+            {!isDesktopShell ? <BMGBadge size={26} variant="full" /> : null}
+            {isDesktopShell ? (
+              <div className="top-strip-title">
+                Scout<span style={{ color: C.green }}>X</span>
+              </div>
+            ) : null}
           </div>
 
           <StepNav
