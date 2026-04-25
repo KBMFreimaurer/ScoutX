@@ -1,6 +1,7 @@
 export function BMGBadge({ size = 36, variant = "mark" }) {
   const isFull = String(variant || "").toLowerCase() === "full";
-  const imageSrc = isFull ? "/scoutx-mark.png" : "/scoutx-icon.png";
+  const assetVersion = "2026-04-25-2";
+  const imageSrc = isFull ? `/scoutx-mark.png?v=${assetVersion}` : `/scoutx-icon.png?v=${assetVersion}`;
   const imageAlt = isFull ? "ScoutX Logo" : "ScoutX Icon";
 
   return (
