@@ -3,6 +3,7 @@ import { useWindowWidth } from "../hooks/useWindowWidth";
 import { KREISE } from "../data/kreise";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { STORAGE_KEYS } from "../config/storage";
+import { ADAPTER_AUTH_TOKEN, ADAPTER_ENDPOINT } from "../config/adapter";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
 import { getRangeToNextSunday, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
 
@@ -253,11 +254,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [toDate, setToDate] = useState(setupDefaults.toDate);
   const [jugendSubLevels, setJugendSubLevels] = useState(() => normalizeTeamParameters(setupDefaults.jugendSubLevels));
   const adapterEndpoint = useMemo(
-    () => normalizeAdapterEndpoint(defaultAdapterEndpoint, "/api/games"),
+    () => normalizeAdapterEndpoint(defaultAdapterEndpoint, ADAPTER_ENDPOINT),
     [defaultAdapterEndpoint],
   );
-  const adapterTokenDefault = String(import.meta.env?.VITE_ADAPTER_TOKEN || "").trim();
-  const [adapterToken, setAdapterToken] = useState(adapterTokenDefault);
+  const adapterToken = ADAPTER_AUTH_TOKEN;
   const [startLocation, setStartLocation] = useState(setupDefaults.startLocation);
   const [locationDraft, setLocationDraft] = useState(setupDefaults.startLocation?.label || "");
   const [locationError, setLocationError] = useState("");
@@ -572,7 +572,6 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setTeamDraft("");
     setTeamValidation(null);
     setJugendSubLevels([]);
-    setAdapterToken(adapterTokenDefault);
     setFromDate(currentRange.fromDate);
     setToDate(currentRange.toDate);
     setStartLocation(null);
@@ -589,7 +588,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       // Falls localStorage blockiert ist, bleibt nur der In-Memory-Reset aktiv.
     }
     setErr("");
-  }, [adapterTokenDefault]);
+  }, []);
 
   const value = useMemo(
     () => ({

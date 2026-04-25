@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
 import { C, GCSS } from "./styles/theme";
+import { ADAPTER_ENDPOINT } from "./config/adapter";
 import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
 import { ScoutXProductProvider } from "./context/ScoutXProductContext";
 import { SetupProvider } from "./context/SetupContext";
@@ -18,7 +19,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) =
 const ScoutSheetPage = lazy(() => import("./pages/ScoutSheetPage").then((module) => ({ default: module.ScoutSheetPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 
-const DEFAULT_ADAPTER_ENDPOINT = import.meta.env.VITE_ADAPTER_ENDPOINT || "/api/games";
+const DEFAULT_ADAPTER_ENDPOINT = ADAPTER_ENDPOINT;
 
 const RAIL_ICONS = {
   hub: (

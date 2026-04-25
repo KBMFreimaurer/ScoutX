@@ -12,7 +12,7 @@ import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } fro
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
 const PORT = Number(process.env.ADAPTER_PORT || 8787);
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "*";
-const AUTH_TOKEN = process.env.ADAPTER_TOKEN || "";
+const AUTH_TOKEN = "ScoutX-Adapter-Internal-2026";
 const MAX_BODY_BYTES = (() => {
   const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
   if (!Number.isFinite(configured) || configured <= 0) {
