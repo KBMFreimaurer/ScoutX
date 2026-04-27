@@ -8,3 +8,4 @@ adapter-service/imports/*
 .env
 .env.local
 .vitest-localstorage*
+test-results/

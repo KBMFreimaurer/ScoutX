@@ -4,6 +4,7 @@ import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { useScoutX } from "../context/ScoutXContext";
 import { C } from "../styles/theme";
+import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
 
 export function GamesPage() {
@@ -100,6 +101,13 @@ export function GamesPage() {
     const start = (currentPage - 1) * PAGE_SIZE;
     return sortedGames.slice(start, start + PAGE_SIZE);
   }, [sortedGames, currentPage, shouldPaginate]);
+
+  const onExportCalendar = () => {
+    const exportGames = selectedGameIds.length > 0 ? games.filter((game) => selectedGameIds.includes(game.id)) : games;
+    downloadCalendarIcs(exportGames, {
+      kreisLabel: String(kreisLabel || kreis?.label || "").trim(),
+    });
+  };
 
   return (
     <div className="fu">
@@ -368,22 +376,27 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          {pdfExporting ? "Plan wird erstellt..." : "Plan öffnen"}
-        </span>
-      </PrimaryButton>
+      <div style={{ display: "grid", gap: 8 }}>
+        <GhostButton onClick={onExportCalendar} disabled={games.length === 0} style={{ width: "100%" }}>
+          Spiele als Kalender (.ics)
+        </GhostButton>
+        <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            {pdfExporting ? "Plan wird erstellt..." : "Plan öffnen"}
+          </span>
+        </PrimaryButton>
+      </div>
     </div>
   );
 }
