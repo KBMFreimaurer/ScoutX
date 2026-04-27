@@ -40,3 +40,7 @@ jobs:
             ASSET_PATH="$(printf "%s" "$INDEX_HTML" | grep -o '/assets/index-[^"]*\.js' | head -n 1)"
             test -n "$ASSET_PATH"
             curl -fsS "http://127.0.0.1:5580${ASSET_PATH}" | grep -q "Bundesland"
+            LAN_INDEX_HTML="$(curl -fsS http://10.0.0.1:5580/)"
+            LAN_ASSET_PATH="$(printf "%s" "$LAN_INDEX_HTML" | grep -o '/assets/index-[^"]*\.js' | head -n 1)"
+            test -n "$LAN_ASSET_PATH"
+            curl -fsS "http://10.0.0.1:5580${LAN_ASSET_PATH}" | grep -q "Bundesland"
