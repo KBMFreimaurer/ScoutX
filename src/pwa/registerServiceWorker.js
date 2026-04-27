@@ -9,10 +9,13 @@ export function registerServiceWorker() {
 
   window.addEventListener(
     "load",
-    () => {
-      navigator.serviceWorker.register("/sw.js").catch((error) => {
+    async () => {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        await registration.update();
+      } catch (error) {
         console.error("[ScoutX PWA] Service-Worker Registrierung fehlgeschlagen:", error);
-      });
+      }
     },
     { once: true },
   );
