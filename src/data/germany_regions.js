@@ -65,6 +65,271 @@ const STATE_DEFAULT_VERBAND = {
   BW: "WFV",
 };
 
+// Bezirks-Zuordnung für Verbände, die ihre Kreise unter Bezirken gruppieren.
+// Diese Tokens erscheinen in fussball.de-Bereichslabels wie "Bezirk Oberbayern"
+// und erweitern die Trefferquote analog zu den Niederrhein-Keywords
+// (Beispiel Duisburg: ["duisburg","mulheim","dinslak"] → matched
+// "Kreis Duisburg-Mülheim-Dinslaken").
+const STATE_BEZIRK_BY_SHORTCODE = {
+  BY: {
+    M: "oberbayern",
+    IN: "oberbayern",
+    RO: "oberbayern",
+    N: "mittelfranken",
+    FUE: "mittelfranken",
+    ER: "mittelfranken",
+    A: "schwaben",
+    R: "oberpfalz",
+    WUE: "unterfranken",
+    AB: "unterfranken",
+    BT: "oberfranken",
+    BA: "oberfranken",
+    LA: "niederbayern",
+    PA: "niederbayern",
+  },
+  NI: {
+    H: "hannover",
+    BS: "braunschweig",
+    WOB: "braunschweig",
+    HI: "braunschweig",
+    GOE: "braunschweig",
+    SZ: "braunschweig",
+    LG: "luneburg",
+    WL: "luneburg",
+    CE: "luneburg",
+    OS: "weser ems",
+    OL: "weser ems",
+    EL: "weser ems",
+  },
+  BW: {
+    S: "stuttgart",
+    HN: "stuttgart",
+    LB: "stuttgart",
+    ES: "stuttgart",
+    BB: "stuttgart",
+    TUE: "alb",
+    RT: "alb",
+    UL: "donau",
+    KA: "karlsruhe",
+    MA: "mannheim",
+    HD: "mannheim",
+    PF: "pforzheim",
+    RNK: "mannheim",
+    FR: "freiburg",
+  },
+  RP: {
+    MZ: "rheinhessen",
+    LU: "vorderpfalz",
+    KL: "westpfalz",
+    WO: "rheinhessen",
+    SP: "vorderpfalz",
+    MZB: "rheinhessen",
+    RPK: "vorderpfalz",
+    KH: "rheinhessen",
+    KO: "rhein lahn",
+    TR: "mosel",
+    MYK: "rhein lahn",
+  },
+  HE: {
+    F: "sud",
+    WI: "sud",
+    OF: "sud",
+    DA: "sud",
+    MTK: "sud",
+    HG: "sud",
+    MKK: "sud",
+    GG: "sud",
+    GI: "mitte",
+    MR: "mitte",
+    KS: "nord",
+    FD: "mitte",
+  },
+};
+
+// Explizite Area-Keywords pro Region (mirroring NRW-Duisburg-Pattern).
+// Wenn fussball.de eine Region in einem zusammengesetzten Kreis-Label führt
+// (z. B. "Kreis Duisburg-Mülheim-Dinslaken"), listen wir hier alle Tokens, die
+// im Label vorkommen können. Greift, falls auto-generierte Keywords nicht
+// reichen.
+const REGION_KEYWORD_OVERRIDES = {
+  // NRW (FVN) – wie bisher, jetzt zentral hier gepflegt:
+  duesseldorf: ["dusseldorf", "duesseldorf"],
+  duisburg: ["duisburg", "mulheim", "dinslak"],
+  essen: ["essen"],
+  krefeld: ["krefeld", "kempen"],
+  moenchen: ["monchengladbach", "moenchengladbach", "viersen"],
+  neuss: ["neuss", "grevenbroich"],
+  oberhausen: ["oberhausen", "bottrop"],
+  viersen: ["viersen", "monchengladbach", "moenchengladbach"],
+  wesel: ["wesel", "moers", "rees", "bocholt"],
+  kleve: ["kleve", "geldern", "rees", "bocholt"],
+  // BY (BFV) – Stadt-Kreise und ihre Bezirke
+  "by-m": ["munchen", "muenchen", "munchen stadt", "munchen land", "oberbayern"],
+  "by-n": ["nurnberg", "nuernberg", "mittelfranken"],
+  "by-fue": ["furth", "fuerth", "mittelfranken"],
+  "by-er": ["erlangen", "pegnitzgrund", "mittelfranken"],
+  "by-a": ["augsburg", "schwaben"],
+  "by-r": ["regensburg", "oberpfalz"],
+  "by-in": ["ingolstadt", "donau isar", "oberbayern"],
+  "by-wue": ["wurzburg", "wuerzburg", "unterfranken"],
+  "by-ab": ["aschaffenburg", "untermain", "unterfranken"],
+  "by-bt": ["bayreuth", "oberfranken"],
+  "by-ba": ["bamberg", "oberfranken"],
+  "by-ro": ["rosenheim", "inn salzach", "oberbayern"],
+  "by-la": ["landshut", "niederbayern"],
+  "by-pa": ["passau", "niederbayern"],
+  // NI (NFV) – Kreise mit Bezirk
+  "ni-h": ["hannover", "region hannover"],
+  "ni-bs": ["braunschweig"],
+  "ni-os": ["osnabruck", "osnabrueck", "weser ems"],
+  "ni-ol": ["oldenburg", "weser ems"],
+  "ni-wob": ["wolfsburg", "braunschweig"],
+  "ni-goe": ["gottingen", "goettingen", "braunschweig"],
+  "ni-hi": ["hildesheim", "braunschweig"],
+  "ni-sz": ["salzgitter", "braunschweig"],
+  "ni-ce": ["celle", "luneburg", "lueneburg"],
+  "ni-lg": ["luneburg", "lueneburg"],
+  "ni-el": ["emsland", "weser ems"],
+  "ni-wl": ["harburg", "luneburg", "lueneburg"],
+  // SH (SHFV) – Kreis-basiert, plain
+  "sh-ki": ["kiel"],
+  "sh-hl": ["lubeck", "luebeck"],
+  "sh-fl": ["flensburg"],
+  "sh-nms": ["neumunster", "neumuenster"],
+  "sh-pi": ["pinneberg"],
+  "sh-se": ["segeberg"],
+  "sh-od": ["stormarn"],
+  "sh-rz": ["lauenburg", "herzogtum lauenburg"],
+  "sh-rd": ["rendsburg", "eckernforde", "eckernfoerde"],
+  "sh-sl": ["schleswig", "flensburg"],
+  "sh-oh": ["ostholstein"],
+  "sh-nf": ["nordfriesland"],
+  // HE (HFV) – mit Region/Bezirk Süd/Mitte/Nord
+  "he-f": ["frankfurt", "main", "sud"],
+  "he-wi": ["wiesbaden", "sud"],
+  "he-ks": ["kassel", "nord"],
+  "he-da": ["darmstadt", "sud"],
+  "he-of": ["offenbach", "sud"],
+  "he-mtk": ["main taunus", "sud"],
+  "he-hg": ["hochtaunus", "taunus", "sud"],
+  "he-mkk": ["main kinzig", "sud"],
+  "he-gg": ["gross gerau", "sud"],
+  "he-gi": ["giessen", "mitte"],
+  "he-mr": ["marburg", "biedenkopf", "mitte"],
+  "he-fd": ["fulda", "mitte"],
+  // BB (FLB) – Brandenburg, plain Kreise
+  "bb-p": ["potsdam"],
+  "bb-cb": ["cottbus", "spree neisse"],
+  "bb-brb": ["brandenburg", "havel"],
+  "bb-ff": ["frankfurt oder", "oder"],
+  "bb-pm": ["potsdam mittelmark"],
+  "bb-hvl": ["havelland"],
+  "bb-ohv": ["oberhavel"],
+  "bb-bar": ["barnim"],
+  "bb-lds": ["dahme", "spreewald"],
+  "bb-tf": ["teltow", "flaming", "flaeming"],
+  // MV (LFV-MV) – Kreise
+  "mv-hro": ["rostock"],
+  "mv-sn": ["schwerin"],
+  "mv-vg": ["vorpommern greifswald", "greifswald"],
+  "mv-vr": ["vorpommern rugen", "ruegen", "rugen"],
+  "mv-mse": ["mecklenburgische seenplatte", "seenplatte"],
+  "mv-lro": ["landkreis rostock"],
+  "mv-lup": ["ludwigslust", "parchim"],
+  "mv-nwm": ["nordwestmecklenburg"],
+  // SN (SFV Sachsen) – Kreise
+  "sn-l": ["leipzig"],
+  "sn-dd": ["dresden"],
+  "sn-c": ["chemnitz"],
+  "sn-z": ["zwickau"],
+  "sn-v": ["vogtland"],
+  "sn-gr": ["gorlitz", "goerlitz"],
+  "sn-bz": ["bautzen"],
+  "sn-mei": ["meissen", "meisen"],
+  "sn-msn": ["mittelsachsen"],
+  "sn-erz": ["erzgebirge"],
+  "sn-ll": ["landkreis leipzig"],
+  // ST (FSA) – Kreise
+  "st-md": ["magdeburg"],
+  "st-hal": ["halle", "saale"],
+  "st-de": ["dessau", "rosslau", "russlau"],
+  "st-hz": ["harz"],
+  "st-sk": ["saalekreis", "saale"],
+  "st-blk": ["burgenlandkreis"],
+  "st-abi": ["anhalt", "bitterfeld"],
+  "st-msh": ["mansfeld", "sudharz", "suedharz"],
+  "st-sdl": ["stendal"],
+  "st-bk": ["borde", "boerde"],
+  // TH (TFV) – Kreise
+  "th-ef": ["erfurt"],
+  "th-j": ["jena"],
+  "th-g": ["gera"],
+  "th-we": ["weimar"],
+  "th-wak": ["eisenach", "wartburg"],
+  "th-gth": ["gotha"],
+  "th-ik": ["ilm"],
+  "th-slf": ["saalfeld", "rudolstadt"],
+  "th-sok": ["saale orla"],
+  "th-shk": ["saale holzland"],
+  "th-ndh": ["nordhausen"],
+  // SL (SFV Saar) – Kreise
+  "sl-sb": ["saarbrucken", "saarbruecken", "regionalverband"],
+  "sl-sls": ["saarlouis"],
+  "sl-mzg": ["merzig", "wadern"],
+  "sl-nk": ["neunkirchen"],
+  "sl-spk": ["saarpfalz"],
+  "sl-wnd": ["wendel", "st wendel"],
+  // RP (SWFV/FVR) – mit Bezirken
+  "rp-mz": ["mainz", "rheinhessen"],
+  "rp-lu": ["ludwigshafen", "vorderpfalz"],
+  "rp-kl": ["kaiserslautern", "westpfalz"],
+  "rp-wo": ["worms", "rheinhessen"],
+  "rp-sp": ["speyer", "vorderpfalz"],
+  "rp-mzb": ["mainz bingen", "rheinhessen"],
+  "rp-rpk": ["rhein pfalz", "vorderpfalz"],
+  "rp-kh": ["bad kreuznach", "rheinhessen"],
+  "rp-ko": ["koblenz", "rhein lahn"],
+  "rp-tr": ["trier", "mosel"],
+  "rp-myk": ["mayen", "koblenz", "rhein lahn"],
+  // BW (WFV/BFV-Baden/SBFV) – Bezirks-Hinweise
+  "bw-s": ["stuttgart"],
+  "bw-hn": ["heilbronn"],
+  "bw-lb": ["ludwigsburg"],
+  "bw-es": ["esslingen", "neckar fils"],
+  "bw-bb": ["boblingen", "boeblingen"],
+  "bw-tue": ["tubingen", "tuebingen", "alb"],
+  "bw-rt": ["reutlingen", "alb"],
+  "bw-ul": ["ulm", "donau"],
+  "bw-ka": ["karlsruhe"],
+  "bw-ma": ["mannheim"],
+  "bw-hd": ["heidelberg"],
+  "bw-pf": ["pforzheim"],
+  "bw-rnk": ["rhein neckar"],
+  "bw-fr": ["freiburg", "breisgau"],
+  // BE (BFV Berlin) – verbandsweit + Bezirk-spezifisch
+  "be-b": ["berlin"],
+  "be-b-mi": ["mitte"],
+  "be-b-pk": ["pankow"],
+  "be-b-nk": ["neukolln", "neukoelln"],
+  "be-b-cw": ["charlottenburg", "wilmersdorf"],
+  "be-b-fk": ["friedrichshain", "kreuzberg"],
+  "be-b-sp": ["spandau"],
+  "be-b-rd": ["reinickendorf"],
+  "be-b-ts": ["tempelhof", "schoneberg", "schoeneberg"],
+  // HH (HFV) – Stadtstaat + Bezirke
+  "hh-hh": ["hamburg"],
+  "hh-hh-m": ["mitte"],
+  "hh-hh-a": ["altona"],
+  "hh-hh-e": ["eimsbuttel", "eimsbuettel"],
+  "hh-hh-n": ["nord"],
+  "hh-hh-w": ["wandsbek"],
+  "hh-hh-b": ["bergedorf"],
+  "hh-hh-h": ["harburg"],
+  // HB (BFV Bremen)
+  "hb-hb": ["bremen"],
+  "hb-bhv": ["bremerhaven"],
+};
+
 function getVerband(verbandKey) {
   if (!verbandKey) {
     return null;
@@ -280,7 +545,7 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function buildRegionAreaKeywords(name, shortCode, legacyId, verband) {
+function buildRegionAreaKeywords({ stateCode, name, shortCode, legacyId, verband, regionId }) {
   const keywords = new Set();
   const normalizedName = slugify(name).replace(/-/g, " ").trim();
   const segments = normalizedName.split(" ").filter(Boolean);
@@ -313,6 +578,17 @@ function buildRegionAreaKeywords(name, shortCode, legacyId, verband) {
     gottingen: ["gottingen", "goettingen"],
     tubingen: ["tubingen", "tuebingen"],
     rosslau: ["rosslau", "russlau"],
+    lubeck: ["lubeck", "luebeck"],
+    neumunster: ["neumunster", "neumuenster"],
+    eckerforde: ["eckerforde", "eckernforde", "eckernfoerde"],
+    boblingen: ["boblingen", "boeblingen"],
+    gorlitz: ["gorlitz", "goerlitz"],
+    meissen: ["meissen", "meisen"],
+    suedharz: ["sudharz", "suedharz"],
+    borde: ["borde", "boerde"],
+    eimsbuttel: ["eimsbuttel", "eimsbuettel"],
+    schoneberg: ["schoneberg", "schoeneberg"],
+    neukolln: ["neukolln", "neukoelln"],
   };
 
   for (const segment of [...keywords]) {
@@ -321,6 +597,23 @@ function buildRegionAreaKeywords(name, shortCode, legacyId, verband) {
       for (const variant of variants) {
         keywords.add(variant);
       }
+    }
+  }
+
+  // Bezirks-Tag aus dem Lookup (BY, NI, BW, RP, HE) – ergänzt verbandsweite
+  // Spielklassen, die auf Bezirksebene laufen.
+  const bezirk = STATE_BEZIRK_BY_SHORTCODE[stateCode]?.[shortCode];
+  if (bezirk) {
+    keywords.add(bezirk);
+  }
+
+  // Explizite Region-spezifische Tokens aus REGION_KEYWORD_OVERRIDES
+  // (mirroring NRW-Pattern aus KREIS_AREA_KEYWORDS).
+  const overrides = REGION_KEYWORD_OVERRIDES[regionId] || [];
+  for (const override of overrides) {
+    const normalized = String(override || "").trim().toLowerCase();
+    if (normalized) {
+      keywords.add(normalized);
     }
   }
 
@@ -337,7 +630,14 @@ function makeRegion(stateCode, entry, index) {
   const verband = getVerband(verbandKey);
   const verbandCode = verband?.code || verbandKey || "";
   const verbandLabel = verband?.label || verbandCode;
-  const areaKeywords = buildRegionAreaKeywords(name, shortCode, legacyId, verband);
+  const areaKeywords = buildRegionAreaKeywords({
+    stateCode,
+    name,
+    shortCode,
+    legacyId,
+    verband,
+    regionId: id,
+  });
 
   // City-state Verbände (Berlin/Hamburg/Bremen) und Bundesland-Auswahlen ohne
   // dedizierte Kreisstruktur dürfen auf den verbandsweiten Spielbetrieb fallen,

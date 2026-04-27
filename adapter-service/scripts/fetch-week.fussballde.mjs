@@ -296,14 +296,23 @@ function applyKreisHeuristicFilter(games) {
 
 async function discoverCompetitions({ season, competitionType, teamType, kreis, mappingParams }) {
   const kindsUrl = buildWamKindsUrl({ season, competitionType });
-  const kinds = await fetchJson(kindsUrl);
+  let kinds;
+  try {
+    kinds = await fetchJson(kindsUrl);
+  } catch (error) {
+    throw new Error(
+      `wam_kinds für mandant=${MANDANT} (verband=${mappingParams?.verband || "?"}) nicht erreichbar: ${error.message || error}. Mandant evtl. inkorrekt – bitte FUSSBALLDE_MANDANT prüfen.`,
+    );
+  }
 
   const leaguesMapRaw = getValueByFlexibleKey(kinds.Spielklasse, teamType) || {};
   const gebietByLeagueRaw = getValueByFlexibleKey(kinds.Gebiet, teamType) || {};
 
   const leagueIds = Object.keys(leaguesMapRaw).map((leagueId) => leagueId.replace(/^_/, ""));
   if (leagueIds.length === 0) {
-    throw new Error(`No Spielklasse entries for teamType=${teamType}`);
+    throw new Error(
+      `Keine Spielklassen für teamType=${teamType} im Verband mandant=${MANDANT} (${mappingParams?.verband || "?"}). Mandant-Code möglicherweise inkorrekt.`,
+    );
   }
 
   const leagueAreaRequests = [];
@@ -466,7 +475,7 @@ async function main() {
   const dateRangeSet = new Set(dateRange);
 
   log(
-    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} teamType=${jugendTeamType} mapping=${regionParams.source} search=${regionParams.fallbackSearchName || "(none)"} keywords=${regionParams.areaKeywords.join("|")}`,
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} teamType=${jugendTeamType} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")}`,
   );
 
   const competitions = await discoverCompetitions({

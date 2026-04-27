@@ -64,7 +64,34 @@ describe("germany region data", () => {
       verband: "BFV",
       mandant: "21",
     });
-    expect(region?.fussballDeMapping.areaKeywords).toEqual(expect.arrayContaining(["munchen", "muenchen"]));
+    expect(region?.fussballDeMapping.areaKeywords).toEqual(
+      expect.arrayContaining(["munchen", "muenchen", "munchen stadt", "munchen land", "oberbayern"]),
+    );
+  });
+
+  it("ergänzt Bezirks-Tokens für Niedersachsen-Regionen", () => {
+    const hannover = getRegionsByState("NI").find((region) => region.shortCode === "H");
+    expect(hannover?.fussballDeMapping.areaKeywords).toEqual(
+      expect.arrayContaining(["hannover", "region hannover"]),
+    );
+    const oldenburg = getRegionsByState("NI").find((region) => region.shortCode === "OL");
+    expect(oldenburg?.fussballDeMapping.areaKeywords).toContain("weser ems");
+  });
+
+  it("ergänzt Bezirks-Tokens für RP-Regionen mit FVR/SWFV", () => {
+    const koblenz = getRegionsByState("RP").find((region) => region.shortCode === "KO");
+    expect(koblenz?.fussballDeMapping.areaKeywords).toContain("rhein lahn");
+    const ludwigshafen = getRegionsByState("RP").find((region) => region.shortCode === "LU");
+    expect(ludwigshafen?.fussballDeMapping.areaKeywords).toContain("vorderpfalz");
+  });
+
+  it("liefert Duisburg-Pattern Keywords für Krefeld und Mönchengladbach", () => {
+    const krefeld = getRegionsByState("NW").find((region) => region.shortCode === "KR");
+    expect(krefeld?.fussballDeMapping.areaKeywords).toEqual(expect.arrayContaining(["krefeld", "kempen"]));
+    const moenchen = getRegionsByState("NW").find((region) => region.shortCode === "MG");
+    expect(moenchen?.fussballDeMapping.areaKeywords).toEqual(
+      expect.arrayContaining(["monchengladbach", "moenchengladbach", "viersen"]),
+    );
   });
 
   it("erlaubt Verbands-Fallback für Stadtstaat-Auswahl Berlin, aber nicht für Bezirke", () => {
