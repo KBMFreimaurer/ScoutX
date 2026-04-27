@@ -111,6 +111,7 @@ describe("adapter-service server integration", () => {
   it("returns health payload", async () => {
     const response = await fetch(`${baseUrl}/health`);
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toBeTruthy();
     const payload = await parseJsonSafe(response);
     expect(payload.ok).toBe(true);
     expect(payload.authEnabled).toBe(true);
@@ -166,5 +167,12 @@ describe("adapter-service server integration", () => {
     const payload = await parseJsonSafe(response);
     expect(payload.ok).toBe(false);
     expect(String(payload.error || "")).toContain("Mandant");
+  });
+
+  it("protects verband-status endpoint with auth", async () => {
+    const response = await fetch(`${baseUrl}/api/admin/verband-status`);
+    expect(response.status).toBe(401);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
   });
 });

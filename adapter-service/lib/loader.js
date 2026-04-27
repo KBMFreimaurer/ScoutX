@@ -1,9 +1,192 @@
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
+import Database from "better-sqlite3";
 import { dedupeGames, normalizeGames, toLookupKey } from "./games.js";
 import { parseCsvRows } from "./csv.js";
 
 const DEFAULT_REMOTE_TIMEOUT_MS = 10000;
+const SQLITE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
+
+function isSqliteStoreFile(storeFile) {
+  return SQLITE_EXTENSIONS.has(extname(String(storeFile || "")).toLowerCase());
+}
+
+function buildGameStoreKey(game) {
+  return [game?.date || "", game?.time || "", game?.home || "", game?.away || ""].join("|");
+}
+
+function initStoreDb(db) {
+  db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS games (
+      dedupe_key TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      time TEXT,
+      home TEXT NOT NULL,
+      away TEXT NOT NULL,
+      venue TEXT,
+      km REAL DEFAULT 0,
+      kreis_id TEXT,
+      jugend_id TEXT,
+      state_code TEXT,
+      region_name TEXT,
+      region_short_code TEXT,
+      source TEXT,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_games_kreis_jugend_date ON games(kreis_id, jugend_id, date);
+  `);
+}
+
+async function openStoreDb(storeFile) {
+  await mkdir(dirname(storeFile), { recursive: true });
+  const db = new Database(storeFile);
+  initStoreDb(db);
+  return db;
+}
+
+function parseStoreObject(raw) {
+  const games = normalizeGames(raw?.games ?? []);
+  return { games, meta: raw?.meta ?? null };
+}
+
+async function readJsonStore(storeFile) {
+  if (!storeFile || !(await fileExists(storeFile))) {
+    return { games: [], meta: null };
+  }
+
+  try {
+    const raw = await readFile(storeFile, "utf8");
+    const parsed = JSON.parse(raw);
+    return parseStoreObject(parsed);
+  } catch {
+    return { games: [], meta: null };
+  }
+}
+
+async function writeJsonStore(storeFile, payload) {
+  const output = {
+    meta: payload.meta ?? {},
+    games: payload.games ?? [],
+  };
+
+  await mkdir(dirname(storeFile), { recursive: true });
+  await writeFile(storeFile, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+}
+
+function resolveMigrationCandidates(storeFile) {
+  const explicit = String(process.env.ADAPTER_STORE_MIGRATION_FILE || "").trim();
+  const candidates = [];
+  if (explicit) {
+    candidates.push(explicit);
+  }
+
+  const defaultJson = join(dirname(storeFile), "games.store.json");
+  candidates.push(defaultJson);
+
+  const replacedExt = storeFile.replace(/\.(db|sqlite|sqlite3)$/i, ".json");
+  if (replacedExt !== storeFile) {
+    candidates.push(replacedExt);
+  }
+
+  return [...new Set(candidates)];
+}
+
+function readStoreFromDb(db) {
+  const rows = db
+    .prepare("SELECT payload FROM games ORDER BY date ASC, time ASC, home ASC, away ASC")
+    .all()
+    .map((row) => {
+      try {
+        return JSON.parse(row.payload);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const metaRow = db.prepare("SELECT value FROM meta WHERE key = ?").get("meta");
+  let meta = null;
+  if (metaRow?.value) {
+    try {
+      meta = JSON.parse(metaRow.value);
+    } catch {
+      meta = null;
+    }
+  }
+
+  return {
+    games: normalizeGames(rows),
+    meta,
+  };
+}
+
+function writeStoreToDb(db, payload) {
+  const games = normalizeGames(payload.games ?? []);
+  const meta = payload.meta ?? {};
+  const insertStmt = db.prepare(`
+    INSERT INTO games (
+      dedupe_key, date, time, home, away, venue, km, kreis_id, jugend_id, state_code, region_name, region_short_code, source, payload
+    ) VALUES (
+      @dedupe_key, @date, @time, @home, @away, @venue, @km, @kreis_id, @jugend_id, @state_code, @region_name, @region_short_code, @source, @payload
+    )
+  `);
+  const clearStmt = db.prepare("DELETE FROM games");
+  const upsertMetaStmt = db.prepare("INSERT INTO meta(key, value) VALUES(@key, @value) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+  const tx = db.transaction(() => {
+    clearStmt.run();
+    for (const game of games) {
+      insertStmt.run({
+        dedupe_key: buildGameStoreKey(game),
+        date: game.date || "",
+        time: game.time || "",
+        home: game.home || "",
+        away: game.away || "",
+        venue: game.venue || "",
+        km: Number(game.km || 0),
+        kreis_id: game.kreisId || "",
+        jugend_id: game.jugendId || "",
+        state_code: game.stateCode || "",
+        region_name: game.regionName || "",
+        region_short_code: game.regionShortCode || "",
+        source: game.source || "",
+        payload: JSON.stringify(game),
+      });
+    }
+    upsertMetaStmt.run({ key: "meta", value: JSON.stringify(meta) });
+  });
+  tx();
+}
+
+async function maybeMigrateLegacyJsonStore(storeFile, db) {
+  const row = db.prepare("SELECT COUNT(*) as count FROM games").get();
+  if (Number(row?.count || 0) > 0) {
+    return false;
+  }
+
+  for (const candidate of resolveMigrationCandidates(storeFile)) {
+    if (!candidate || !(await fileExists(candidate))) {
+      continue;
+    }
+    const raw = await readJsonStore(candidate);
+    if (raw.games.length === 0 && !raw.meta) {
+      continue;
+    }
+    writeStoreToDb(db, raw);
+    db.prepare("INSERT INTO meta(key, value) VALUES(@key, @value) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run({
+      key: "migration_source",
+      value: candidate,
+    });
+    return true;
+  }
+
+  return false;
+}
 
 async function fileExists(path) {
   try {
@@ -190,28 +373,48 @@ async function loadSampleFile(sampleFile, aliasMap) {
 }
 
 async function readStore(storeFile) {
-  if (!storeFile || !(await fileExists(storeFile))) {
+  if (!storeFile) {
     return { games: [], meta: null };
   }
 
+  if (!isSqliteStoreFile(storeFile)) {
+    return readJsonStore(storeFile);
+  }
+
+  let db;
   try {
-    const raw = await readFile(storeFile, "utf8");
-    const parsed = JSON.parse(raw);
-    const games = normalizeGames(parsed.games ?? []);
-    return { games, meta: parsed.meta ?? null };
+    db = await openStoreDb(storeFile);
+    await maybeMigrateLegacyJsonStore(storeFile, db);
+    return readStoreFromDb(db);
   } catch {
     return { games: [], meta: null };
+  } finally {
+    if (db) {
+      db.close();
+    }
   }
 }
 
 async function writeStore(storeFile, payload) {
-  const output = {
-    meta: payload.meta ?? {},
-    games: payload.games ?? [],
-  };
+  if (!storeFile) {
+    return;
+  }
 
-  await mkdir(dirname(storeFile), { recursive: true });
-  await writeFile(storeFile, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+  if (!isSqliteStoreFile(storeFile)) {
+    await writeJsonStore(storeFile, payload);
+    return;
+  }
+
+  let db;
+  try {
+    db = await openStoreDb(storeFile);
+    await maybeMigrateLegacyJsonStore(storeFile, db);
+    writeStoreToDb(db, payload);
+  } finally {
+    if (db) {
+      db.close();
+    }
+  }
 }
 
 async function refreshStore(config) {

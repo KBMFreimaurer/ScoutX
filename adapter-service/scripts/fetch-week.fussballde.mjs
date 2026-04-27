@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   KREIS_AREA_KEYWORDS,
   JUGEND_TO_TEAM_LABEL,
@@ -30,6 +33,19 @@ const MAX_COMPETITIONS = Math.max(1, Number(process.env.FUSSBALLDE_MAX_COMPETITI
 const MAX_MATCHES = Math.max(1, Number(process.env.FUSSBALLDE_MAX_MATCHES || 600));
 const FETCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const DEBUG = process.env.SCOUTPLAN_DEBUG_EXPORTER === "true";
+const USER_AGENT_POOL = Object.freeze([
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+  "ScoutXAdapter/1.0 (+https://www.fussball.de)",
+]);
+const CIRCUIT_THRESHOLD = Math.max(1, Number(process.env.FUSSBALLDE_CIRCUIT_THRESHOLD || 3));
+const CIRCUIT_COOLDOWN_MS = Math.max(60000, Number(process.env.FUSSBALLDE_CIRCUIT_COOLDOWN_MS || 10 * 60 * 1000));
+const ROBOTS_CHECK_ENABLED = process.env.FUSSBALLDE_ROBOTS_CHECK !== "false";
+const ROBOTS_CACHE_TTL_MS = Math.max(60 * 60 * 1000, Number(process.env.FUSSBALLDE_ROBOTS_TTL_MS || 24 * 60 * 60 * 1000));
+const DEFAULT_STATE_FILE = fileURLToPath(new URL("../data/fussballde.fetch-state.json", import.meta.url));
+const STATE_FILE = process.env.FUSSBALLDE_STATE_FILE || DEFAULT_STATE_FILE;
 
 const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
 const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
@@ -67,6 +83,12 @@ const selectedTeams = (() => {
     return [];
   }
 })();
+const dynamicConcurrency = {
+  page: PAGE_CONCURRENCY,
+  match: MATCH_CONCURRENCY,
+  recoveryCounter: 0,
+};
+let fetchStateCache = null;
 
 function toIsoDate(date) {
   return formatIsoDate(date);
@@ -86,6 +108,252 @@ function warn(message) {
   console.error(`[fussballde-export][warn] ${message}`);
 }
 
+function pickUserAgent() {
+  const idx = Math.floor(Math.random() * USER_AGENT_POOL.length);
+  return USER_AGENT_POOL[idx] || USER_AGENT_POOL[USER_AGENT_POOL.length - 1];
+}
+
+function getMandantCircuitKey() {
+  return String(MANDANT || "").trim() || "default";
+}
+
+async function readJsonFileSafe(filePath, fallback) {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeJsonFileSafe(filePath, payload) {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+async function loadFetchState() {
+  if (fetchStateCache) {
+    return fetchStateCache;
+  }
+
+  fetchStateCache = await readJsonFileSafe(STATE_FILE, {
+    version: 1,
+    updatedAt: "",
+    robots: {
+      checkedAt: 0,
+      baseUrl: "",
+      blockedPaths: [],
+      status: "unknown",
+      error: "",
+    },
+    circuit: {},
+  });
+  if (!fetchStateCache.circuit || typeof fetchStateCache.circuit !== "object") {
+    fetchStateCache.circuit = {};
+  }
+  if (!fetchStateCache.robots || typeof fetchStateCache.robots !== "object") {
+    fetchStateCache.robots = { checkedAt: 0, baseUrl: "", blockedPaths: [], status: "unknown", error: "" };
+  }
+  return fetchStateCache;
+}
+
+async function persistFetchState() {
+  if (!fetchStateCache) {
+    return;
+  }
+  fetchStateCache.updatedAt = nowIso();
+  await writeJsonFileSafe(STATE_FILE, fetchStateCache);
+}
+
+function maybeRecoverConcurrency() {
+  dynamicConcurrency.recoveryCounter += 1;
+  if (dynamicConcurrency.recoveryCounter < 20) {
+    return;
+  }
+  dynamicConcurrency.recoveryCounter = 0;
+  if (dynamicConcurrency.page < PAGE_CONCURRENCY) {
+    dynamicConcurrency.page += 1;
+  }
+  if (dynamicConcurrency.match < MATCH_CONCURRENCY) {
+    dynamicConcurrency.match += 1;
+  }
+}
+
+function applyRateLimitBackoff(status) {
+  if (status !== 429) {
+    return;
+  }
+  const previousPage = dynamicConcurrency.page;
+  const previousMatch = dynamicConcurrency.match;
+  dynamicConcurrency.page = Math.max(1, Math.floor(dynamicConcurrency.page / 2));
+  dynamicConcurrency.match = Math.max(1, Math.floor(dynamicConcurrency.match / 2));
+  dynamicConcurrency.recoveryCounter = 0;
+  if (previousPage !== dynamicConcurrency.page || previousMatch !== dynamicConcurrency.match) {
+    warn(
+      `Rate limit detected (429). Reduced concurrency page=${previousPage}->${dynamicConcurrency.page}, match=${previousMatch}->${dynamicConcurrency.match}`,
+    );
+  }
+}
+
+async function ensureCircuitAllowsRequests() {
+  const state = await loadFetchState();
+  const key = getMandantCircuitKey();
+  const entry = state.circuit[key];
+  const blockedUntil = Number(entry?.blockedUntil || 0);
+  if (blockedUntil > Date.now()) {
+    const waitSeconds = Math.ceil((blockedUntil - Date.now()) / 1000);
+    throw new Error(`Mandant ${key} circuit-open für ${waitSeconds}s nach wiederholten 403/429`);
+  }
+}
+
+async function markCircuitSuccess() {
+  const state = await loadFetchState();
+  const key = getMandantCircuitKey();
+  const entry = state.circuit[key];
+  if (!entry || (!entry.consecutiveFailures && !entry.blockedUntil)) {
+    maybeRecoverConcurrency();
+    return;
+  }
+
+  state.circuit[key] = {
+    ...entry,
+    consecutiveFailures: 0,
+    blockedUntil: 0,
+    lastSuccessAt: nowIso(),
+  };
+  maybeRecoverConcurrency();
+  await persistFetchState();
+}
+
+async function markCircuitFailure(status, reason) {
+  if (status !== 403 && status !== 429) {
+    return;
+  }
+
+  const state = await loadFetchState();
+  const key = getMandantCircuitKey();
+  const entry = state.circuit[key] || {
+    consecutiveFailures: 0,
+    blockedUntil: 0,
+  };
+  const nextFailures = Number(entry.consecutiveFailures || 0) + 1;
+  const blocked = nextFailures >= CIRCUIT_THRESHOLD ? Date.now() + CIRCUIT_COOLDOWN_MS : 0;
+
+  state.circuit[key] = {
+    consecutiveFailures: nextFailures,
+    blockedUntil: blocked,
+    lastFailureAt: nowIso(),
+    lastStatus: status,
+    lastError: String(reason || ""),
+  };
+
+  await persistFetchState();
+
+  if (blocked) {
+    warn(`Circuit breaker opened for mandant=${key} (${nextFailures} consecutive ${status} errors).`);
+  }
+}
+
+function parseRobotsDisallow(robotsText) {
+  const rules = [];
+  const lines = String(robotsText || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+  let wildcardActive = false;
+
+  for (const line of lines) {
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const [rawKey, ...rest] = line.split(":");
+    const key = String(rawKey || "")
+      .trim()
+      .toLowerCase();
+    const value = rest.join(":").trim();
+    if (key === "user-agent") {
+      wildcardActive = value === "*";
+      continue;
+    }
+    if (wildcardActive && key === "disallow" && value) {
+      rules.push(value);
+    }
+  }
+
+  return rules;
+}
+
+function isDisallowed(pathname, disallowRules) {
+  return disallowRules.some((rule) => pathname.startsWith(rule));
+}
+
+async function ensureRobotsAllowsAccess() {
+  if (!ROBOTS_CHECK_ENABLED) {
+    return;
+  }
+
+  const state = await loadFetchState();
+  const robotsState = state.robots || {};
+  const stillValid =
+    String(robotsState.baseUrl || "") === BASE_URL &&
+    Number(robotsState.checkedAt || 0) > 0 &&
+    Date.now() - Number(robotsState.checkedAt || 0) < ROBOTS_CACHE_TTL_MS;
+
+  if (stillValid && robotsState.status === "blocked") {
+    throw new Error(`robots.txt blockiert Zugriff auf ${robotsState.blockedPaths?.join(", ") || "fussball.de endpoints"}`);
+  }
+  if (stillValid && robotsState.status === "ok") {
+    return;
+  }
+
+  const { controller, clear } = createAbortController(Math.min(REQUEST_TIMEOUT_MS, 10000));
+  try {
+    const robotsUrl = `${BASE_URL}/robots.txt`;
+    const response = await fetch(robotsUrl, {
+      signal: controller.signal,
+      headers: { "user-agent": pickUserAgent(), accept: "text/plain,*/*;q=0.8" },
+    });
+
+    if (!response.ok) {
+      state.robots = {
+        checkedAt: Date.now(),
+        baseUrl: BASE_URL,
+        blockedPaths: [],
+        status: "unknown",
+        error: `HTTP ${response.status}`,
+      };
+      await persistFetchState();
+      warn(`robots.txt check unavailable: HTTP ${response.status}`);
+      return;
+    }
+
+    const robotsText = await response.text();
+    const disallowRules = parseRobotsDisallow(robotsText);
+    const blockedPaths = ["/ajax.fixturelist/", "/wam_"].filter((path) => isDisallowed(path, disallowRules));
+    const blocked = blockedPaths.length > 0;
+
+    state.robots = {
+      checkedAt: Date.now(),
+      baseUrl: BASE_URL,
+      blockedPaths,
+      status: blocked ? "blocked" : "ok",
+      error: "",
+    };
+    await persistFetchState();
+
+    if (blocked) {
+      throw new Error(`robots.txt blockiert Zugriff auf ${blockedPaths.join(", ")}`);
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      warn("robots.txt check timed out; proceeding with scrape");
+      return;
+    }
+    throw error;
+  } finally {
+    clear();
+  }
+}
+
 function createAbortController(timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -96,32 +364,46 @@ function createAbortController(timeoutMs) {
 }
 
 async function fetchText(url, { retries = FETCH_RETRY_DELAYS_MS.length } = {}) {
+  await ensureCircuitAllowsRequests();
   let attempt = 0;
 
   while (attempt <= retries) {
     const { controller, clear } = createAbortController(REQUEST_TIMEOUT_MS);
+    const userAgent = pickUserAgent();
 
     try {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          "user-agent": "ScoutXAdapter/1.0 (+https://www.fussball.de)",
+          "user-agent": userAgent,
           accept: "text/html,application/json;q=0.9,*/*;q=0.8",
         },
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const httpError = new Error(`HTTP ${response.status}`);
+        httpError.httpStatus = response.status;
+        throw httpError;
       }
 
-      return await response.text();
+      const text = await response.text();
+      await markCircuitSuccess();
+      return text;
     } catch (error) {
+      const status = Number(error?.httpStatus || 0);
+      if (status === 403 || status === 429) {
+        await markCircuitFailure(status, error.message || error);
+      }
+      applyRateLimitBackoff(status);
+
       if (attempt >= retries) {
         throw new Error(`${url} -> ${error.message || error}`);
       }
 
       const delayMs = FETCH_RETRY_DELAYS_MS[Math.min(attempt, FETCH_RETRY_DELAYS_MS.length - 1)] || 0;
-      warn(`Request retry ${attempt + 1}/${retries} for ${url}: ${error.message || error}`);
+      warn(
+        `Request retry ${attempt + 1}/${retries} for ${url}: ${error.message || error} ua=${userAgent} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       attempt += 1;
     } finally {
@@ -376,7 +658,7 @@ async function discoverCompetitions({ season, competitionType, requestedJugendId
 
   log(`League/area requests: ${leagueAreaRequests.length}`);
 
-  const payloads = await mapLimit(leagueAreaRequests, PAGE_CONCURRENCY, async ({ leagueId, areaId }) => {
+  const payloads = await mapLimit(leagueAreaRequests, dynamicConcurrency.page, async ({ leagueId, areaId }) => {
     const url = buildWamCompetitionsUrl({
       season,
       competitionType,
@@ -416,7 +698,7 @@ async function collectMatchCandidates(competitions, from, to) {
 
   log(`Fixturelist tasks: ${tasks.length}`);
 
-  const rows = await mapLimit(tasks, PAGE_CONCURRENCY, async (task) => {
+  const rows = await mapLimit(tasks, dynamicConcurrency.page, async (task) => {
     const fixtureUrl = buildFixtureListUrl(task.staffelId, from, to);
 
     try {
@@ -448,7 +730,7 @@ async function collectMatchCandidates(competitions, from, to) {
 async function enrichMatches(matchCandidates, dateRangeSet) {
   const teamPageCache = new Map();
 
-  const details = await mapLimit(matchCandidates, MATCH_CONCURRENCY, async (candidate) => {
+  const details = await mapLimit(matchCandidates, dynamicConcurrency.match, async (candidate) => {
     try {
       const html = await fetchText(candidate.matchUrl);
       const parsed = extractMatchDetails(html);
@@ -506,6 +788,8 @@ async function main() {
     throw new Error(`Invalid from/to date. from=${fromDate}, to=${toDate}`);
   }
 
+  await ensureRobotsAllowsAccess();
+
   const base = await fetchJson(`${BASE_URL}/wam_base.json`);
   const season = process.env.FUSSBALLDE_SAISON || base.currentSaison;
   const competitionType = process.env.FUSSBALLDE_COMPETITION_TYPE || base.defaultCompetitionType || "1";
@@ -514,7 +798,7 @@ async function main() {
   const dateRangeSet = new Set(dateRange);
 
   log(
-    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")}`,
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
   );
 
   const discovery = await discoverCompetitions({

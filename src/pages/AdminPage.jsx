@@ -4,6 +4,7 @@ import { useScoutX } from "../context/ScoutXContext";
 import {
   fetchAdapterAdminStatus,
   fetchAdapterHealth,
+  fetchAdapterVerbandStatus,
   importAdapterClubCatalog,
   probeAdapterMandant,
   resolveAdapterAdminUrl,
@@ -141,6 +142,26 @@ export function AdminPage() {
     setNotice("");
 
     try {
+      const aggregate = await fetchAdapterVerbandStatus(adapterEndpoint, adapterToken).catch(() => null);
+      if (aggregate?.ok && Array.isArray(aggregate.rows) && aggregate.rows.length > 0) {
+        const mapped = {};
+        for (const row of aggregate.rows) {
+          const code = String(row?.code || "").trim();
+          if (!code) {
+            continue;
+          }
+          mapped[code] = {
+            ok: Boolean(row?.ok),
+            teamTypeCount: Number(row?.teamTypeCount || 0),
+            leagueCount: Number(row?.leagueCount || 0),
+            error: row?.error ? String(row.error) : "",
+          };
+        }
+        setMandantProbeResults(mapped);
+        setNotice("Verbandskennzahlen wurden geprüft.");
+        return;
+      }
+
       const probes = await Promise.all(
         mandantProbeRows.map(async (row) => {
           try {

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { refreshStore } from "./loader";
+import { readStore, refreshStore } from "./loader";
 
 const tempDirs = [];
 
@@ -133,5 +133,44 @@ describe("loader", () => {
 
     expect(result.games).toHaveLength(1);
     expect(result.meta.warnings.some((msg) => msg.includes("Timeout"))).toBe(true);
+  });
+
+  it("migrates legacy JSON store into sqlite store file", async () => {
+    const root = await makeTempDir();
+    const dataDir = join(root, "data");
+    await mkdir(dataDir, { recursive: true });
+
+    const sqliteStoreFile = join(dataDir, "games.store.db");
+    const legacyStoreFile = join(dataDir, "games.store.json");
+    await writeFile(
+      legacyStoreFile,
+      JSON.stringify(
+        {
+          meta: { updatedAt: "2026-04-27T10:00:00.000Z", counts: { total: 1 } },
+          games: [{ home: "Team A", away: "Team B", date: "2026-04-27", time: "18:00", kreisId: "duisburg" }],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const migrated = await readStore(sqliteStoreFile);
+    expect(migrated.games).toHaveLength(1);
+    expect(migrated.meta?.counts?.total).toBe(1);
+
+    const refreshed = await refreshStore({
+      aliasesFile: "",
+      importDir: "",
+      sampleFile: "",
+      storeFile: sqliteStoreFile,
+      remoteUrl: "",
+      remoteToken: "",
+    });
+
+    expect(refreshed.games).toHaveLength(1);
+    const readBack = await readStore(sqliteStoreFile);
+    expect(readBack.games).toHaveLength(1);
+    expect(readBack.games[0].home).toBe("Team A");
   });
 });

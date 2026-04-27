@@ -209,3 +209,12 @@ export async function probeAdapterMandant(adapterEndpoint, adapterToken, mandant
     token: adapterToken,
   });
 }
+
+export async function fetchAdapterVerbandStatus(adapterEndpoint, adapterToken) {
+  const url = resolveAdapterAdminUrl(adapterEndpoint, "verband-status");
+  return callAdapterApi({
+    url,
+    method: "GET",
+    token: adapterToken,
+  });
+}

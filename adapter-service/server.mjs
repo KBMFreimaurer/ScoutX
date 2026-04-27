@@ -1,13 +1,15 @@
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
 import { extractClubSearchResults } from "./lib/fussballde.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
+import { createLogger } from "./lib/logger.js";
 import { fetchWeekTemplateGames, runExportCommand } from "./lib/dynamicSources.js";
 import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } from "./lib/week.js";
+import { GERMANY_VERBANDS } from "../src/data/germany_regions.js";
 
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
 const PORT = Number(process.env.ADAPTER_PORT || 8787);
@@ -31,7 +33,7 @@ const MAX_TOKEN_BYTES = (() => {
 const SAMPLE_FILE =
   process.env.ADAPTER_DATA_FILE || fileURLToPath(new URL("./data/games.sample.json", import.meta.url));
 const STORE_FILE =
-  process.env.ADAPTER_STORE_FILE || fileURLToPath(new URL("./data/games.store.json", import.meta.url));
+  process.env.ADAPTER_STORE_FILE || fileURLToPath(new URL("./data/games.store.db", import.meta.url));
 const CLUB_CATALOG_FILE =
   process.env.ADAPTER_CLUB_CATALOG_FILE || fileURLToPath(new URL("./data/clubs.catalog.json", import.meta.url));
 const CLUB_LOGOS_DIR =
@@ -63,6 +65,7 @@ const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS
 const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
 const MANDANT_PROBE_BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
 const MANDANT_PROBE_TIMEOUT_MS = Number(process.env.ADAPTER_MANDANT_PROBE_TIMEOUT_MS || 15000);
+const VERBAND_STATUS_MAX = Math.max(1, Number(process.env.ADAPTER_VERBAND_STATUS_MAX || 8));
 const LOGO_CONTENT_TYPES = Object.freeze({
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -73,6 +76,18 @@ const LOGO_CONTENT_TYPES = Object.freeze({
 });
 
 const rateLimitStore = new Map();
+const rootLogger = createLogger({ service: "scoutx-adapter" });
+
+const KNOWN_VERBANDS = Object.values(GERMANY_VERBANDS || {})
+  .filter((entry) => entry && typeof entry === "object")
+  .map((entry) => ({
+    code: String(entry.code || "").trim(),
+    label: String(entry.label || "").trim(),
+    mandant: String(entry.mandant || "").trim(),
+    areaKeyword: String(entry.areaKeyword || "").trim(),
+  }))
+  .filter((entry) => entry.mandant)
+  .sort((left, right) => left.code.localeCompare(right.code, "de-DE"));
 
 function checkRateLimit(ip) {
   const now = Date.now();
@@ -500,10 +515,14 @@ function timingSafeTokenEquals(left, right) {
   return equal && leftBuf.length === rightBuf.length;
 }
 
-function sendJson(res, statusCode, payload, origin) {
+function sendJson(res, statusCode, payload, origin, requestId = "") {
   setCorsHeaders(res, origin);
   const text = JSON.stringify(payload);
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  const headers = { "Content-Type": "application/json; charset=utf-8" };
+  if (requestId) {
+    headers["X-Request-Id"] = requestId;
+  }
+  res.writeHead(statusCode, headers);
   res.end(text);
 }
 
@@ -544,18 +563,18 @@ function isAuthorized(req) {
   return timingSafeTokenEquals(providedToken, AUTH_TOKEN);
 }
 
-async function writeStoreSafely(reason, payload) {
+async function writeStoreSafely(reason, payload, logger = rootLogger) {
   try {
     await writeStore(STORE_FILE, payload);
     return true;
   } catch (error) {
-    console.error(`[adapter] ${reason} writeStore failed: ${error.message || error}`);
+    logger.error("store write failed", { reason, error });
     state.lastError = `Store-Write fehlgeschlagen (${reason}). Vorheriger Stand bleibt aktiv.`;
     return false;
   }
 }
 
-async function refreshData(reason = "manual") {
+async function refreshData(reason = "manual", logger = rootLogger) {
   if (refreshPromise) {
     return refreshPromise;
   }
@@ -577,10 +596,16 @@ async function refreshData(reason = "manual") {
       state.aliasMap = result.aliasMap;
       state.lastRefreshReason = reason;
       state.lastError = null;
+      logger.info("adapter refresh completed", {
+        reason,
+        count: result.games.length,
+        warnings: result.meta?.warnings?.length || 0,
+      });
 
       return result;
     } catch (error) {
       state.lastError = error.message || "Refresh fehlgeschlagen.";
+      logger.error("adapter refresh failed", { reason, error });
 
       const fallbackStore = await readStore(STORE_FILE);
       if (fallbackStore.games.length > 0) {
@@ -617,7 +642,7 @@ function shouldKeepExistingGameForWeek(game, params, weekRange) {
   return false;
 }
 
-async function maybeAutoRefreshWeek(payload) {
+async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
   const hasDynamicSource = Boolean(EXPORT_COMMAND || WEEK_SOURCE_TEMPLATE);
   if (!AUTO_REFRESH_WEEK || !hasDynamicSource) {
     return { ran: false, reason: "disabled_or_not_configured" };
@@ -678,6 +703,13 @@ async function maybeAutoRefreshWeek(payload) {
         collected.push(...filterGamesToWeek(normalized, weekRange));
       } catch (error) {
         warnings.push(`Export command failed: ${error.message || error}`);
+        logger.warn("week export command failed", {
+          cacheKey,
+          reason: String(error.message || error),
+          stateCode: params.stateCode,
+          regionName: params.regionName,
+          regionShortCode: params.regionShortCode,
+        });
       }
     }
 
@@ -701,11 +733,18 @@ async function maybeAutoRefreshWeek(payload) {
         collected.push(...filterGamesToWeek(normalized, weekRange));
       } catch (error) {
         warnings.push(`Week source failed: ${error.message || error}`);
+        logger.warn("week template source failed", {
+          cacheKey,
+          reason: String(error.message || error),
+          stateCode: params.stateCode,
+          regionName: params.regionName,
+          regionShortCode: params.regionShortCode,
+        });
       }
     }
 
     // Reload import/remote baseline after command execution
-    const refreshed = await refreshData("auto-week-base");
+    const refreshed = await refreshData("auto-week-base", logger);
 
     const replaceBaseline =
       collected.length > 0
@@ -736,7 +775,7 @@ async function maybeAutoRefreshWeek(payload) {
       weekRefresh: weekMeta,
     };
 
-    const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta });
+    const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta }, logger);
     if (!persisted) {
       return {
         ran: false,
@@ -755,6 +794,17 @@ async function maybeAutoRefreshWeek(payload) {
     state.lastRefreshReason = "auto-week";
     state.lastError = warnings.length ? warnings.join(" | ") : null;
     state.weekRefreshCache[cacheKey] = now;
+    logger.info("week refresh completed", {
+      cacheKey,
+      added,
+      replaced,
+      collected: collected.length,
+      warningCount: warnings.length,
+      stateCode: params.stateCode,
+      regionName: params.regionName,
+      regionShortCode: params.regionShortCode,
+      jugendId: params.jugendId,
+    });
 
     return {
       ran: true,
@@ -778,6 +828,8 @@ async function maybeAutoRefreshWeek(payload) {
 }
 
 function getHealthPayload() {
+  const storeExtension = extname(String(STORE_FILE || "")).toLowerCase();
+  const storeBackend = [".db", ".sqlite", ".sqlite3"].includes(storeExtension) ? "sqlite" : "json";
   return {
     ok: true,
     service: "scoutplan-adapter",
@@ -791,6 +843,8 @@ function getHealthPayload() {
     refreshIntervalSec: REFRESH_INTERVAL_SEC,
     autoRefreshWeek: AUTO_REFRESH_WEEK,
     weekSourceConfigured: Boolean(WEEK_SOURCE_TEMPLATE || EXPORT_COMMAND),
+    storeBackend,
+    storeFile: STORE_FILE,
     meta: state.meta,
   };
 }
@@ -813,22 +867,27 @@ function normalizeUnderscoreKeyMap(raw) {
   return out;
 }
 
-async function fetchMandantProbe({ mandant, season = "", competitionType = "1" }) {
+async function fetchBasePayload({ signal }) {
+  const baseUrl = String(MANDANT_PROBE_BASE_URL || "").replace(/\/+$/, "");
+  const baseResponse = await fetch(`${baseUrl}/wam_base.json`, { signal });
+  if (!baseResponse.ok) {
+    throw new Error(`wam_base HTTP ${baseResponse.status}`);
+  }
+  const basePayload = await baseResponse.json();
+  return { baseUrl, basePayload };
+}
+
+async function fetchMandantProbe({ mandant, season = "", competitionType = "1", logger = rootLogger }) {
   const normalizedMandant = String(mandant || "").trim();
   if (!/^\d{1,3}$/.test(normalizedMandant)) {
     throw new Error("Ungültiger Mandant. Erwartet wird eine numerische Kennzahl.");
   }
 
-  const baseUrl = String(MANDANT_PROBE_BASE_URL || "").replace(/\/+$/, "");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MANDANT_PROBE_TIMEOUT_MS);
 
   try {
-    const baseResponse = await fetch(`${baseUrl}/wam_base.json`, { signal: controller.signal });
-    if (!baseResponse.ok) {
-      throw new Error(`wam_base HTTP ${baseResponse.status}`);
-    }
-    const basePayload = await baseResponse.json();
+    const { baseUrl, basePayload } = await fetchBasePayload({ signal: controller.signal });
     const effectiveSeason = String(season || basePayload?.currentSaison || "").trim();
     const effectiveCompetitionType = String(competitionType || basePayload?.defaultCompetitionType || "1").trim() || "1";
 
@@ -854,7 +913,7 @@ async function fetchMandantProbe({ mandant, season = "", competitionType = "1" }
       }
     }
 
-    return {
+    const probe = {
       ok: true,
       mandant: normalizedMandant,
       season: effectiveSeason,
@@ -864,35 +923,192 @@ async function fetchMandantProbe({ mandant, season = "", competitionType = "1" }
       teamTypes,
       kindsUrl,
     };
+
+    logger.info("mandant probe succeeded", {
+      mandant: normalizedMandant,
+      season: effectiveSeason,
+      competitionType: effectiveCompetitionType,
+      leagueCount: probe.leagueCount,
+      teamTypeCount: probe.teamTypeCount,
+    });
+    return probe;
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(`Mandant-Probe Timeout nach ${MANDANT_PROBE_TIMEOUT_MS}ms`);
     }
+    logger.warn("mandant probe failed", {
+      mandant: normalizedMandant,
+      season,
+      competitionType,
+      error,
+    });
     throw error;
   } finally {
     clearTimeout(timer);
   }
 }
 
+async function fetchVerbandStatusRow(verband, basePayload, logger) {
+  const mandant = String(verband?.mandant || "").trim();
+  const season = String(basePayload?.currentSaison || "").trim();
+  const competitionType = String(basePayload?.defaultCompetitionType || "1").trim() || "1";
+  const baseUrl = String(MANDANT_PROBE_BASE_URL || "").replace(/\/+$/, "");
+  const kindsUrl = `${baseUrl}/wam_kinds_${mandant}_${season}_${competitionType}.json`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANDANT_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(kindsUrl, { signal: controller.signal });
+    if (!response.ok) {
+      return {
+        code: verband.code,
+        label: verband.label,
+        mandant,
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}`,
+      };
+    }
+    const payload = await response.json();
+    const teamTypes = Object.keys(normalizeUnderscoreKeyMap(payload?.Mannschaftsart || {}));
+    return {
+      code: verband.code,
+      label: verband.label,
+      mandant,
+      ok: true,
+      season,
+      competitionType,
+      teamTypeCount: teamTypes.length,
+    };
+  } catch (error) {
+    const errorMessage = error?.name === "AbortError" ? `Timeout nach ${MANDANT_PROBE_TIMEOUT_MS}ms` : String(error.message || error);
+    logger.warn("verband status check failed", {
+      verband: verband.code,
+      mandant,
+      error: errorMessage,
+    });
+    return {
+      code: verband.code,
+      label: verband.label,
+      mandant,
+      ok: false,
+      error: errorMessage,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function collectKnownMandantStatus(logger = rootLogger) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANDANT_PROBE_TIMEOUT_MS);
+  try {
+    const { basePayload } = await fetchBasePayload({ signal: controller.signal });
+    const rows = [];
+    for (let index = 0; index < KNOWN_VERBANDS.length; index += VERBAND_STATUS_MAX) {
+      const chunk = KNOWN_VERBANDS.slice(index, index + VERBAND_STATUS_MAX);
+      const part = await Promise.all(chunk.map((verband) => fetchVerbandStatusRow(verband, basePayload, logger)));
+      rows.push(...part);
+    }
+
+    return {
+      ok: true,
+      fetchedAt: new Date().toISOString(),
+      season: String(basePayload?.currentSaison || ""),
+      competitionType: String(basePayload?.defaultCompetitionType || "1") || "1",
+      total: rows.length,
+      okCount: rows.filter((row) => row.ok).length,
+      rows,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function summarizeDiscoveredMandants(basePayload) {
+  const source = basePayload?.mandant || basePayload?.Mandant || basePayload?.associations || basePayload?.associationsById || {};
+  const pairs = [];
+  if (Array.isArray(source)) {
+    for (const entry of source) {
+      const mandant = String(entry?.id || entry?.mandant || entry?.value || "").trim();
+      const label = String(entry?.name || entry?.label || "").trim();
+      if (mandant) {
+        pairs.push({ mandant, label });
+      }
+    }
+    return pairs;
+  }
+
+  if (source && typeof source === "object") {
+    for (const [key, value] of Object.entries(source)) {
+      const mandant = String(key || "").replace(/^_/, "").trim();
+      const label = String(value || "").trim();
+      if (mandant) {
+        pairs.push({ mandant, label });
+      }
+    }
+  }
+  return pairs;
+}
+
+async function runStartupVerbandDiscovery(logger = rootLogger) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANDANT_PROBE_TIMEOUT_MS);
+  try {
+    const { basePayload } = await fetchBasePayload({ signal: controller.signal });
+    const discovered = summarizeDiscoveredMandants(basePayload);
+    if (discovered.length === 0) {
+      logger.info("verband discovery: no association list found in wam_base");
+      return;
+    }
+
+    const knownMandants = new Set(KNOWN_VERBANDS.map((entry) => entry.mandant));
+    const discoveredMandants = new Set(discovered.map((entry) => entry.mandant));
+    const unknown = discovered.filter((entry) => !knownMandants.has(entry.mandant));
+    const missing = KNOWN_VERBANDS.filter((entry) => !discoveredMandants.has(entry.mandant));
+
+    logger.info("verband discovery completed", {
+      discoveredCount: discovered.length,
+      configuredCount: KNOWN_VERBANDS.length,
+      unknownMandants: unknown.map((entry) => `${entry.mandant}:${entry.label || "-"}`),
+      missingConfiguredMandants: missing.map((entry) => `${entry.mandant}:${entry.code}`),
+    });
+  } catch (error) {
+    const message = error?.name === "AbortError" ? `Timeout nach ${MANDANT_PROBE_TIMEOUT_MS}ms` : String(error.message || error);
+    logger.warn("verband discovery failed", { error: message });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const server = createServer(async (req, res) => {
+  const requestId = randomUUID();
   const origin = req.headers.origin || "";
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const clientIp = req.headers["x-real-ip"] || req.socket.remoteAddress || "unknown";
+  const requestLogger = rootLogger.withRequest(requestId).child({
+    method: req.method,
+    path: url.pathname,
+    clientIp,
+  });
+
+  requestLogger.info("incoming request");
 
   if (req.method === "OPTIONS") {
     setCorsHeaders(res, origin);
-    res.writeHead(204);
+    res.writeHead(204, { "X-Request-Id": requestId });
     res.end();
     return;
   }
 
   if (url.pathname !== "/health" && !checkRateLimit(clientIp)) {
-    sendJson(res, 429, { ok: false, error: "Zu viele Anfragen. Bitte später erneut versuchen." }, origin);
+    requestLogger.warn("rate limit exceeded");
+    sendJson(res, 429, { ok: false, error: "Zu viele Anfragen. Bitte später erneut versuchen." }, origin, requestId);
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
-    sendJson(res, 200, getHealthPayload(), origin);
+    sendJson(res, 200, getHealthPayload(), origin, requestId);
     return;
   }
 
@@ -908,7 +1124,7 @@ const server = createServer(async (req, res) => {
     const logoPath = resolveLogoFilePath(decodedName);
     if (!logoPath) {
       setCorsHeaders(res, origin);
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "X-Request-Id": requestId });
       res.end("Logo not found");
       return;
     }
@@ -919,11 +1135,12 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, {
         "Content-Type": detectLogoContentType(logoPath),
         "Cache-Control": "public, max-age=86400",
+        "X-Request-Id": requestId,
       });
       res.end(logoBuffer);
     } catch {
       setCorsHeaders(res, origin);
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "X-Request-Id": requestId });
       res.end("Logo not found");
     }
     return;
@@ -931,13 +1148,20 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/games") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/games");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
     try {
       const payload = await readBody(req);
-      const autoRefresh = await maybeAutoRefreshWeek(payload);
+      const logCtx = {
+        stateCode: String(payload.stateCode || ""),
+        regionName: String(payload.regionName || payload.kreisId || ""),
+        regionShortCode: String(payload.regionShortCode || ""),
+        jugendId: String(payload.jugendId || ""),
+      };
+      const autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx));
       const requestedTeams = uniqueNormalizedTeams(payload.teams);
       const requestedTeamCount = requestedTeams.length;
       const gamesWithTeamFilter =
@@ -974,10 +1198,16 @@ const server = createServer(async (req, res) => {
           games,
         },
         origin,
+        requestId,
       );
+      requestLogger.info("games request served", {
+        ...logCtx,
+        count: games.length,
+        autoRefreshRan: Boolean(autoRefresh?.ran),
+      });
     } catch (error) {
-      console.error("[adapter] /api/games error:", error.message || error);
-      sendJson(res, 400, { ok: false, error: "Ungültige Anfrage." }, origin);
+      requestLogger.error("games request failed", { error });
+      sendJson(res, 400, { ok: false, error: "Ungültige Anfrage." }, origin, requestId);
     }
 
     return;
@@ -985,7 +1215,8 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/clubs/search") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/clubs/search");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
@@ -993,7 +1224,7 @@ const server = createServer(async (req, res) => {
     const limit = clampLimit(url.searchParams.get("limit"), 1, Math.max(1, CLUB_SEARCH_MAX_LIMIT), 8);
 
     if (query.length < 2) {
-      sendJson(res, 200, { ok: true, query, clubs: [] }, origin);
+      sendJson(res, 200, { ok: true, query, clubs: [] }, origin, requestId);
       return;
     }
 
@@ -1001,17 +1232,17 @@ const server = createServer(async (req, res) => {
     const localMatches = toPublicClubEntries(req, localMatchesRaw);
 
     if (localMatches.length >= limit) {
-      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog" }, origin);
+      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog" }, origin, requestId);
       return;
     }
 
     try {
       const remoteMatches = await fetchRemoteClubSuggestions(query, limit);
       const clubs = toPublicClubEntries(req, mergeClubResults(remoteMatches, localMatchesRaw, limit));
-      sendJson(res, 200, { ok: true, query, clubs, source: "remote+local" }, origin);
+      sendJson(res, 200, { ok: true, query, clubs, source: "remote+local" }, origin, requestId);
     } catch (error) {
-      console.error("[adapter] /api/clubs/search error:", error.message || error);
-      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog-fallback" }, origin);
+      requestLogger.warn("club search remote fallback", { query, error });
+      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog-fallback" }, origin, requestId);
     }
 
     return;
@@ -1019,23 +1250,25 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/admin/refresh") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/admin/refresh");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
     try {
-      await refreshData("admin-refresh");
-      sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin);
+      await refreshData("admin-refresh", requestLogger);
+      sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin, requestId);
     } catch (error) {
-      console.error("[adapter] /api/admin/refresh error:", error.message || error);
-      sendJson(res, 500, { ok: false, error: "Refresh fehlgeschlagen." }, origin);
+      requestLogger.error("admin refresh failed", { error });
+      sendJson(res, 500, { ok: false, error: "Refresh fehlgeschlagen." }, origin, requestId);
     }
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/import") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/admin/import");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
@@ -1064,9 +1297,9 @@ const server = createServer(async (req, res) => {
         warnings: state.meta?.warnings || [],
       };
 
-      const persisted = await writeStoreSafely("admin-import", { games: merged, meta });
+      const persisted = await writeStoreSafely("admin-import", { games: merged, meta }, requestLogger);
       if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Store konnte nicht geschrieben werden." }, origin);
+        sendJson(res, 500, { ok: false, error: "Store konnte nicht geschrieben werden." }, origin, requestId);
         return;
       }
       state.games = merged;
@@ -1074,10 +1307,10 @@ const server = createServer(async (req, res) => {
       state.lastRefreshReason = replace ? "admin-import-replace" : "admin-import-merge";
       state.lastError = null;
 
-      sendJson(res, 200, { ok: true, imported: importedGames.length, total: merged.length }, origin);
+      sendJson(res, 200, { ok: true, imported: importedGames.length, total: merged.length }, origin, requestId);
     } catch (error) {
-      console.error("[adapter] /api/admin/import error:", error.message || error);
-      sendJson(res, 400, { ok: false, error: "Import fehlgeschlagen." }, origin);
+      requestLogger.error("admin import failed", { error });
+      sendJson(res, 400, { ok: false, error: "Import fehlgeschlagen." }, origin, requestId);
     }
 
     return;
@@ -1085,7 +1318,8 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/admin/clubs/import") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/admin/clubs/import");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
@@ -1112,10 +1346,11 @@ const server = createServer(async (req, res) => {
           replace,
         },
         origin,
+        requestId,
       );
     } catch (error) {
-      console.error("[adapter] /api/admin/clubs/import error:", error.message || error);
-      sendJson(res, 400, { ok: false, error: "Vereinskatalog-Import fehlgeschlagen." }, origin);
+      requestLogger.error("admin clubs import failed", { error });
+      sendJson(res, 400, { ok: false, error: "Vereinskatalog-Import fehlgeschlagen." }, origin, requestId);
     }
 
     return;
@@ -1123,17 +1358,19 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/admin/status") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/admin/status");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
-    sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin);
+    sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin, requestId);
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/mandant-probe") {
     if (!isAuthorized(req)) {
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      requestLogger.warn("unauthorized /api/admin/mandant-probe");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
       return;
     }
 
@@ -1141,16 +1378,33 @@ const server = createServer(async (req, res) => {
       const mandant = String(url.searchParams.get("mandant") || "").trim();
       const season = String(url.searchParams.get("season") || "").trim();
       const competitionType = String(url.searchParams.get("competitionType") || "").trim();
-      const probe = await fetchMandantProbe({ mandant, season, competitionType });
-      sendJson(res, 200, probe, origin);
+      const probe = await fetchMandantProbe({ mandant, season, competitionType, logger: requestLogger });
+      sendJson(res, 200, probe, origin, requestId);
     } catch (error) {
-      console.error("[adapter] /api/admin/mandant-probe error:", error.message || error);
-      sendJson(res, 400, { ok: false, error: String(error?.message || "Mandant-Probe fehlgeschlagen.") }, origin);
+      requestLogger.error("admin mandant-probe failed", { error });
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Mandant-Probe fehlgeschlagen.") }, origin, requestId);
     }
     return;
   }
 
-  sendJson(res, 404, { ok: false, error: "Not Found" }, origin);
+  if (req.method === "GET" && url.pathname === "/api/admin/verband-status") {
+    if (!isAuthorized(req)) {
+      requestLogger.warn("unauthorized /api/admin/verband-status");
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
+      return;
+    }
+
+    try {
+      const payload = await collectKnownMandantStatus(requestLogger);
+      sendJson(res, 200, payload, origin, requestId);
+    } catch (error) {
+      requestLogger.error("admin verband-status failed", { error });
+      sendJson(res, 500, { ok: false, error: "Verbands-Status fehlgeschlagen." }, origin, requestId);
+    }
+    return;
+  }
+
+  sendJson(res, 404, { ok: false, error: "Not Found" }, origin, requestId);
 });
 
 try {
@@ -1159,35 +1413,37 @@ try {
   state.clubs = [];
 }
 
+await runStartupVerbandDiscovery(rootLogger);
+
 try {
-  await refreshData("startup");
+  await refreshData("startup", rootLogger);
 } catch (error) {
-  console.error(`[adapter] initial refresh failed: ${error.message || error}`);
+  rootLogger.error("initial refresh failed", { error });
 }
 
 if (REFRESH_INTERVAL_SEC > 0) {
   setInterval(() => {
-    refreshData("interval").catch((error) => {
-      console.error(`[adapter] interval refresh failed: ${error.message || error}`);
+    refreshData("interval", rootLogger).catch((error) => {
+      rootLogger.error("interval refresh failed", { error });
     });
   }, REFRESH_INTERVAL_SEC * 1000);
 }
 
 server.listen(PORT, HOST, () => {
-  const tokenInfo = AUTH_TOKEN ? "enabled" : "disabled";
-  console.log(`[adapter] running on http://${HOST}:${PORT} (auth: ${tokenInfo})`);
-  console.log(`[adapter] store: ${STORE_FILE}`);
-  console.log(`[adapter] club-catalog: ${CLUB_CATALOG_FILE} (${state.clubs.length})`);
-  console.log(`[adapter] club-logos: ${CLUB_LOGOS_DIR}`);
-  console.log(`[adapter] imports: ${IMPORT_DIR}`);
-  console.log(`[adapter] remote: ${REMOTE_URL || "disabled"}`);
-  if (REMOTE_URL) {
-    console.log(`[adapter] remote-timeout-ms: ${REMOTE_TIMEOUT_MS}`);
-  }
-  console.log(`[adapter] auto-week: ${AUTO_REFRESH_WEEK ? "enabled" : "disabled"}`);
-  console.log(`[adapter] week-source-template: ${WEEK_SOURCE_TEMPLATE ? "configured" : "disabled"}`);
-  console.log(`[adapter] export-command: ${EXPORT_COMMAND ? "configured" : "disabled"}`);
-  if (REFRESH_INTERVAL_SEC > 0) {
-    console.log(`[adapter] auto-refresh every ${REFRESH_INTERVAL_SEC}s`);
-  }
+  rootLogger.info("adapter server started", {
+    host: HOST,
+    port: PORT,
+    authEnabled: Boolean(AUTH_TOKEN),
+    store: STORE_FILE,
+    clubCatalog: CLUB_CATALOG_FILE,
+    clubsCount: state.clubs.length,
+    clubLogosDir: CLUB_LOGOS_DIR,
+    importDir: IMPORT_DIR,
+    remoteUrl: REMOTE_URL || "",
+    remoteTimeoutMs: REMOTE_URL ? REMOTE_TIMEOUT_MS : 0,
+    autoWeekRefresh: AUTO_REFRESH_WEEK,
+    weekSourceConfigured: Boolean(WEEK_SOURCE_TEMPLATE),
+    exportCommandConfigured: Boolean(EXPORT_COMMAND),
+    refreshIntervalSec: REFRESH_INTERVAL_SEC,
+  });
 });

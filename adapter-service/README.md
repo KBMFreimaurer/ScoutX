@@ -4,11 +4,14 @@ Dauerhafte Daten-Schicht für ScoutX ohne direkte fussball.de-API.
 
 ## Architektur
 
-Der Adapter baut einen **persistenten Store** (`games.store.json`) aus mehreren Quellen:
+Der Adapter baut einen **persistenten Store** (default: `games.store.db`, SQLite) aus mehreren Quellen:
 
 1. `imports/` (CSV/JSON aus DFBnet/fussball.de-Export)
 2. optional `ADAPTER_REMOTE_URL` (externer Feed)
 3. Fallback `games.sample.json`
+
+Beim ersten Start mit SQLite migriert der Adapter bestehende `games.store.json`
+automatisch in die Datenbank.
 
 Zusätzlich kann pro angefragter Woche automatisch ein Export-Prozess getriggert werden.
 
@@ -105,6 +108,7 @@ ADAPTER_WEEK_SOURCE_TOKEN="..."
 - `POST /api/admin/clubs/import`
 - `GET /api/admin/status`
 - `GET /api/admin/mandant-probe?mandant=<code>&season=<yyzz>`
+- `GET /api/admin/verband-status`
 
 ### Vereinskatalog Import
 
@@ -138,7 +142,8 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 
 - `ADAPTER_HOST` (default: `0.0.0.0`)
 - `ADAPTER_PORT` (default: `8787`)
-- `ADAPTER_STORE_FILE` (default: `adapter-service/data/games.store.json`)
+- `ADAPTER_STORE_FILE` (default: `adapter-service/data/games.store.db`)
+- `ADAPTER_STORE_MIGRATION_FILE` (optional, explizite Legacy-JSON-Quelle für Erstmigration)
 - `ADAPTER_CLUB_CATALOG_FILE` (default: `adapter-service/data/clubs.catalog.json`)
 - `ADAPTER_CLUB_LOGOS_DIR` (default: `adapter-service/data/logos`)
 - `ADAPTER_IMPORT_DIR` (default: `adapter-service/imports`)
@@ -159,9 +164,19 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_CLUB_SEARCH_TIMEOUT_MS` (default: `12000`)
 - `ADAPTER_CLUB_SEARCH_MAX_LIMIT` (default: `20`)
 - `ADAPTER_MANDANT_PROBE_TIMEOUT_MS` (default: `15000`)
+- `ADAPTER_VERBAND_STATUS_MAX` (default: `8`, parallele Mandant-Checks pro Batch)
+- `LOG_LEVEL` (`debug|info|warn|error`, default: `info`)
   - zum Deaktivieren explizit leer setzen (`ADAPTER_EXPORT_COMMAND=`)
 - `ADAPTER_WEEK_COMMAND_TIMEOUT_MS` (default: `60000`)
 - `CORS_ORIGIN` (default: `*`)
+
+Exporter-Härtung (fussball.de):
+
+- `FUSSBALLDE_CIRCUIT_THRESHOLD` (default: `3`)
+- `FUSSBALLDE_CIRCUIT_COOLDOWN_MS` (default: `600000`)
+- `FUSSBALLDE_ROBOTS_CHECK` (default: `true`)
+- `FUSSBALLDE_ROBOTS_TTL_MS` (default: `86400000`)
+- `FUSSBALLDE_STATE_FILE` (default: `adapter-service/data/fussballde.fetch-state.json`)
 
 ## Dauerhafter Betrieb
 
