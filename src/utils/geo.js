@@ -11,7 +11,6 @@ const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/js
 const GOOGLE_ROUTES_BASE_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const GOOGLE_DIRECTIONS_BASE_URL = "https://maps.googleapis.com/maps/api/directions/json";
 const GOOGLE_ROUTES_FIELD_MASK = "routes.distanceMeters,routes.duration,routes.legs.distanceMeters,routes.legs.duration";
-const PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY = "AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc";
 const ENV_GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 const GOOGLE_STRICT_ENV = String(import.meta?.env?.VITE_GOOGLE_MAPS_STRICT || "").trim().toLowerCase();
 const GOOGLE_MAPS_RUNTIME_STORAGE_KEY = "scoutplan.googlemaps.apikey.v1";
@@ -124,7 +123,7 @@ function getGoogleMapsApiKey() {
   if (ENV_GOOGLE_MAPS_API_KEY) {
     return ENV_GOOGLE_MAPS_API_KEY;
   }
-  return PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY;
+  return "";
 }
 
 function getGoogleMapsApiKeySource() {
@@ -134,9 +133,6 @@ function getGoogleMapsApiKeySource() {
   }
   if (ENV_GOOGLE_MAPS_API_KEY) {
     return "env";
-  }
-  if (PROJECT_DEFAULT_GOOGLE_MAPS_API_KEY) {
-    return "project";
   }
   return "none";
 }
@@ -170,7 +166,10 @@ function isGoogleStrictDisabled() {
 }
 
 function isGoogleStrictRequestedByEnv() {
-  return !isGoogleStrictDisabled();
+  if (!GOOGLE_STRICT_ENV || isGoogleStrictDisabled()) {
+    return false;
+  }
+  return GOOGLE_STRICT_ENV === "true" || GOOGLE_STRICT_ENV === "1" || GOOGLE_STRICT_ENV === "on";
 }
 
 function shouldUseGoogleStrictMode() {

@@ -12,7 +12,7 @@ import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } fro
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
 const PORT = Number(process.env.ADAPTER_PORT || 8787);
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "*";
-const AUTH_TOKEN = "ScoutX-Adapter-Internal-2026";
+const AUTH_TOKEN = String(process.env.ADAPTER_TOKEN || "").trim();
 const MAX_BODY_BYTES = (() => {
   const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
   if (!Number.isFinite(configured) || configured <= 0) {
@@ -61,6 +61,8 @@ const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
 const CLUB_SEARCH_URL = process.env.ADAPTER_CLUB_SEARCH_URL || "https://www.fussball.de/suche";
 const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS || 12000);
 const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
+const MANDANT_PROBE_BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
+const MANDANT_PROBE_TIMEOUT_MS = Number(process.env.ADAPTER_MANDANT_PROBE_TIMEOUT_MS || 15000);
 const LOGO_CONTENT_TYPES = Object.freeze({
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -803,6 +805,75 @@ function buildAdminMeta() {
   };
 }
 
+function normalizeUnderscoreKeyMap(raw) {
+  const out = {};
+  for (const [key, value] of Object.entries(raw || {})) {
+    out[String(key || "").replace(/^_/, "")] = value;
+  }
+  return out;
+}
+
+async function fetchMandantProbe({ mandant, season = "", competitionType = "1" }) {
+  const normalizedMandant = String(mandant || "").trim();
+  if (!/^\d{1,3}$/.test(normalizedMandant)) {
+    throw new Error("Ungültiger Mandant. Erwartet wird eine numerische Kennzahl.");
+  }
+
+  const baseUrl = String(MANDANT_PROBE_BASE_URL || "").replace(/\/+$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MANDANT_PROBE_TIMEOUT_MS);
+
+  try {
+    const baseResponse = await fetch(`${baseUrl}/wam_base.json`, { signal: controller.signal });
+    if (!baseResponse.ok) {
+      throw new Error(`wam_base HTTP ${baseResponse.status}`);
+    }
+    const basePayload = await baseResponse.json();
+    const effectiveSeason = String(season || basePayload?.currentSaison || "").trim();
+    const effectiveCompetitionType = String(competitionType || basePayload?.defaultCompetitionType || "1").trim() || "1";
+
+    if (!effectiveSeason) {
+      throw new Error("Keine Saison verfügbar (wam_base.currentSaison leer).");
+    }
+
+    const kindsUrl = `${baseUrl}/wam_kinds_${normalizedMandant}_${effectiveSeason}_${effectiveCompetitionType}.json`;
+    const kindsResponse = await fetch(kindsUrl, { signal: controller.signal });
+    if (!kindsResponse.ok) {
+      throw new Error(`wam_kinds HTTP ${kindsResponse.status}`);
+    }
+    const kindsPayload = await kindsResponse.json();
+
+    const teamTypes = normalizeUnderscoreKeyMap(kindsPayload?.Mannschaftsart || {});
+    const spielklasseByType = normalizeUnderscoreKeyMap(kindsPayload?.Spielklasse || {});
+    const leagueIds = new Set();
+
+    for (const byLeague of Object.values(spielklasseByType)) {
+      const normalized = normalizeUnderscoreKeyMap(byLeague || {});
+      for (const leagueId of Object.keys(normalized)) {
+        leagueIds.add(leagueId);
+      }
+    }
+
+    return {
+      ok: true,
+      mandant: normalizedMandant,
+      season: effectiveSeason,
+      competitionType: effectiveCompetitionType,
+      teamTypeCount: Object.keys(teamTypes).length,
+      leagueCount: leagueIds.size,
+      teamTypes,
+      kindsUrl,
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Mandant-Probe Timeout nach ${MANDANT_PROBE_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const server = createServer(async (req, res) => {
   const origin = req.headers.origin || "";
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1057,6 +1128,25 @@ const server = createServer(async (req, res) => {
     }
 
     sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/mandant-probe") {
+    if (!isAuthorized(req)) {
+      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin);
+      return;
+    }
+
+    try {
+      const mandant = String(url.searchParams.get("mandant") || "").trim();
+      const season = String(url.searchParams.get("season") || "").trim();
+      const competitionType = String(url.searchParams.get("competitionType") || "").trim();
+      const probe = await fetchMandantProbe({ mandant, season, competitionType });
+      sendJson(res, 200, probe, origin);
+    } catch (error) {
+      console.error("[adapter] /api/admin/mandant-probe error:", error.message || error);
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Mandant-Probe fehlgeschlagen.") }, origin);
+    }
     return;
   }
 

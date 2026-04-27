@@ -338,8 +338,13 @@ async function discoverCompetitions({ season, competitionType, requestedJugendId
 
   const leaguesMapRaw = getValueByFlexibleKey(kinds.Spielklasse, teamType) || {};
   const gebietByLeagueRaw = getValueByFlexibleKey(kinds.Gebiet, teamType) || {};
+  const teamTypeKeys = Object.keys(kinds?.Mannschaftsart || {}).map((key) => key.replace(/^_/, ""));
+  const spielklasseKeys = Object.keys(kinds?.Spielklasse || {}).map((key) => key.replace(/^_/, ""));
 
   const leagueIds = Object.keys(leaguesMapRaw).map((leagueId) => leagueId.replace(/^_/, ""));
+  log(
+    `wam_kinds diagnostics: mandant=${MANDANT} season=${season} competitionType=${competitionType} teamTypesFound=${teamTypeKeys.length} spielklasseKeys=${spielklasseKeys.join("|") || "(none)"} leaguesFound=${leagueIds.length}`,
+  );
   if (leagueIds.length === 0) {
     throw new Error(
       `Keine Spielklassen für teamType=${teamType} im Verband mandant=${MANDANT} (${mappingParams?.verband || "?"}). Mandant-Code möglicherweise inkorrekt.`,

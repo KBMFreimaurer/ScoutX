@@ -5,10 +5,12 @@ import {
   fetchAdapterAdminStatus,
   fetchAdapterHealth,
   importAdapterClubCatalog,
+  probeAdapterMandant,
   resolveAdapterAdminUrl,
   triggerAdapterAdminRefresh,
 } from "../services/adapterAdmin";
 import { parseClubCatalogFile } from "../services/clubCatalogImport";
+import { GERMANY_VERBANDS } from "../data/germany_regions";
 import { C } from "../styles/theme";
 
 function formatDateTime(value) {
@@ -61,11 +63,26 @@ export function AdminPage() {
   const [importingClubs, setImportingClubs] = useState(false);
   const [replaceClubs, setReplaceClubs] = useState(true);
   const [importSummary, setImportSummary] = useState(null);
+  const [probingMandants, setProbingMandants] = useState(false);
+  const [mandantProbeResults, setMandantProbeResults] = useState({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const adminStatusUrl = useMemo(() => resolveAdapterAdminUrl(adapterEndpoint, "status"), [adapterEndpoint]);
   const authEnabled = Boolean(String(adapterToken || "").trim());
+  const mandantProbeRows = useMemo(() => {
+    const unique = new Map();
+    for (const verband of Object.values(GERMANY_VERBANDS || {})) {
+      const code = String(verband?.code || "").trim();
+      const mandant = String(verband?.mandant || "").trim();
+      const label = String(verband?.label || code || "").trim();
+      if (!code || !mandant || unique.has(code)) {
+        continue;
+      }
+      unique.set(code, { code, mandant, label });
+    }
+    return [...unique.values()].sort((a, b) => a.label.localeCompare(b.label, "de"));
+  }, []);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -111,6 +128,39 @@ export function AdminPage() {
       setError(`Adapter-Refresh fehlgeschlagen: ${String(refreshError?.message || refreshError || "Unbekannter Fehler")}`);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const onProbeMandants = async () => {
+    if (probingMandants) {
+      return;
+    }
+
+    setProbingMandants(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const probes = await Promise.all(
+        mandantProbeRows.map(async (row) => {
+          try {
+            const result = await probeAdapterMandant(adapterEndpoint, adapterToken, row.mandant);
+            return [row.code, { ok: true, ...result }];
+          } catch (probeError) {
+            return [
+              row.code,
+              {
+                ok: false,
+                error: String(probeError?.message || probeError || "Unbekannter Fehler"),
+              },
+            ];
+          }
+        }),
+      );
+      setMandantProbeResults(Object.fromEntries(probes));
+      setNotice("Verbandskennzahlen wurden geprüft.");
+    } finally {
+      setProbingMandants(false);
     }
   };
 
@@ -252,6 +302,59 @@ export function AdminPage() {
             <div>
               Health-Endpoint erreichbar: <strong style={{ color: health?.ok ? C.greenLight : C.warn }}>{health?.ok ? "Ja" : "Unbekannt"}</strong>
             </div>
+          </div>
+        </section>
+
+        <section
+          className="fu2"
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+            <div style={{ color: C.offWhite, fontWeight: 700, fontSize: 13 }}>Verbandskennzahl prüfen</div>
+            <GhostButton onClick={onProbeMandants} disabled={probingMandants || loading}>
+              {probingMandants ? "Prüfung läuft..." : "Alle Verbände prüfen"}
+            </GhostButton>
+          </div>
+          <div style={{ display: "grid", gap: 6, maxHeight: 260, overflow: "auto", paddingRight: 2 }}>
+            {mandantProbeRows.map((row) => {
+              const probe = mandantProbeResults[row.code];
+              const ok = probe?.ok === true;
+              const failed = probe?.ok === false;
+              return (
+                <div
+                  key={row.code}
+                  style={{
+                    border: `1px solid ${ok ? C.greenBorder : failed ? "rgba(239,68,68,0.22)" : C.border}`,
+                    background: ok ? C.greenDim : failed ? C.errorDim : C.surfaceElev,
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    color: C.grayLight,
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <strong style={{ color: C.offWhite }}>{row.label}</strong>
+                    <code style={{ color: C.offWhite }}>mandant {row.mandant}</code>
+                  </div>
+                  {ok ? (
+                    <div>
+                      <span style={{ color: C.greenLight }}>OK</span>
+                      {" · "}
+                      Teamarten: <strong style={{ color: C.offWhite }}>{Number(probe?.teamTypeCount || 0)}</strong>
+                      {" · "}
+                      Ligen: <strong style={{ color: C.offWhite }}>{Number(probe?.leagueCount || 0)}</strong>
+                    </div>
+                  ) : null}
+                  {failed ? <div style={{ color: "#fca5a5" }}>{String(probe?.error || "Probe fehlgeschlagen.")}</div> : null}
+                </div>
+              );
+            })}
           </div>
         </section>
 

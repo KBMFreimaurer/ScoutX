@@ -78,6 +78,15 @@ Konfigurierbare ENV (optional):
 - `FUSSBALLDE_MAX_MATCHES` (default: `600`)
 - `SCOUTPLAN_DEBUG_EXPORTER=true` (Debug-Logs auf `stderr`)
 
+Mandant-Zuordnung:
+
+- Die produktive Zuordnung Verband/Region -> `mandant` kommt aus
+  `src/data/germany_regions.js` (`fussballDeMapping.mandant`).
+- `FUSSBALLDE_MANDANT` dient nur als globaler Fallback.
+- Verifiziert ist derzeit vor allem der Niederrhein-Flow (`mandant=22`); andere
+  Verbände sind kuratiert und sollten über Admin-Diagnostik regelmäßig geprüft
+  werden.
+
 ### Option B: Week URL Template
 
 ```bash
@@ -95,6 +104,7 @@ ADAPTER_WEEK_SOURCE_TOKEN="..."
 - `POST /api/admin/import`
 - `POST /api/admin/clubs/import`
 - `GET /api/admin/status`
+- `GET /api/admin/mandant-probe?mandant=<code>&season=<yyzz>`
 
 ### Vereinskatalog Import
 
@@ -148,8 +158,9 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_CLUB_SEARCH_URL` (default: `https://www.fussball.de/suche`)
 - `ADAPTER_CLUB_SEARCH_TIMEOUT_MS` (default: `12000`)
 - `ADAPTER_CLUB_SEARCH_MAX_LIMIT` (default: `20`)
+- `ADAPTER_MANDANT_PROBE_TIMEOUT_MS` (default: `15000`)
   - zum Deaktivieren explizit leer setzen (`ADAPTER_EXPORT_COMMAND=`)
-- `ADAPTER_WEEK_COMMAND_TIMEOUT_MS` (default: `30000`)
+- `ADAPTER_WEEK_COMMAND_TIMEOUT_MS` (default: `60000`)
 - `CORS_ORIGIN` (default: `*`)
 
 ## Dauerhafter Betrieb

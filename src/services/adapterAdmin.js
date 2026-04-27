@@ -193,3 +193,19 @@ export async function importAdapterClubCatalog(adapterEndpoint, adapterToken, cl
     },
   });
 }
+
+export async function probeAdapterMandant(adapterEndpoint, adapterToken, mandant, season = "") {
+  const baseUrl = resolveAdapterAdminUrl(adapterEndpoint, "mandant-probe");
+  const url = new URL(baseUrl, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+  url.searchParams.set("mandant", String(mandant || "").trim());
+  if (String(season || "").trim()) {
+    url.searchParams.set("season", String(season || "").trim());
+  }
+
+  const requestUrl = baseUrl.startsWith("/") ? `${url.pathname}${url.search}` : url.toString();
+  return callAdapterApi({
+    url: requestUrl,
+    method: "GET",
+    token: adapterToken,
+  });
+}

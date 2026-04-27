@@ -261,7 +261,7 @@ describe("geo utils", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("gibt im Strict-Mode den Google-Geocoding-Fehler weiter", async () => {
+  it("fällt ohne Strict-Mode bei Google-Fehlern nicht hart aus", async () => {
     setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
 
     const fetchMock = vi.fn().mockResolvedValue({
@@ -273,7 +273,8 @@ describe("geo utils", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(geocodeAddress("Geibelstraße 1, 47057 Duisburg")).rejects.toThrow(/REQUEST_DENIED/i);
+    const result = await geocodeAddress("Geibelstraße 1, 47057 Duisburg");
+    expect(result).toBeNull();
   });
 
   it("liefert bei Direktstrecken ohne Google-Wert 'unbekannt'", async () => {
@@ -307,7 +308,7 @@ describe("geo utils", () => {
       strictActive: expect.any(Boolean),
     });
 
-    expect(["env", "project"]).toContain(config.keySource);
+    expect(["env", "none"]).toContain(config.keySource);
   });
 
   it("nutzt lokal gespeicherten API-Key als Runtime-Quelle", () => {

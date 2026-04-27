@@ -337,7 +337,6 @@ export function SetupPage() {
                   : ""}
               {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
               {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
-              {googleRouting.keySource === "project" ? " · Key im Projekt" : ""}
               {googleRouting.keySource === "runtime" ? (
                 <button
                   type="button"
