@@ -2,6 +2,7 @@
 
 import {
   KREIS_AREA_KEYWORDS,
+  JUGEND_TO_TEAM_LABEL,
   JUGEND_TO_TEAM_TYPE,
   buildDateRange,
   extractCompetitionEntries,
@@ -53,7 +54,8 @@ const regionParams = resolveFussballDeRegionParams({
 });
 const MANDANT = String(regionParams.mandant || DEFAULT_MANDANT).trim() || "22";
 const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
-const jugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
+const fallbackJugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
+const jugendTeamLabel = JUGEND_TO_TEAM_LABEL[jugendId] || "";
 const selectedTeams = (() => {
   try {
     const parsed = JSON.parse(process.env.SCOUTPLAN_TEAMS_JSON || "[]");
@@ -170,6 +172,22 @@ function buildWamCompetitionsUrl({ season, competitionType, teamType, leagueId, 
   return `${BASE_URL}/wam_competitions_${MANDANT}_${season}_${competitionType}_${teamType}_${leagueId}_${areaId}.json`;
 }
 
+function resolveJugendTeamType(kinds, requestedJugendId, fallbackTeamType) {
+  const label = JUGEND_TO_TEAM_LABEL[requestedJugendId] || "";
+  const entries = Object.entries(kinds?.Mannschaftsart || {});
+  const exact = entries.find(([, value]) => normalizeLookup(value) === normalizeLookup(label));
+
+  if (exact) {
+    return exact[0].replace(/^_/, "");
+  }
+
+  if (fallbackTeamType && getValueByFlexibleKey(kinds?.Spielklasse, fallbackTeamType)) {
+    return fallbackTeamType;
+  }
+
+  return "";
+}
+
 function buildFixtureListUrl(staffelId, from, to) {
   return `${BASE_URL}/ajax.fixturelist/-/staffel/${staffelId}/datum-von/${from}/datum-bis/${to}/max/500/offset/0`;
 }
@@ -275,7 +293,11 @@ function matchesSelectedTeams(home, away) {
 }
 
 function applyKreisHeuristicFilter(games) {
-  const keywords = regionParams.areaKeywords?.length ? regionParams.areaKeywords : KREIS_AREA_KEYWORDS[kreisId] || [];
+  const preciseKeywords = regionParams.resultKeywords?.length
+    ? regionParams.resultKeywords
+    : regionParams.primaryAreaKeywords || [];
+  const broadKeywords = regionParams.areaKeywords?.length ? regionParams.areaKeywords : KREIS_AREA_KEYWORDS[kreisId] || [];
+  const keywords = preciseKeywords.length ? preciseKeywords : broadKeywords;
   if (!kreisId || keywords.length === 0 || games.length === 0) {
     return games;
   }
@@ -294,7 +316,7 @@ function applyKreisHeuristicFilter(games) {
   return games;
 }
 
-async function discoverCompetitions({ season, competitionType, teamType, kreis, mappingParams }) {
+async function discoverCompetitions({ season, competitionType, requestedJugendId, fallbackTeamType, kreis, mappingParams }) {
   const kindsUrl = buildWamKindsUrl({ season, competitionType });
   let kinds;
   try {
@@ -304,6 +326,15 @@ async function discoverCompetitions({ season, competitionType, teamType, kreis, 
       `wam_kinds für mandant=${MANDANT} (verband=${mappingParams?.verband || "?"}) nicht erreichbar: ${error.message || error}. Mandant evtl. inkorrekt – bitte FUSSBALLDE_MANDANT prüfen.`,
     );
   }
+
+  const teamType = resolveJugendTeamType(kinds, requestedJugendId, fallbackTeamType);
+  if (!teamType) {
+    throw new Error(
+      `Keine Mannschaftsart für jugend=${requestedJugendId} (${JUGEND_TO_TEAM_LABEL[requestedJugendId] || "unbekannt"}) im Verband mandant=${MANDANT} (${mappingParams?.verband || "?"}).`,
+    );
+  }
+
+  log(`Resolved jugend=${requestedJugendId} label=${JUGEND_TO_TEAM_LABEL[requestedJugendId] || "(none)"} to teamType=${teamType}`);
 
   const leaguesMapRaw = getValueByFlexibleKey(kinds.Spielklasse, teamType) || {};
   const gebietByLeagueRaw = getValueByFlexibleKey(kinds.Gebiet, teamType) || {};
@@ -358,13 +389,16 @@ async function discoverCompetitions({ season, competitionType, teamType, kreis, 
     }
   });
 
-  return uniqueBy(
-    payloads
-      .flat()
-      .slice(0, MAX_COMPETITIONS * 4)
-      .filter((entry) => entry.url.includes("/spieltagsuebersicht/")),
-    (entry) => entry.url,
-  ).slice(0, MAX_COMPETITIONS);
+  return {
+    teamType,
+    competitions: uniqueBy(
+      payloads
+        .flat()
+        .slice(0, MAX_COMPETITIONS * 4)
+        .filter((entry) => entry.url.includes("/spieltagsuebersicht/")),
+      (entry) => entry.url,
+    ).slice(0, MAX_COMPETITIONS),
+  };
 }
 
 async function collectMatchCandidates(competitions, from, to) {
@@ -457,7 +491,7 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
 }
 
 async function main() {
-  if (!jugendTeamType) {
+  if (!jugendTeamLabel && !fallbackJugendTeamType) {
     throw new Error(`Unsupported jugendId: ${jugendId}`);
   }
 
@@ -475,16 +509,18 @@ async function main() {
   const dateRangeSet = new Set(dateRange);
 
   log(
-    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} teamType=${jugendTeamType} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")}`,
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")}`,
   );
 
-  const competitions = await discoverCompetitions({
+  const discovery = await discoverCompetitions({
     season,
     competitionType,
-    teamType: jugendTeamType,
+    requestedJugendId: jugendId,
+    fallbackTeamType: fallbackJugendTeamType,
     kreis: kreisId,
     mappingParams: regionParams,
   });
+  const { teamType: jugendTeamType, competitions } = discovery;
 
   if (competitions.length === 0) {
     warn("No competitions found for selected filters.");

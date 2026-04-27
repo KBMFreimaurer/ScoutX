@@ -57,12 +57,12 @@ describe("germany region data", () => {
     }
   });
 
-  it("baut bayerische Region München mit BFV-Mandant 21", () => {
+  it("baut bayerische Region München mit BFV-Mandant 31", () => {
     const region = getRegionsByState("BY").find((entry) => entry.id === "by-m");
     expect(region?.fussballDeMapping).toMatchObject({
       searchName: "München",
       verband: "BFV",
-      mandant: "21",
+      mandant: "31",
     });
     expect(region?.fussballDeMapping.areaKeywords).toEqual(
       expect.arrayContaining(["munchen", "muenchen", "munchen stadt", "munchen land", "oberbayern"]),
@@ -98,19 +98,21 @@ describe("germany region data", () => {
     const berlinAll = getRegionsByState("BE").find((region) => region.shortCode === "B");
     expect(berlinAll?.fussballDeMapping.allowRegionalFallback).toBe(true);
     const tempelhof = getRegionsByState("BE").find((region) => region.shortCode === "B-TS");
-    expect(tempelhof?.fussballDeMapping.allowRegionalFallback).toBe(false);
+    expect(tempelhof?.fussballDeMapping.allowRegionalFallback).toBe(true);
+    expect(tempelhof?.fussballDeMapping.areaKeywords).toContain("berlin");
   });
 
   it("setzt für RP-Region Koblenz den FVR-Verband", () => {
     const koblenz = getRegionsByState("RP").find((region) => region.shortCode === "KO");
     expect(koblenz?.fussballDeMapping).toMatchObject({
       verband: "FVR",
-      mandant: "25",
+      mandant: "41",
     });
   });
 
   it("exportiert den globalen Verbandskatalog", () => {
     expect(GERMANY_VERBANDS.FVN).toMatchObject({ code: "FVN", mandant: "22" });
-    expect(GERMANY_VERBANDS.BFV_BY).toMatchObject({ code: "BFV", mandant: "21" });
+    expect(GERMANY_VERBANDS.BFV_BY).toMatchObject({ code: "BFV", mandant: "31" });
+    expect(GERMANY_VERBANDS.BFV_BE).toMatchObject({ code: "BFV Berlin", mandant: "66" });
   });
 });

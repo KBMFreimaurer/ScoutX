@@ -23,27 +23,27 @@ const STATE_NAMES = {
 // Codes basieren auf den auf fussball.de gepflegten Verbandskennzahlen und können
 // per Mapping-Override (siehe FUSSBALLDE_MANDANT) angepasst werden.
 const VERBANDS = {
-  SHFV: { code: "SHFV", label: "Schleswig-Holsteinischer FV", mandant: "01", areaKeyword: "schleswig" },
-  NFV: { code: "NFV", label: "Niedersächsischer FV", mandant: "02", areaKeyword: "niedersachsen" },
+  SHFV: { code: "SHFV", label: "Schleswig-Holsteinischer FV", mandant: "04", areaKeyword: "schleswig" },
+  NFV: { code: "NFV", label: "Niedersächsischer FV", mandant: "01", areaKeyword: "niedersachsen" },
   HFV_HH: { code: "HFV", label: "Hamburger FV", mandant: "03", areaKeyword: "hamburg" },
-  BFV_HB: { code: "BFV Bremen", label: "Bremer FV", mandant: "04", areaKeyword: "bremen" },
-  FLVW: { code: "FLVW", label: "FLVW Westfalen", mandant: "05", areaKeyword: "westfalen" },
-  FLB: { code: "FLB", label: "Fußball-Landesverband Brandenburg", mandant: "06", areaKeyword: "brandenburg" },
-  FVM: { code: "FVM", label: "Fußball-Verband Mittelrhein", mandant: "07", areaKeyword: "mittelrhein" },
-  LFV_MV: { code: "LFV MV", label: "Landesfußballverband Mecklenburg-Vorpommern", mandant: "08", areaKeyword: "mecklenburg" },
-  TFV: { code: "TFV", label: "Thüringer Fußball-Verband", mandant: "09", areaKeyword: "thuringen" },
-  SFV_SN: { code: "SFV Sachsen", label: "Sächsischer Fußball-Verband", mandant: "11", areaKeyword: "sachsen" },
-  SBFV: { code: "SBFV", label: "Südbadischer Fußball-Verband", mandant: "12", areaKeyword: "sudbaden" },
-  FSA: { code: "FSA", label: "Fußballverband Sachsen-Anhalt", mandant: "13", areaKeyword: "sachsen-anhalt" },
-  HFV_HE: { code: "HFV Hessen", label: "Hessischer Fußball-Verband", mandant: "15", areaKeyword: "hessen" },
-  SWFV: { code: "SWFV", label: "Südwestdeutscher Fußballverband", mandant: "17", areaKeyword: "sudwest" },
-  BFV_BY: { code: "BFV", label: "Bayerischer Fußball-Verband", mandant: "21", areaKeyword: "bayern" },
+  BFV_HB: { code: "BFV Bremen", label: "Bremer FV", mandant: "02", areaKeyword: "bremen" },
+  FLVW: { code: "FLVW", label: "FLVW Westfalen", mandant: "21", areaKeyword: "westfalen" },
+  FLB: { code: "FLB", label: "Fußball-Landesverband Brandenburg", mandant: "61", areaKeyword: "brandenburg" },
+  FVM: { code: "FVM", label: "Fußball-Verband Mittelrhein", mandant: "23", areaKeyword: "mittelrhein" },
+  LFV_MV: { code: "LFV MV", label: "Landesfußballverband Mecklenburg-Vorpommern", mandant: "62", areaKeyword: "mecklenburg" },
+  TFV: { code: "TFV", label: "Thüringer Fußball-Verband", mandant: "65", areaKeyword: "thuringen" },
+  SFV_SN: { code: "SFV Sachsen", label: "Sächsischer Fußball-Verband", mandant: "63", areaKeyword: "sachsen" },
+  SBFV: { code: "SBFV", label: "Südbadischer Fußball-Verband", mandant: "33", areaKeyword: "sudbaden" },
+  FSA: { code: "FSA", label: "Fußballverband Sachsen-Anhalt", mandant: "64", areaKeyword: "sachsen-anhalt" },
+  HFV_HE: { code: "HFV Hessen", label: "Hessischer Fußball-Verband", mandant: "34", areaKeyword: "hessen" },
+  SWFV: { code: "SWFV", label: "Südwestdeutscher Fußballverband", mandant: "42", areaKeyword: "sudwest" },
+  BFV_BY: { code: "BFV", label: "Bayerischer Fußball-Verband", mandant: "31", areaKeyword: "bayern" },
   FVN: { code: "FVN", label: "Fußballverband Niederrhein", mandant: "22", areaKeyword: "niederrhein" },
-  SFV_SL: { code: "SFV Saar", label: "Saarländischer Fußballverband", mandant: "23", areaKeyword: "saarland" },
-  FVR: { code: "FVR", label: "Fußballverband Rheinland", mandant: "25", areaKeyword: "rheinland" },
-  BFV_BE: { code: "BFV Berlin", label: "Berliner Fußball-Verband", mandant: "27", areaKeyword: "berlin" },
-  WFV: { code: "WFV", label: "Württembergischer Fußballverband", mandant: "32", areaKeyword: "wurttemberg" },
-  BFV_BA: { code: "BFV Baden", label: "Badischer Fußballverband", mandant: "33", areaKeyword: "baden" },
+  SFV_SL: { code: "SFV Saar", label: "Saarländischer Fußballverband", mandant: "43", areaKeyword: "saarland" },
+  FVR: { code: "FVR", label: "Fußballverband Rheinland", mandant: "41", areaKeyword: "rheinland" },
+  BFV_BE: { code: "BFV Berlin", label: "Berliner Fußball-Verband", mandant: "66", areaKeyword: "berlin" },
+  WFV: { code: "WFV", label: "Württembergischer Fußballverband", mandant: "35", areaKeyword: "wurttemberg" },
+  BFV_BA: { code: "BFV Baden", label: "Badischer Fußballverband", mandant: "32", areaKeyword: "baden" },
 };
 
 const STATE_DEFAULT_VERBAND = {
@@ -188,15 +188,15 @@ const REGION_KEYWORD_OVERRIDES = {
   "ni-hi": ["hildesheim", "braunschweig"],
   "ni-sz": ["salzgitter", "braunschweig"],
   "ni-ce": ["celle", "luneburg", "lueneburg"],
-  "ni-lg": ["luneburg", "lueneburg"],
+  "ni-lg": ["luneburg", "lueneburg", "heide wendland"],
   "ni-el": ["emsland", "weser ems"],
   "ni-wl": ["harburg", "luneburg", "lueneburg"],
   // SH (SHFV) – Kreis-basiert, plain
   "sh-ki": ["kiel"],
   "sh-hl": ["lubeck", "luebeck"],
   "sh-fl": ["flensburg"],
-  "sh-nms": ["neumunster", "neumuenster"],
-  "sh-pi": ["pinneberg"],
+  "sh-nms": ["neumunster", "neumuenster", "holstein"],
+  "sh-pi": ["pinneberg", "holstein"],
   "sh-se": ["segeberg"],
   "sh-od": ["stormarn"],
   "sh-rz": ["lauenburg", "herzogtum lauenburg"],
@@ -219,32 +219,32 @@ const REGION_KEYWORD_OVERRIDES = {
   "he-fd": ["fulda", "mitte"],
   // BB (FLB) – Brandenburg, plain Kreise
   "bb-p": ["potsdam"],
-  "bb-cb": ["cottbus", "spree neisse"],
+  "bb-cb": ["cottbus", "spree neisse", "niederlausitz", "sudbrandenburg", "suedbrandenburg"],
   "bb-brb": ["brandenburg", "havel"],
-  "bb-ff": ["frankfurt oder", "oder"],
-  "bb-pm": ["potsdam mittelmark"],
+  "bb-ff": ["frankfurt oder", "oder", "ostbrandenburg"],
+  "bb-pm": ["potsdam mittelmark", "havelland", "dahme flaming", "dahme flaeming"],
   "bb-hvl": ["havelland"],
   "bb-ohv": ["oberhavel"],
   "bb-bar": ["barnim"],
   "bb-lds": ["dahme", "spreewald"],
   "bb-tf": ["teltow", "flaming", "flaeming"],
   // MV (LFV-MV) – Kreise
-  "mv-hro": ["rostock"],
+  "mv-hro": ["rostock", "warnow"],
   "mv-sn": ["schwerin"],
   "mv-vg": ["vorpommern greifswald", "greifswald"],
   "mv-vr": ["vorpommern rugen", "ruegen", "rugen"],
   "mv-mse": ["mecklenburgische seenplatte", "seenplatte"],
-  "mv-lro": ["landkreis rostock"],
-  "mv-lup": ["ludwigslust", "parchim"],
-  "mv-nwm": ["nordwestmecklenburg"],
+  "mv-lro": ["landkreis rostock", "warnow"],
+  "mv-lup": ["ludwigslust", "parchim", "westmecklenburg"],
+  "mv-nwm": ["nordwestmecklenburg", "schwerin nordwestmeckl", "nordwestmeckl"],
   // SN (SFV Sachsen) – Kreise
   "sn-l": ["leipzig"],
   "sn-dd": ["dresden"],
   "sn-c": ["chemnitz"],
   "sn-z": ["zwickau"],
   "sn-v": ["vogtland"],
-  "sn-gr": ["gorlitz", "goerlitz"],
-  "sn-bz": ["bautzen"],
+  "sn-gr": ["gorlitz", "goerlitz", "oberlausitz"],
+  "sn-bz": ["bautzen", "oberlausitz", "westlausitz"],
   "sn-mei": ["meissen", "meisen"],
   "sn-msn": ["mittelsachsen"],
   "sn-erz": ["erzgebirge"],
@@ -255,36 +255,36 @@ const REGION_KEYWORD_OVERRIDES = {
   "st-de": ["dessau", "rosslau", "russlau"],
   "st-hz": ["harz"],
   "st-sk": ["saalekreis", "saale"],
-  "st-blk": ["burgenlandkreis"],
+  "st-blk": ["burgenlandkreis", "burgenland"],
   "st-abi": ["anhalt", "bitterfeld"],
   "st-msh": ["mansfeld", "sudharz", "suedharz"],
-  "st-sdl": ["stendal"],
+  "st-sdl": ["stendal", "altmark ost", "altmark west"],
   "st-bk": ["borde", "boerde"],
   // TH (TFV) – Kreise
   "th-ef": ["erfurt"],
   "th-j": ["jena"],
   "th-g": ["gera"],
   "th-we": ["weimar"],
-  "th-wak": ["eisenach", "wartburg"],
-  "th-gth": ["gotha"],
+  "th-wak": ["eisenach", "wartburg", "westthuringen", "westthueringen"],
+  "th-gth": ["gotha", "westthuringen", "westthueringen"],
   "th-ik": ["ilm"],
-  "th-slf": ["saalfeld", "rudolstadt"],
+  "th-slf": ["saalfeld", "rudolstadt", "sudthuringen", "suedthueringen"],
   "th-sok": ["saale orla"],
   "th-shk": ["saale holzland"],
-  "th-ndh": ["nordhausen"],
+  "th-ndh": ["nordhausen", "nordthuringen", "nordthueringen"],
   // SL (SFV Saar) – Kreise
-  "sl-sb": ["saarbrucken", "saarbruecken", "regionalverband"],
-  "sl-sls": ["saarlouis"],
-  "sl-mzg": ["merzig", "wadern"],
-  "sl-nk": ["neunkirchen"],
-  "sl-spk": ["saarpfalz"],
-  "sl-wnd": ["wendel", "st wendel"],
+  "sl-sb": ["saarbrucken", "saarbruecken", "regionalverband", "westsaar", "sudsaar", "suedsaar"],
+  "sl-sls": ["saarlouis", "westsaar"],
+  "sl-mzg": ["merzig", "wadern", "westsaar", "nordsaar"],
+  "sl-nk": ["neunkirchen", "ostsaar"],
+  "sl-spk": ["saarpfalz", "ostsaar"],
+  "sl-wnd": ["wendel", "st wendel", "nordsaar"],
   // RP (SWFV/FVR) – mit Bezirken
   "rp-mz": ["mainz", "rheinhessen"],
   "rp-lu": ["ludwigshafen", "vorderpfalz"],
   "rp-kl": ["kaiserslautern", "westpfalz"],
   "rp-wo": ["worms", "rheinhessen"],
-  "rp-sp": ["speyer", "vorderpfalz"],
+  "rp-sp": ["speyer", "vorderpfalz", "rhein mittelhaardt", "rhein pfalz"],
   "rp-mzb": ["mainz bingen", "rheinhessen"],
   "rp-rpk": ["rhein pfalz", "vorderpfalz"],
   "rp-kh": ["bad kreuznach", "rheinhessen"],
@@ -621,6 +621,10 @@ function buildRegionAreaKeywords({ stateCode, name, shortCode, legacyId, verband
     keywords.add(slugify(verband.code).replace(/-/g, " "));
   }
 
+  if (verband?.areaKeyword && ["BE", "HH", "HB"].includes(stateCode)) {
+    keywords.add(slugify(verband.areaKeyword).replace(/-/g, " "));
+  }
+
   return [...keywords].filter(Boolean);
 }
 
@@ -639,12 +643,12 @@ function makeRegion(stateCode, entry, index) {
     regionId: id,
   });
 
-  // City-state Verbände (Berlin/Hamburg/Bremen) und Bundesland-Auswahlen ohne
-  // dedizierte Kreisstruktur dürfen auf den verbandsweiten Spielbetrieb fallen,
-  // damit der Spielplan auch dort funktioniert. Reine Bezirks-Mappings sollen
-  // dagegen nicht den ganzen Landesverband crawlen.
+  // City-state Verbände (Berlin/Hamburg/Bremen) veröffentlichen fussball.de
+  // teils nur auf Verbands-/Kreisebene. Auch Bezirke dürfen deshalb auf die
+  // echte verbandsweite Datenebene fallen; die UI-Region bleibt als Kontext
+  // erhalten und die heuristische Detailfilterung versucht sie danach einzugrenzen.
   const allowRegionalFallback =
-    type === "region" || (type === "kreis" && ["BE", "HH", "HB"].includes(stateCode));
+    type === "region" || ["BE", "HH", "HB"].includes(stateCode);
 
   return {
     id,

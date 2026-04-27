@@ -321,6 +321,30 @@ describe("fussballde helpers", () => {
     ).toEqual(["BFV_WEIT"]);
   });
 
+  it("bevorzugt konkrete Kreis-Treffer vor breiten Bezirks-Treffern", () => {
+    const areaMap = {
+      _BAYERN: "Bayern",
+      _OBERBAYERN: "Bezirk Oberbayern",
+      _MUENCHEN: "Kreis München",
+    };
+
+    const params = resolveFussballDeRegionParams({
+      kreisId: "by-m",
+      stateCode: "BY",
+      regionName: "München",
+      regionShortCode: "M",
+      mapping: {
+        searchName: "München",
+        verband: "BFV",
+        mandant: "31",
+        kreis: "München",
+        areaKeywords: ["munchen", "muenchen", "oberbayern"],
+      },
+    });
+
+    expect(pickAreaIdsForLeague(areaMap, "by-m", params)).toEqual(["MUENCHEN"]);
+  });
+
   it("blockiert Verbands-Fallback bei Bezirks-Mappings ohne Flag", () => {
     const areaMap = {
       _BFV_WEIT: "BFV Bayern",

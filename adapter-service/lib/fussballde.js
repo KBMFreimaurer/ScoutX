@@ -53,6 +53,12 @@ function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionNam
     safeMapping.region,
     safeMapping.searchName,
   ]);
+  const primaryAreaKeywords = normalizeMappingKeywords([
+    safeMapping.kreis,
+    safeMapping.region,
+    safeMapping.searchName,
+    regionName,
+  ]);
   const legacyKeywords = KREIS_AREA_KEYWORDS[kreisId] || [];
   const fallbackKeywords = normalizeMappingKeywords([regionName, regionShortCode, kreisId]);
   const areaKeywords = [...new Set([...explicitKeywords, ...legacyKeywords, ...fallbackKeywords])];
@@ -70,6 +76,7 @@ function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionNam
     kreis,
     region,
     areaKeywords,
+    primaryAreaKeywords: [...new Set(primaryAreaKeywords)],
     resultKeywords: normalizeMappingKeywords(safeMapping.resultKeywords || []),
     slugHints: Array.isArray(safeMapping.slugHints) ? safeMapping.slugHints.map((value) => String(value || "").trim()).filter(Boolean) : [],
     fallbackSearchName: searchName || String(regionName || kreisId || "").trim(),
@@ -501,6 +508,23 @@ function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
     .map(([areaId]) => areaId);
 
   if (matches.length > 0) {
+    const primaryKeywords = Array.isArray(regionParams?.primaryAreaKeywords) ? regionParams.primaryAreaKeywords : [];
+    const primaryMatches = primaryKeywords.length
+      ? entries
+          .filter(([areaId, label]) => {
+            if (!matches.includes(areaId)) {
+              return false;
+            }
+            const lookup = normalizeLookup(label);
+            return primaryKeywords.some((keyword) => lookup.includes(keyword));
+          })
+          .map(([areaId]) => areaId)
+      : [];
+
+    if (primaryMatches.length > 0) {
+      return primaryMatches;
+    }
+
     return matches;
   }
 
