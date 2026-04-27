@@ -26,7 +26,10 @@ describe("ScoutX Integration", () => {
 
     await screen.findByRole("heading", { name: /Scouting-Plan konfigurieren/i }, { timeout: 5000 });
 
-    const kreisButtons = await screen.findAllByRole("button", { name: /Kreis .* auswählen/i }, { timeout: 5000 });
+    fireEvent.click(await screen.findByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i }, { timeout: 5000 }));
+    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
+
+    const kreisButtons = await screen.findAllByRole("button", { name: /Region\/Kreis .* auswählen/i }, { timeout: 5000 });
     kreisIndices.forEach((index) => {
       const button = kreisButtons[index] || kreisButtons[0];
       fireEvent.click(button);
@@ -36,7 +39,6 @@ describe("ScoutX Integration", () => {
     const jugendButtons = await screen.findAllByRole("button", { name: /Jugend auswählen/i }, { timeout: 5000 });
     fireEvent.click(jugendButtons[0]);
 
-    fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
@@ -230,7 +232,7 @@ describe("ScoutX Integration", () => {
           status: 200,
           json: async () => ({ games: [] }),
         }),
-      expectedText: "Adapter lieferte keine Spiele",
+      expectedText: "Für diese Region wurden keine Spiele gefunden",
     },
     {
       label: "malformed JSON",

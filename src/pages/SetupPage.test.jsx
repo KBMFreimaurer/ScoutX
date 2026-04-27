@@ -28,8 +28,9 @@ function clickNextStep() {
   fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 }
 
-function clickBackStep() {
-  fireEvent.click(screen.getByRole("button", { name: /Zurück zum vorherigen Schritt/i }));
+function selectNrwState() {
+  fireEvent.click(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i }));
+  clickNextStep();
 }
 
 function goToStepWithRequiredSelections(step) {
@@ -37,21 +38,21 @@ function goToStepWithRequiredSelections(step) {
     return;
   }
 
-  fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
-  clickNextStep();
-
+  selectNrwState();
   if (step <= 2) {
     return;
   }
 
-  fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+  fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
   clickNextStep();
 
   if (step <= 3) {
     return;
   }
 
+  fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
   clickNextStep();
+
   if (step <= 4) {
     return;
   }
@@ -86,36 +87,45 @@ describe("SetupPage", () => {
     vi.useRealTimers();
   });
 
-  it("setzt Vereins-Parameter bei Kreiswechsel zurück", () => {
+  it("zeigt nach der Altersklasse direkt den Zeitraum ohne Vereinsparameter", () => {
     renderSetupPage();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    selectNrwState();
+    fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
     clickNextStep();
     fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
     clickNextStep();
 
-    fireEvent.change(screen.getByLabelText(/Verein hinzuf/i), {
-      target: { value: "TSV Heimaterde" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Vereinsfeld hinzuf/i }));
+    expect(screen.getByRole("button", { name: /Scouting-Datum auswählen/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Verein hinzuf/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Vereinsfeld hinzuf/i })).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/Alle löschen/i)).toBeInTheDocument();
+  it("zeigt die Bundesland-Auswahl mit 16 Bundesländern", () => {
+    renderSetupPage();
 
-    clickBackStep();
-    clickBackStep();
-    fireEvent.click(screen.getByRole("button", { name: /Kreis Duisburg auswählen/i }));
+    expect(screen.getAllByText("Bundesland auswählen").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Bundesland .* auswählen/i })).toHaveLength(16);
+    expect(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i })).toBeDisabled();
+  });
+
+  it("zeigt nach Bundesland-Auswahl nur passende Regionen", () => {
+    renderSetupPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /Bundesland Bayern auswählen/i }));
     clickNextStep();
-    clickNextStep();
 
-    expect(screen.queryByText(/Alle löschen/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Keine Vereinsparameter gesetzt/i)).toBeInTheDocument();
+    expect(screen.getByText("Bayern")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Region\/Kreis München auswählen/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Region\/Kreis Duisburg auswählen/i })).not.toBeInTheDocument();
   });
 
   it("erlaubt die Auswahl mehrerer Kreise", () => {
     renderSetupPage();
+    selectNrwState();
 
-    const duisburgButton = screen.getByRole("button", { name: /Kreis Duisburg (auswählen|abwählen)/i });
-    const essenButton = screen.getByRole("button", { name: /Kreis Essen auswählen/i });
+    const duisburgButton = screen.getByRole("button", { name: /Region\/Kreis Duisburg (auswählen|abwählen)/i });
+    const essenButton = screen.getByRole("button", { name: /Region\/Kreis Essen auswählen/i });
 
     fireEvent.click(duisburgButton);
     fireEvent.click(essenButton);
@@ -137,7 +147,8 @@ describe("SetupPage", () => {
 
   it("zeigt Unterstufen-Auswahl für Jugendklassen ausser Bambini", () => {
     renderSetupPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    selectNrwState();
+    fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
     clickNextStep();
 
     fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
@@ -150,7 +161,8 @@ describe("SetupPage", () => {
 
   it("zeigt bei Bambini keinen Unterstufen-Parameter", () => {
     renderSetupPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    selectNrwState();
+    fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
     clickNextStep();
 
     fireEvent.click(screen.getByRole("button", { name: /Bambini auswählen/i }));
@@ -175,13 +187,15 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    const duisburgButton = screen.getByLabelText(/Kreis Duisburg (auswählen|abwählen)/i);
+    expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toHaveAttribute("aria-pressed", "true");
+    clickNextStep();
+    const duisburgButton = screen.getByLabelText(/Region\/Kreis Duisburg (auswählen|abwählen)/i);
     expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
 
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
     expect(nextButton).toBeEnabled();
 
-    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain("duisburg");
+    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain('"selectedStateCode":"NW"');
   });
 
   it("setzt den Zeitraum initial von heute bis zum nächsten Sonntag", () => {
@@ -215,21 +229,22 @@ describe("SetupPage", () => {
     expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toHaveTextContent("26.04.2026");
   });
 
-  it("zählt Altersklassen-Unterstufen nicht als gesetzte Mannschaften", () => {
+  it("zeigt keinen Mannschaften-Block mehr in der Zusammenfassung", () => {
     renderSetupPage();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Kreis .* auswählen/i })[0]);
+    selectNrwState();
+    fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
     clickNextStep();
     fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
     fireEvent.click(screen.getByRole("button", { name: /D I auswählen/i }));
     clickNextStep();
     clickNextStep();
     clickNextStep();
-    clickNextStep();
     fireEvent.change(screen.getByLabelText(/Scout-Name \(für Abrechnung\)/i), { target: { value: "Ayoub Kerbab" } });
     clickNextStep();
 
-    expect(screen.getByText("Mannschaften").closest(".setup-summary-item")).toHaveTextContent("Keine Team-Parameter");
+    expect(screen.queryByText("Mannschaften")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Team-Parameter/i)).not.toBeInTheDocument();
   });
 
   it("öffnet die Kalenderauswahl und übernimmt ein Datum", () => {

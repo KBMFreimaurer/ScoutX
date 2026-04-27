@@ -116,6 +116,10 @@ describe("data provider", () => {
     const result = await fetchGamesWithProviders({
       mode: "adapter",
       kreisId: "duesseldorf",
+      stateCode: "NW",
+      regionName: "Düsseldorf",
+      regionShortCode: "DU",
+      fussballDeMapping: { searchName: "Düsseldorf", verband: "FVN", kreis: "Düsseldorf" },
       jugendId: "e-jugend",
       fromDate: "2026-05-01",
       toDate: "2026-05-07",
@@ -129,6 +133,14 @@ describe("data provider", () => {
     expect(result.source).toBe("adapter");
     expect(result.games).toHaveLength(1);
     expect(result.games[0].home).toBe("Team X");
+    const payload = JSON.parse(String(fetch.mock.calls[0][1]?.body || "{}"));
+    expect(payload).toMatchObject({
+      kreisId: "duesseldorf",
+      stateCode: "NW",
+      regionName: "Düsseldorf",
+      regionShortCode: "DU",
+      fussballDeMapping: { searchName: "Düsseldorf", verband: "FVN", kreis: "Düsseldorf" },
+    });
   });
 
   it("faellt auf benachbarte Woche zurück, wenn der gewählte Zeitraum leer ist", async () => {

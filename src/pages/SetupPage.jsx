@@ -1,20 +1,19 @@
 import { useMemo, useState } from "react";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
-import { KREISE } from "../data/kreise";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { AgeGroupSelector } from "../components/AgeGroupSelector";
 import { DateFocusPanel } from "../components/DateFocusPanel";
 import { KreisSelector } from "../components/KreisSelector";
+import { StateSelector } from "../components/StateSelector";
 import { SectionHeader } from "../components/SectionHeader";
-import { TeamPicker } from "../components/TeamPicker";
 import { useScoutX } from "../context/ScoutXContext";
 import { C, card, inp, lbl, secH } from "../styles/theme";
 import { clearRuntimeGoogleMapsApiKey, getGoogleRoutingConfig, setRuntimeGoogleMapsApiKey } from "../utils/geo";
 
 const SETUP_STEPS = [
-  { id: 1, title: "Region & Kreis" },
-  { id: 2, title: "Altersklasse" },
-  { id: 3, title: "Mannschaften (optional)" },
+  { id: 1, title: "Bundesland" },
+  { id: 2, title: "Region & Kreis" },
+  { id: 3, title: "Altersklasse" },
   { id: 4, title: "Zeitraum" },
   { id: 5, title: "Startpunkt" },
   { id: 6, title: "Fahrtkosten" },
@@ -50,22 +49,22 @@ function buildKreisSelectionLabel(kreise) {
   }
 
   if (safeKreise.length === 1) {
-    return safeKreise[0].label;
+    return safeKreise[0].displayName || safeKreise[0].label || safeKreise[0].name;
   }
 
-  return `${safeKreise.length} Kreise (${safeKreise.map((item) => item.kurz).join(", ")})`;
+  return `${safeKreise.length} Kreise (${safeKreise.map((item) => item.shortCode || item.kurz).join(", ")})`;
 }
 
-function buildStepCompletionMap({ kreisIds, jugendId, fromDate, toDate, teamParameterCount, scoutName, kmPauschale }) {
+function buildStepCompletionMap({ selectedStateCode, kreisIds, jugendId, fromDate, toDate, scoutName, kmPauschale }) {
   const hasValidRange = Boolean(fromDate && toDate && String(toDate) >= String(fromDate));
   const hasScoutName = Boolean(String(scoutName || "").trim());
   const hasKmPauschale = Number(kmPauschale) > 0;
   const hasKreisSelection = Array.isArray(kreisIds) && kreisIds.length > 0;
 
   return {
-    1: hasKreisSelection,
-    2: Boolean(jugendId),
-    3: teamParameterCount >= 0,
+    1: Boolean(selectedStateCode),
+    2: hasKreisSelection,
+    3: Boolean(jugendId),
     4: hasValidRange,
     5: true,
     6: hasScoutName && hasKmPauschale,
@@ -80,16 +79,15 @@ function canBuildStepCompletion({ hasKreisSelection, jugendId, hasValidRange, ha
 export function SetupPage() {
   const {
     isMobile,
+    states,
+    selectedStateCode,
+    selectedState,
+    availableRegions,
     kreisIds,
     jugendId,
     jugend,
-    selectedTeams,
     jugendSubLevels,
     availableJugendSubLevels,
-    teamDraft,
-    teamValidation,
-    adapterEndpoint,
-    adapterToken,
     fromDate,
     toDate,
     canBuild,
@@ -102,16 +100,11 @@ export function SetupPage() {
     hasLocation,
     scoutName,
     kmPauschale,
+    onSelectState,
     onSelectKreis,
     onSelectJugend,
     onToggleJugendSubLevel,
     onClearJugendSubLevels,
-    onAddTeamField,
-    onUpdateTeamField,
-    onNormalizeTeamField,
-    onRemoveTeamField,
-    onSetTeamDraft,
-    onClearAllTeams,
     onSetFromDate,
     onSetToDate,
     onBuildAndGo,
@@ -130,18 +123,17 @@ export function SetupPage() {
 
   const googleRouting = getGoogleRoutingConfig();
   const totalSteps = SETUP_STEPS.length;
-  const selectedKreise = useMemo(
-    () => KREISE.filter((item) => (Array.isArray(kreisIds) ? kreisIds : []).includes(item.id)),
-    [kreisIds],
-  );
+  const selectedKreise = useMemo(() => availableRegions.filter((item) => (Array.isArray(kreisIds) ? kreisIds : []).includes(item.id)), [
+    availableRegions,
+    kreisIds,
+  ]);
   const selectedKreisLabel = useMemo(() => buildKreisSelectionLabel(selectedKreise), [selectedKreise]);
-  const teamParameterCount = selectedTeams.length || 0;
   const stepCompletionMap = buildStepCompletionMap({
+    selectedStateCode,
     kreisIds,
     jugendId,
     fromDate,
     toDate,
-    teamParameterCount,
     scoutName,
     kmPauschale,
   });
@@ -150,7 +142,6 @@ export function SetupPage() {
   const summaryParts = [
     selectedKreisLabel,
     jugend?.label || "Keine Altersklasse",
-    teamParameterCount > 0 ? `${teamParameterCount} Team-Parameter` : "Ohne Team-Parameter",
     hasLocation ? "Startpunkt gesetzt" : "Ohne Startpunkt",
   ];
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
@@ -163,10 +154,13 @@ export function SetupPage() {
   }, [currentStep, totalSteps, stepCompletionMap]);
 
   const nextButtonLabel = useMemo(() => {
-    if (currentStep === 1 && (!Array.isArray(kreisIds) || kreisIds.length === 0)) {
-      return "Mindestens einen Kreis auswählen";
+    if (currentStep === 1 && !selectedStateCode) {
+      return "Bundesland auswählen";
     }
-    if (currentStep === 2 && !jugendId) {
+    if (currentStep === 2 && (!Array.isArray(kreisIds) || kreisIds.length === 0)) {
+      return "Region & Kreis auswählen";
+    }
+    if (currentStep === 3 && !jugendId) {
       return "Altersklasse auswählen";
     }
     if (currentStep === 4 && (!fromDate || !toDate || String(toDate) < String(fromDate))) {
@@ -176,7 +170,7 @@ export function SetupPage() {
       return "Scout-Name eintragen";
     }
     return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
-  }, [currentStep, fromDate, toDate, jugendId, kreisIds, scoutName, nextStepMeta]);
+  }, [currentStep, fromDate, toDate, jugendId, kreisIds, scoutName, nextStepMeta, selectedStateCode]);
 
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
@@ -434,18 +428,16 @@ export function SetupPage() {
       <SectionHeader>Zusammenfassung</SectionHeader>
       <div className="setup-summary-grid">
         <div className="setup-summary-item">
+          <span className="setup-summary-label">Bundesland</span>
+          <span className="setup-summary-value">{selectedState?.name || "Nicht gesetzt"}</span>
+        </div>
+        <div className="setup-summary-item">
           <span className="setup-summary-label">Region & Kreis</span>
           <span className="setup-summary-value">{selectedKreisLabel || "Nicht gesetzt"}</span>
         </div>
         <div className="setup-summary-item">
           <span className="setup-summary-label">Altersklasse</span>
           <span className="setup-summary-value">{jugend?.label || "Nicht gesetzt"}</span>
-        </div>
-        <div className="setup-summary-item">
-          <span className="setup-summary-label">Mannschaften</span>
-          <span className="setup-summary-value">
-            {teamParameterCount > 0 ? `${teamParameterCount} gesetzt` : "Keine Team-Parameter"}
-          </span>
         </div>
         <div className="setup-summary-item">
           <span className="setup-summary-label">Zeitraum</span>
@@ -468,8 +460,19 @@ export function SetupPage() {
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
-        return <KreisSelector kreise={KREISE} kreisIds={kreisIds} onSelect={onSelectKreis} isMobile={isMobile} />;
+        return <StateSelector states={states} selectedStateCode={selectedStateCode} onSelect={onSelectState} isMobile={isMobile} />;
       case 2:
+        return (
+          <KreisSelector
+            kreise={availableRegions}
+            kreisIds={kreisIds}
+            onSelect={onSelectKreis}
+            isMobile={isMobile}
+            stateName={selectedState?.name || ""}
+            disabled={!selectedStateCode}
+          />
+        );
+      case 3:
         return (
           <AgeGroupSelector
             jugendKlassen={JUGEND_KLASSEN}
@@ -480,22 +483,6 @@ export function SetupPage() {
             selectedSubLevels={jugendSubLevels}
             onToggleSubLevel={onToggleJugendSubLevel}
             onClearSubLevels={onClearJugendSubLevels}
-          />
-        );
-      case 3:
-        return (
-          <TeamPicker
-            selectedTeams={selectedTeams}
-            teamDraft={teamDraft}
-            teamValidation={teamValidation}
-            onTeamDraft={onSetTeamDraft}
-            onAddTeam={onAddTeamField}
-            onUpdateTeam={onUpdateTeamField}
-            onNormalizeTeams={onNormalizeTeamField}
-            onRemoveTeam={onRemoveTeamField}
-            onClearAll={onClearAllTeams}
-            adapterEndpoint={adapterEndpoint}
-            adapterToken={adapterToken}
           />
         );
       case 4:
@@ -606,9 +593,7 @@ export function SetupPage() {
                     <line x1="5" y1="12" x2="19" y2="12" />
                     <polyline points="12 5 19 12 12 19" />
                   </svg>
-                  {teamParameterCount > 0
-                    ? `Spielplan generieren — ${teamParameterCount} Team-Parameter`
-                    : "Spielplan generieren"}
+                  Spielplan generieren
                 </span>
               )}
             </PrimaryButton>

@@ -29,7 +29,7 @@ function buildWeekTemplateUrl(template, params) {
     return "";
   }
 
-  return template.replace(/\{(fromDate|toDate|kreisId|jugendId)\}/g, (_, key) =>
+  return template.replace(/\{(fromDate|toDate|kreisId|stateCode|regionName|regionShortCode|jugendId)\}/g, (_, key) =>
     encodeURIComponent(String(params[key] || "")),
   );
 }
@@ -79,6 +79,10 @@ async function runExportCommand({ command, timeoutMs, params, importDir }) {
     SCOUTPLAN_FROM_DATE: String(params.fromDate || ""),
     SCOUTPLAN_TO_DATE: String(params.toDate || ""),
     SCOUTPLAN_KREIS_ID: String(params.kreisId || ""),
+    SCOUTPLAN_STATE_CODE: String(params.stateCode || ""),
+    SCOUTPLAN_REGION_NAME: String(params.regionName || ""),
+    SCOUTPLAN_REGION_SHORT_CODE: String(params.regionShortCode || ""),
+    SCOUTPLAN_FUSSBALLDE_MAPPING_JSON: JSON.stringify(params.fussballDeMapping || null),
     SCOUTPLAN_JUGEND_ID: String(params.jugendId || ""),
     SCOUTPLAN_TEAMS_JSON: JSON.stringify(Array.isArray(params.teams) ? params.teams : []),
     SCOUTPLAN_IMPORT_DIR: String(importDir || ""),

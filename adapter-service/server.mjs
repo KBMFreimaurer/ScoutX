@@ -645,6 +645,10 @@ async function maybeAutoRefreshWeek(payload) {
       fromDate: weekRange.fromDate,
       toDate: weekRange.toDate,
       kreisId: payload.kreisId || "",
+      stateCode: payload.stateCode || "",
+      regionName: payload.regionName || "",
+      regionShortCode: payload.regionShortCode || "",
+      fussballDeMapping: payload.fussballDeMapping || null,
       jugendId: payload.jugendId || "",
       teams: Array.isArray(payload.teams) ? payload.teams : [],
     };

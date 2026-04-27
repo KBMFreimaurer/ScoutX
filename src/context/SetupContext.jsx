@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useWindowWidth } from "../hooks/useWindowWidth";
-import { KREISE } from "../data/kreise";
+import { GERMANY_STATES, getRegionById, getRegionsByState, getStateByCode, inferStateCodeFromRegionIds } from "../data/germany_regions";
 import { JUGEND_KLASSEN } from "../data/altersklassen";
 import { STORAGE_KEYS } from "../config/storage";
 import { ADAPTER_AUTH_TOKEN, ADAPTER_ENDPOINT } from "../config/adapter";
@@ -15,7 +15,8 @@ const ROMAN_TO_ARABIC = {
   III: "3",
   IV: "4",
 };
-const KNOWN_KREIS_IDS = new Set(KREISE.map((item) => String(item.id || "").trim()).filter(Boolean));
+const KNOWN_KREIS_IDS = new Set(GERMANY_STATES.flatMap((state) => state.regions.map((item) => String(item.id || "").trim())).filter(Boolean));
+const KNOWN_STATE_CODES = new Set(GERMANY_STATES.map((state) => state.code));
 
 function normalizeKreisIds(values) {
   const list = Array.isArray(values) ? values : [values];
@@ -31,17 +32,28 @@ function normalizeKreisIds(values) {
     ids.push(id);
   }
 
-  return KREISE.map((item) => item.id).filter((id) => ids.includes(id));
+  return GERMANY_STATES.flatMap((state) => state.regions.map((item) => item.id)).filter((id) => ids.includes(id));
 }
 
 function buildKreisLabel(kreise) {
-  const labels = (Array.isArray(kreise) ? kreise : []).map((item) => String(item?.label || "").trim()).filter(Boolean);
+  const labels = (Array.isArray(kreise) ? kreise : [])
+    .map((item) => String(item?.displayName || item?.label || item?.name || "").trim())
+    .filter(Boolean);
 
   if (labels.length === 0) {
     return "";
   }
 
   return labels.join(", ");
+}
+
+function normalizeStateCode(value, regionIds = []) {
+  const direct = String(value || "").trim().toUpperCase();
+  if (KNOWN_STATE_CODES.has(direct)) {
+    return direct;
+  }
+  const inferred = inferStateCodeFromRegionIds(regionIds, "");
+  return KNOWN_STATE_CODES.has(inferred) ? inferred : "";
 }
 
 function humanizeGeolocationError(error) {
@@ -207,8 +219,9 @@ function readPersistedSetup(fallback) {
 
     return {
       ...fallback,
-      kreisIds: normalizeKreisIds(parsed.kreisIds || parsed.kreisId),
-      kreisId: String(parsed.kreisId || "").trim(),
+      kreisIds: normalizeKreisIds(parsed.kreisIds || parsed.kreisId || parsed.selectedRegion),
+      kreisId: String(parsed.kreisId || parsed.selectedRegion || "").trim(),
+      selectedStateCode: normalizeStateCode(parsed.selectedStateCode || parsed.stateCode, parsed.kreisIds || parsed.kreisId || parsed.selectedRegion),
       jugendId: JUGEND_KLASSEN.some((item) => item.id === parsed.jugendId) ? parsed.jugendId : "",
       selTeams: normalizeTeamParameters(parsed.selTeams),
       fromDate: safeFromDate,
@@ -229,6 +242,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     const fallback = {
       kreisIds: [],
       kreisId: "",
+      selectedStateCode: "",
       jugendId: "",
       selTeams: [],
       fromDate: initialRange.fromDate,
@@ -246,6 +260,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const isMobile = width < 600;
 
   const [kreisIds, setKreisIds] = useState(() => normalizeKreisIds(setupDefaults.kreisIds || setupDefaults.kreisId));
+  const [selectedStateCode, setSelectedStateCode] = useState(() =>
+    normalizeStateCode(setupDefaults.selectedStateCode, setupDefaults.kreisIds || setupDefaults.kreisId),
+  );
   const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
   const [selectedTeams, setSelectedTeams] = useState(() => normalizeTeamParameters(setupDefaults.selTeams));
   const [teamDraft, setTeamDraft] = useState("");
@@ -294,8 +311,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   }, []);
 
   const kreisId = useMemo(() => (Array.isArray(kreisIds) && kreisIds.length > 0 ? kreisIds[0] : ""), [kreisIds]);
+  const selectedState = useMemo(() => getStateByCode(selectedStateCode), [selectedStateCode]);
+  const availableRegions = useMemo(() => getRegionsByState(selectedStateCode).filter((region) => region.enabled), [selectedStateCode]);
   const kreise = useMemo(
-    () => (Array.isArray(kreisIds) ? kreisIds : []).map((id) => KREISE.find((item) => item.id === id)).filter(Boolean),
+    () => (Array.isArray(kreisIds) ? kreisIds : []).map((id) => getRegionById(id)).filter(Boolean),
     [kreisIds],
   );
   const kreis = useMemo(() => (kreise.length > 0 ? kreise[0] : null), [kreise]);
@@ -326,6 +345,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
         JSON.stringify({
           kreisIds,
           kreisId,
+          selectedStateCode,
           jugendId,
           selTeams: selectedTeams,
           fromDate,
@@ -338,24 +358,48 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     } catch {
       // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
     }
-  }, [kreisIds, kreisId, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
+  }, [kreisIds, kreisId, selectedStateCode, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
 
-  const onSelectKreis = useCallback((id) => {
-    const nextId = String(id || "").trim();
-    if (!nextId || !KNOWN_KREIS_IDS.has(nextId)) {
+  const onSelectState = useCallback((code) => {
+    const nextCode = String(code || "").trim().toUpperCase();
+    if (!KNOWN_STATE_CODES.has(nextCode)) {
       return;
     }
-
+    setSelectedStateCode(nextCode);
     setKreisIds((prev) => {
-      const current = Array.isArray(prev) ? prev : [];
-      const next = current.includes(nextId) ? current.filter((value) => value !== nextId) : [...current, nextId];
-      return normalizeKreisIds(next);
+      const nextRegions = getRegionsByState(nextCode);
+      const allowed = new Set(nextRegions.map((region) => region.id));
+      return normalizeKreisIds((Array.isArray(prev) ? prev : []).filter((id) => allowed.has(id)));
     });
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
     setErr("");
   }, []);
+
+  const onSelectKreis = useCallback(
+    (id) => {
+      const nextId = String(id || "").trim();
+      if (!nextId || !KNOWN_KREIS_IDS.has(nextId)) {
+        return;
+      }
+      const region = getRegionById(nextId);
+      if (!region || !selectedStateCode || region.stateCode !== selectedStateCode) {
+        return;
+      }
+
+      setKreisIds((prev) => {
+        const current = Array.isArray(prev) ? prev : [];
+        const next = current.includes(nextId) ? current.filter((value) => value !== nextId) : [...current, nextId];
+        return normalizeKreisIds(next);
+      });
+      setSelectedTeams([]);
+      setTeamDraft("");
+      setTeamValidation(null);
+      setErr("");
+    },
+    [selectedStateCode],
+  );
 
   const onSelectJugend = useCallback((id) => {
     setJugendId(id);
@@ -567,6 +611,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const resetSetupState = useCallback(() => {
     const currentRange = buildCurrentScoutingRange();
     setKreisIds([]);
+    setSelectedStateCode("");
     setJugendId("");
     setSelectedTeams([]);
     setTeamDraft("");
@@ -596,6 +641,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       width,
       kreisIds,
       kreisId,
+      selectedStateCode,
+      selectedState,
+      states: GERMANY_STATES,
+      availableRegions,
       kreise,
       jugendId,
       kreis,
@@ -626,6 +675,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       clearErr,
       setTeamValidation,
       onSelectKreis,
+      onSelectState,
       onSelectJugend,
       onToggleJugendSubLevel,
       onClearJugendSubLevels,
@@ -659,6 +709,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       width,
       kreisIds,
       kreisId,
+      selectedStateCode,
+      selectedState,
+      availableRegions,
       kreise,
       jugendId,
       kreis,
@@ -686,6 +739,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       err,
       clearErr,
       onSelectKreis,
+      onSelectState,
       onSelectJugend,
       onToggleJugendSubLevel,
       onClearJugendSubLevels,

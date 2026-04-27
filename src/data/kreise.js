@@ -1,15 +1,6 @@
-export const KREISE = [
-  { id: "duesseldorf", label: "Düsseldorf", kurz: "DU" },
-  { id: "duisburg", label: "Duisburg", kurz: "DUI" },
-  { id: "essen", label: "Essen", kurz: "ES" },
-  { id: "krefeld", label: "Krefeld", kurz: "KR" },
-  { id: "moenchen", label: "Mönchengladbach", kurz: "MG" },
-  { id: "neuss", label: "Neuss/Grevenbroich", kurz: "NE" },
-  { id: "oberhausen", label: "Oberhausen", kurz: "OB" },
-  { id: "viersen", label: "Viersen", kurz: "VIE" },
-  { id: "wesel", label: "Wesel", kurz: "WES" },
-  { id: "kleve", label: "Kleve/Geldern", kurz: "KLE" },
-];
+import { getRegionsByState } from "./germany_regions";
+
+export const KREISE = getRegionsByState("NW");
 
 export const VEREINE_JE_KREIS = {
   duesseldorf: [

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
+import { getRegionById } from "../data/germany_regions";
 import { fetchGamesWithProviders } from "../services/dataProvider";
 import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
 import { useSetup } from "./SetupContext";
@@ -627,10 +628,15 @@ export function GamesProvider({ children }) {
 
     try {
       const providerRuns = await Promise.all(
-        requestedKreise.map((selectedKreisId) =>
-          fetchGamesWithProviders({
+        requestedKreise.map((selectedKreisId) => {
+          const selectedRegion = getRegionById(selectedKreisId);
+          return fetchGamesWithProviders({
             mode: "adapter",
             kreisId: selectedKreisId,
+            stateCode: selectedRegion?.stateCode || "",
+            regionName: selectedRegion?.displayName || selectedRegion?.name || "",
+            regionShortCode: selectedRegion?.shortCode || selectedRegion?.kurz || "",
+            fussballDeMapping: selectedRegion?.fussballDeMapping || null,
             jugendId,
             fromDate,
             toDate,
@@ -642,8 +648,8 @@ export function GamesProvider({ children }) {
           }).then((result) => ({
             ...result,
             selectedKreisId,
-          })),
-        ),
+          }));
+        }),
       );
 
       if (buildRunRef.current !== runId) {

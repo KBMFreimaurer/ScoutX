@@ -21,6 +21,45 @@ const KREIS_AREA_KEYWORDS = {
   kleve: ["kleve", "geldern", "rees", "bocholt"],
 };
 
+function normalizeMappingKeywords(values) {
+  const source = Array.isArray(values) ? values : [values];
+  return source
+    .map((value) => normalizeLookup(value))
+    .filter(Boolean);
+}
+
+function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionName = "", regionShortCode = "", mapping = null } = {}) {
+  const safeMapping = mapping && typeof mapping === "object" ? mapping : {};
+  const searchName = String(safeMapping.searchName || regionName || kreisId || "").trim();
+  const kreis = String(safeMapping.kreis || "").trim();
+  const region = String(safeMapping.region || "").trim();
+  const verband = String(safeMapping.verband || "").trim();
+  const explicitKeywords = normalizeMappingKeywords([
+    ...(Array.isArray(safeMapping.areaKeywords) ? safeMapping.areaKeywords : []),
+    safeMapping.kreis,
+    safeMapping.region,
+    safeMapping.searchName,
+  ]);
+  const legacyKeywords = KREIS_AREA_KEYWORDS[kreisId] || [];
+  const fallbackKeywords = normalizeMappingKeywords([regionName, regionShortCode, kreisId]);
+  const areaKeywords = [...new Set([...explicitKeywords, ...legacyKeywords, ...fallbackKeywords])];
+
+  return {
+    stateCode: String(stateCode || "").trim().toUpperCase(),
+    regionName: String(regionName || "").trim(),
+    regionShortCode: String(regionShortCode || "").trim(),
+    kreisId: String(kreisId || "").trim(),
+    searchName,
+    verband,
+    kreis,
+    region,
+    areaKeywords,
+    slugHints: Array.isArray(safeMapping.slugHints) ? safeMapping.slugHints.map((value) => String(value || "").trim()).filter(Boolean) : [],
+    fallbackSearchName: searchName || String(regionName || kreisId || "").trim(),
+    source: Object.keys(safeMapping).length > 0 ? "mapping" : "fallback",
+  };
+}
+
 function warnParser(message) {
   console.warn(`[fussballde-parser] ${message}`);
 }
@@ -421,10 +460,12 @@ function normalizeAreas(areaMap) {
   return normalized;
 }
 
-function pickAreaIdsForLeague(areaMap, kreisId) {
+function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
   const areas = normalizeAreas(areaMap);
   const entries = Object.entries(areas);
-  const keywords = KREIS_AREA_KEYWORDS[kreisId] || [];
+  const keywords = Array.isArray(regionParams?.areaKeywords) && regionParams.areaKeywords.length > 0
+    ? regionParams.areaKeywords
+    : KREIS_AREA_KEYWORDS[kreisId] || [];
 
   if (entries.length === 0) {
     return [];
@@ -448,7 +489,9 @@ function pickAreaIdsForLeague(areaMap, kreisId) {
   const regional = entries
     .filter(([, label]) => {
       const lookup = normalizeLookup(label);
-      return lookup.includes("niederrhein") && !lookup.includes("kreis");
+      const verband = normalizeLookup(regionParams?.verband || "");
+      const knownRegional = verband ? lookup.includes(verband) : lookup.includes("niederrhein");
+      return knownRegional && !lookup.includes("kreis");
     })
     .map(([areaId]) => areaId);
 
@@ -525,6 +568,7 @@ export {
   normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
+  resolveFussballDeRegionParams,
   stripLeadingUnderscore,
   stripTags,
   toAbsoluteFussballUrl,

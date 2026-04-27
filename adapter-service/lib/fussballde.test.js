@@ -6,6 +6,7 @@ import {
   extractMatchesFromDatePage,
   extractClubSearchResults,
   pickAreaIdsForLeague,
+  resolveFussballDeRegionParams,
   toSpieldatumUrl,
 } from "./fussballde";
 
@@ -212,5 +213,49 @@ describe("fussballde helpers", () => {
     };
 
     expect(pickAreaIdsForLeague(areaMap, "duisburg")).toEqual([]);
+  });
+
+  it("builds NRW Duisburg adapter mapping params", () => {
+    const params = resolveFussballDeRegionParams({
+      kreisId: "duisburg",
+      stateCode: "NW",
+      regionName: "Duisburg",
+      regionShortCode: "DUI",
+      mapping: { searchName: "Duisburg", verband: "FVN", kreis: "Duisburg" },
+    });
+
+    expect(params).toMatchObject({
+      stateCode: "NW",
+      regionName: "Duisburg",
+      regionShortCode: "DUI",
+      searchName: "Duisburg",
+      verband: "FVN",
+      kreis: "Duisburg",
+      source: "mapping",
+    });
+    expect(params.areaKeywords).toContain("duisburg");
+  });
+
+  it("builds Bayern München params from fallback mapping", () => {
+    const params = resolveFussballDeRegionParams({
+      kreisId: "by-m",
+      stateCode: "BY",
+      regionName: "München",
+      regionShortCode: "M",
+      mapping: { searchName: "München", verband: "BFV", region: "München" },
+    });
+
+    expect(params.stateCode).toBe("BY");
+    expect(params.fallbackSearchName).toBe("München");
+    expect(params.areaKeywords).toContain("munchen");
+  });
+
+  it("supports Berlin and Hamburg city-state fallback search", () => {
+    expect(
+      resolveFussballDeRegionParams({ kreisId: "be-b", stateCode: "BE", regionName: "Berlin" }),
+    ).toMatchObject({ stateCode: "BE", fallbackSearchName: "Berlin" });
+    expect(
+      resolveFussballDeRegionParams({ kreisId: "hh-hh", stateCode: "HH", regionName: "Hamburg" }),
+    ).toMatchObject({ stateCode: "HH", fallbackSearchName: "Hamburg" });
   });
 });

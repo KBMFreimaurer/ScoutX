@@ -827,6 +827,10 @@ async function fetchGamesAdapter(params) {
             headers,
             body: JSON.stringify({
               kreisId: params.kreisId,
+              stateCode: params.stateCode || "",
+              regionName: params.regionName || "",
+              regionShortCode: params.regionShortCode || "",
+              fussballDeMapping: params.fussballDeMapping || null,
               jugendId: params.jugendId,
               fromDate: candidateRange.fromDate,
               toDate: candidateRange.toDate,
@@ -869,7 +873,7 @@ async function fetchGamesAdapter(params) {
 
   if (!payload) {
     if (sawEmptyResponse) {
-      throw new Error("Adapter lieferte keine Spiele.");
+      throw new Error("Für diese Region wurden keine Spiele gefunden. Bitte Zeitraum, Altersklasse oder Region ändern.");
     }
     const candidateInfo = endpointCandidates.length > 1 ? ` (getestet: ${endpointCandidates.join(", ")})` : "";
     throw new Error(`${connectionError?.message || "Adapter nicht erreichbar."}${candidateInfo}`);
@@ -929,6 +933,10 @@ async function fetchGamesMock(params) {
 export async function fetchGamesWithProviders({
   mode = "auto",
   kreisId,
+  stateCode,
+  regionName,
+  regionShortCode,
+  fussballDeMapping,
   jugendId,
   fromDate,
   toDate,
@@ -942,6 +950,10 @@ export async function fetchGamesWithProviders({
   const normalizedRange = normalizeRequestedDateRange(fromDate, toDate);
   const context = {
     kreisId,
+    stateCode,
+    regionName,
+    regionShortCode,
+    fussballDeMapping,
     jugendId,
     fromDate: normalizedRange.fromDate,
     toDate: normalizedRange.toDate,

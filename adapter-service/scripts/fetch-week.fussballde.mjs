@@ -14,6 +14,7 @@ import {
   normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
+  resolveFussballDeRegionParams,
   toAbsoluteFussballUrl,
   uniqueBy,
 } from "../lib/fussballde.js";
@@ -32,6 +33,24 @@ const DEBUG = process.env.SCOUTPLAN_DEBUG_EXPORTER === "true";
 const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
 const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
 const kreisId = process.env.SCOUTPLAN_KREIS_ID || "";
+const stateCode = process.env.SCOUTPLAN_STATE_CODE || "";
+const regionName = process.env.SCOUTPLAN_REGION_NAME || "";
+const regionShortCode = process.env.SCOUTPLAN_REGION_SHORT_CODE || "";
+const fussballDeMapping = (() => {
+  try {
+    const parsed = JSON.parse(process.env.SCOUTPLAN_FUSSBALLDE_MAPPING_JSON || "null");
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+})();
+const regionParams = resolveFussballDeRegionParams({
+  kreisId,
+  stateCode,
+  regionName,
+  regionShortCode,
+  mapping: fussballDeMapping,
+});
 const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
 const jugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
 const selectedTeams = (() => {
@@ -255,7 +274,7 @@ function matchesSelectedTeams(home, away) {
 }
 
 function applyKreisHeuristicFilter(games) {
-  const keywords = KREIS_AREA_KEYWORDS[kreisId] || [];
+  const keywords = regionParams.areaKeywords?.length ? regionParams.areaKeywords : KREIS_AREA_KEYWORDS[kreisId] || [];
   if (!kreisId || keywords.length === 0 || games.length === 0) {
     return games;
   }
@@ -274,7 +293,7 @@ function applyKreisHeuristicFilter(games) {
   return games;
 }
 
-async function discoverCompetitions({ season, competitionType, teamType, kreis }) {
+async function discoverCompetitions({ season, competitionType, teamType, kreis, mappingParams }) {
   const kindsUrl = buildWamKindsUrl({ season, competitionType });
   const kinds = await fetchJson(kindsUrl);
 
@@ -289,10 +308,12 @@ async function discoverCompetitions({ season, competitionType, teamType, kreis }
   const leagueAreaRequests = [];
   for (const leagueId of leagueIds) {
     const areaMap = getValueByFlexibleKey(gebietByLeagueRaw, leagueId) || {};
-    const areaIds = pickAreaIdsForLeague(areaMap, kreis);
+    const areaIds = pickAreaIdsForLeague(areaMap, kreis, mappingParams);
 
     if (areaIds.length === 0) {
-      warn(`No area IDs for league=${leagueId} and kreis=${kreis || "(none)"}`);
+      warn(
+        `No area IDs for league=${leagueId} and region=${mappingParams?.regionName || kreis || "(none)"} state=${mappingParams?.stateCode || "(none)"}`,
+      );
       continue;
     }
 
@@ -302,7 +323,9 @@ async function discoverCompetitions({ season, competitionType, teamType, kreis }
   }
 
   if (leagueAreaRequests.length === 0) {
-    throw new Error(`No area mapping found for teamType=${teamType} / kreis=${kreis || "(none)"}`);
+    throw new Error(
+      `No area mapping found for teamType=${teamType} / state=${mappingParams?.stateCode || "(none)"} / region=${mappingParams?.regionName || kreis || "(none)"}`,
+    );
   }
 
   log(`League/area requests: ${leagueAreaRequests.length}`);
@@ -401,6 +424,9 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
         venue: parsed.venue || "Sportanlage",
         km: 0,
         kreisId,
+        stateCode: regionParams.stateCode,
+        regionName: regionParams.regionName,
+        regionShortCode: regionParams.regionShortCode,
         jugendId,
       };
     } catch (error) {
@@ -438,18 +464,30 @@ async function main() {
   const dateRange = buildDateRangeFromEnv();
   const dateRangeSet = new Set(dateRange);
 
-  log(`Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} kreis=${kreisId} jugend=${jugendId} teamType=${jugendTeamType}`);
+  log(
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} teamType=${jugendTeamType} mapping=${regionParams.source} search=${regionParams.fallbackSearchName || "(none)"} keywords=${regionParams.areaKeywords.join("|")}`,
+  );
 
   const competitions = await discoverCompetitions({
     season,
     competitionType,
     teamType: jugendTeamType,
     kreis: kreisId,
+    mappingParams: regionParams,
   });
 
   if (competitions.length === 0) {
     warn("No competitions found for selected filters.");
-    process.stdout.write(`${JSON.stringify({ games: [] })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({
+        games: [],
+        meta: {
+          provider: "fussball.de",
+          selectedRegion: regionParams,
+          warning: "Für diese Region wurden keine Spiele gefunden. Bitte Zeitraum, Altersklasse oder Region ändern.",
+        },
+      })}\n`,
+    );
     return;
   }
 
@@ -477,6 +515,7 @@ async function main() {
         candidates: candidates.length,
         selectedTeamsHintCount: selectedTeams.length,
         selectedTeamsMatchCount: games.filter((game) => matchesSelectedTeams(game.home, game.away)).length,
+        selectedRegion: regionParams,
       },
     })}\n`,
   );

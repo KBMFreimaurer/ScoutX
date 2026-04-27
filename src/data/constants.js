@@ -1,4 +1,5 @@
 export { KREISE, VEREINE_JE_KREIS } from "./kreise";
+export { GERMANY_STATES, GERMANY_REGIONS } from "./germany_regions";
 
 // Legacy re-exports for existing imports.
 export { C } from "../config/colors";
