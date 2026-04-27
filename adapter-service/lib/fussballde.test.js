@@ -274,4 +274,67 @@ describe("fussballde helpers", () => {
       resolveFussballDeRegionParams({ kreisId: "hh-hh", stateCode: "HH", regionName: "Hamburg" }),
     ).toMatchObject({ stateCode: "HH", fallbackSearchName: "Hamburg" });
   });
+
+  it("propagiert mandant und allowRegionalFallback aus dem Mapping", () => {
+    const params = resolveFussballDeRegionParams({
+      kreisId: "by-m",
+      stateCode: "BY",
+      regionName: "München",
+      regionShortCode: "M",
+      mapping: {
+        searchName: "München",
+        verband: "BFV",
+        verbandLabel: "Bayerischer Fußball-Verband",
+        mandant: "21",
+        region: "München",
+        areaKeywords: ["munchen", "muenchen"],
+        allowRegionalFallback: true,
+      },
+    });
+
+    expect(params).toMatchObject({
+      stateCode: "BY",
+      verband: "BFV",
+      verbandLabel: "Bayerischer Fußball-Verband",
+      mandant: "21",
+      allowRegionalFallback: true,
+    });
+    expect(params.areaKeywords).toEqual(expect.arrayContaining(["munchen", "muenchen"]));
+  });
+
+  it("erlaubt Verbands-Fallback wenn allowRegionalFallback gesetzt ist", () => {
+    const areaMap = {
+      _BFV_WEIT: "BFV Bayern",
+      _OBB_KREIS: "Kreis München",
+      _NIEDERRHEIN: "FVN Niederrhein",
+    };
+
+    expect(
+      pickAreaIdsForLeague(areaMap, "by-r", {
+        stateCode: "BY",
+        regionName: "Regensburg",
+        verband: "BFV",
+        verbandLabel: "Bayerischer Fußball-Verband",
+        areaKeywords: ["regensburg"],
+        allowRegionalFallback: true,
+      }),
+    ).toEqual(["BFV_WEIT"]);
+  });
+
+  it("blockiert Verbands-Fallback bei Bezirks-Mappings ohne Flag", () => {
+    const areaMap = {
+      _BFV_WEIT: "BFV Bayern",
+      _OBERPFALZ: "Bezirk Oberpfalz",
+    };
+
+    expect(
+      pickAreaIdsForLeague(areaMap, "by-tirschenreuth", {
+        stateCode: "BY",
+        regionName: "Tirschenreuth",
+        verband: "BFV",
+        verbandLabel: "Bayerischer Fußball-Verband",
+        areaKeywords: ["tirschenreuth"],
+      }),
+    ).toEqual([]);
+  });
 });

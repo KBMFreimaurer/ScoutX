@@ -8,6 +8,16 @@ const JUGEND_TO_TEAM_TYPE = {
   "a-jugend": "344",
 };
 
+const JUGEND_TO_TEAM_LABEL = {
+  bambini: "G-Junioren",
+  "f-jugend": "F-Junioren",
+  "e-jugend": "E-Junioren",
+  "d-jugend": "D-Junioren",
+  "c-jugend": "C-Junioren",
+  "b-jugend": "B-Junioren",
+  "a-jugend": "A-Junioren",
+};
+
 const KREIS_AREA_KEYWORDS = {
   duesseldorf: ["dusseldorf"],
   duisburg: ["duisburg", "mulheim", "dinslak"],
@@ -34,6 +44,9 @@ function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionNam
   const kreis = String(safeMapping.kreis || "").trim();
   const region = String(safeMapping.region || "").trim();
   const verband = String(safeMapping.verband || "").trim();
+  const verbandLabel = String(safeMapping.verbandLabel || "").trim();
+  const mandant = String(safeMapping.mandant || safeMapping.mandantCode || "").trim();
+  const allowRegionalFallback = safeMapping.allowRegionalFallback === true;
   const explicitKeywords = normalizeMappingKeywords([
     ...(Array.isArray(safeMapping.areaKeywords) ? safeMapping.areaKeywords : []),
     safeMapping.kreis,
@@ -51,9 +64,13 @@ function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionNam
     kreisId: String(kreisId || "").trim(),
     searchName,
     verband,
+    verbandLabel,
+    mandant,
+    allowRegionalFallback,
     kreis,
     region,
     areaKeywords,
+    resultKeywords: normalizeMappingKeywords(safeMapping.resultKeywords || []),
     slugHints: Array.isArray(safeMapping.slugHints) ? safeMapping.slugHints.map((value) => String(value || "").trim()).filter(Boolean) : [],
     fallbackSearchName: searchName || String(regionName || kreisId || "").trim(),
     source: Object.keys(safeMapping).length > 0 ? "mapping" : "fallback",
@@ -487,14 +504,19 @@ function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
     return matches;
   }
 
-  const allowRegionalFallback = keywords.length === 0 || legacyKeywords.length > 0;
+  const verbandLookup = normalizeLookup(regionParams?.verband || "");
+  const verbandLabelLookup = normalizeLookup(regionParams?.verbandLabel || "");
+  const allowRegionalFallback =
+    regionParams?.allowRegionalFallback === true || keywords.length === 0 || legacyKeywords.length > 0;
 
   const regional = allowRegionalFallback
     ? entries
         .filter(([, label]) => {
           const lookup = normalizeLookup(label);
-          const verband = normalizeLookup(regionParams?.verband || "");
-          const knownRegional = verband ? lookup.includes(verband) : lookup.includes("niederrhein");
+          const knownRegional = verbandLookup
+            ? lookup.includes(verbandLookup) ||
+              (verbandLabelLookup && lookup.includes(verbandLabelLookup))
+            : lookup.includes("niederrhein");
           return knownRegional && !lookup.includes("kreis");
         })
         .map(([areaId]) => areaId)
@@ -560,6 +582,7 @@ function uniqueBy(items, keyFn) {
 
 export {
   JUGEND_TO_TEAM_TYPE,
+  JUGEND_TO_TEAM_LABEL,
   KREIS_AREA_KEYWORDS,
   buildDateRange,
   extractCompetitionEntries,

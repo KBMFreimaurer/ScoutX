@@ -21,7 +21,7 @@ import {
 import { isLikelyTeamMatch } from "../lib/games.js";
 
 const BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
-const MANDANT = process.env.FUSSBALLDE_MANDANT || "22";
+const DEFAULT_MANDANT = process.env.FUSSBALLDE_MANDANT || "22";
 const REQUEST_TIMEOUT_MS = Number(process.env.FUSSBALLDE_REQUEST_TIMEOUT_MS || 15000);
 const PAGE_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_PAGE_CONCURRENCY || 4));
 const MATCH_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_MATCH_CONCURRENCY || 6));
@@ -51,6 +51,7 @@ const regionParams = resolveFussballDeRegionParams({
   regionShortCode,
   mapping: fussballDeMapping,
 });
+const MANDANT = String(regionParams.mandant || DEFAULT_MANDANT).trim() || "22";
 const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
 const jugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
 const selectedTeams = (() => {
