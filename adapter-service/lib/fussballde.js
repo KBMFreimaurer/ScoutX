@@ -463,9 +463,10 @@ function normalizeAreas(areaMap) {
 function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
   const areas = normalizeAreas(areaMap);
   const entries = Object.entries(areas);
+  const legacyKeywords = KREIS_AREA_KEYWORDS[kreisId] || [];
   const keywords = Array.isArray(regionParams?.areaKeywords) && regionParams.areaKeywords.length > 0
     ? regionParams.areaKeywords
-    : KREIS_AREA_KEYWORDS[kreisId] || [];
+    : legacyKeywords;
 
   if (entries.length === 0) {
     return [];
@@ -486,14 +487,18 @@ function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
     return matches;
   }
 
-  const regional = entries
-    .filter(([, label]) => {
-      const lookup = normalizeLookup(label);
-      const verband = normalizeLookup(regionParams?.verband || "");
-      const knownRegional = verband ? lookup.includes(verband) : lookup.includes("niederrhein");
-      return knownRegional && !lookup.includes("kreis");
-    })
-    .map(([areaId]) => areaId);
+  const allowRegionalFallback = keywords.length === 0 || legacyKeywords.length > 0;
+
+  const regional = allowRegionalFallback
+    ? entries
+        .filter(([, label]) => {
+          const lookup = normalizeLookup(label);
+          const verband = normalizeLookup(regionParams?.verband || "");
+          const knownRegional = verband ? lookup.includes(verband) : lookup.includes("niederrhein");
+          return knownRegional && !lookup.includes("kreis");
+        })
+        .map(([areaId]) => areaId)
+    : [];
 
   if (regional.length > 0) {
     return regional;

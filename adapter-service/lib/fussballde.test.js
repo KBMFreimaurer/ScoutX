@@ -215,6 +215,22 @@ describe("fussballde helpers", () => {
     expect(pickAreaIdsForLeague(areaMap, "duisburg")).toEqual([]);
   });
 
+  it("does not broaden new district mappings to a whole state association", () => {
+    const areaMap = {
+      _BERLIN_WIDE: "BFV Berlin",
+      _NEUKOELLN: "Bezirk Neukölln",
+    };
+
+    expect(
+      pickAreaIdsForLeague(areaMap, "be-b-ts", {
+        stateCode: "BE",
+        regionName: "Tempelhof-Schöneberg",
+        verband: "BFV Berlin",
+        areaKeywords: ["tempelhof schöneberg"],
+      }),
+    ).toEqual([]);
+  });
+
   it("builds NRW Duisburg adapter mapping params", () => {
     const params = resolveFussballDeRegionParams({
       kreisId: "duisburg",
