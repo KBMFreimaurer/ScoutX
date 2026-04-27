@@ -53,8 +53,8 @@ const WEEK_SOURCE_TOKEN = process.env.ADAPTER_WEEK_SOURCE_TOKEN || "";
 const DEFAULT_EXPORT_SCRIPT = fileURLToPath(new URL("./scripts/fetch-week.fussballde.mjs", import.meta.url));
 const EXPORT_COMMAND =
   process.env.ADAPTER_EXPORT_COMMAND !== undefined ? process.env.ADAPTER_EXPORT_COMMAND : `node "${DEFAULT_EXPORT_SCRIPT}"`;
-const WEEK_COMMAND_TIMEOUT_MS = Number(process.env.ADAPTER_WEEK_COMMAND_TIMEOUT_MS || 30000);
-const WEEK_EXTERNAL_TIMEOUT_MS = 30000;
+const WEEK_COMMAND_TIMEOUT_MS = Number(process.env.ADAPTER_WEEK_COMMAND_TIMEOUT_MS || 60000);
+const WEEK_EXTERNAL_TIMEOUT_MS = 60000;
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.ADAPTER_RATE_LIMIT_WINDOW_MS || 60000);
 const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);

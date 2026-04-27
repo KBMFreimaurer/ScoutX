@@ -52,6 +52,8 @@ services:
       - ADAPTER_REFRESH_INTERVAL_SEC=300
       - ADAPTER_AUTO_REFRESH_WEEK=true
       - ADAPTER_WEEK_REFRESH_TTL_SEC=300
+      - ADAPTER_WEEK_COMMAND_TIMEOUT_MS=60000
+      - FUSSBALLDE_REQUEST_TIMEOUT_MS=20000
       - ADAPTER_EXPORT_COMMAND=node /app/scripts/fetch-week.fussballde.mjs
       - ADAPTER_TOKEN=${ADAPTER_TOKEN:-scoutx-internal-2026}
       # - ADAPTER_WEEK_SOURCE_URL_TEMPLATE=https://example.com/api/games?from={fromDate}&to={toDate}&kreis={kreisId}&jugend={jugendId}

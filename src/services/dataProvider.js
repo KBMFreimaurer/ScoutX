@@ -12,7 +12,7 @@ export const DATA_SOURCE_LABELS = {
 const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Oberhausen"];
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
-const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 15000);
+const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 60000);
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 const GENERIC_TEAM_TOKENS = new Set([
