@@ -199,7 +199,7 @@ describe("ScoutX Integration", () => {
 
     await renderSetupAndSubmit(fetchMock);
 
-    const matches = await screen.findAllByText(/Spieldaten konnten nicht geladen werden: Adapter Timeout nach 75000ms/i);
+    const matches = await screen.findAllByText(/Spieldaten konnten nicht geladen werden: Adapter Timeout nach \d+ms/i);
     expect(matches.length).toBeGreaterThan(0);
   });
 

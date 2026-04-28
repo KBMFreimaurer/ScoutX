@@ -12,7 +12,7 @@ export const DATA_SOURCE_LABELS = {
 const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Oberhausen"];
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
-const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 75000);
+const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 18000);
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 const GENERIC_TEAM_TOKENS = new Set([
@@ -286,7 +286,6 @@ function buildAdapterRangeCandidates(requestedRange) {
   const safeRange = normalizeRequestedDateRange(requestedRange?.fromDate, requestedRange?.toDate);
   const baseWeek = getWeekRange(safeRange.fromDate);
   const candidates = [];
-
   appendUniqueRange(candidates, safeRange.fromDate, safeRange.toDate);
   appendUniqueRange(candidates, baseWeek.fromDate, baseWeek.toDate);
 
@@ -294,7 +293,6 @@ function buildAdapterRangeCandidates(requestedRange) {
   const nextWeekStart = toIsoDate(addDays(baseWeek.fromDate, 7));
   const previousWeek = getWeekRange(previousWeekStart);
   const nextWeek = getWeekRange(nextWeekStart);
-
   appendUniqueRange(candidates, previousWeek.fromDate, previousWeek.toDate);
   appendUniqueRange(candidates, nextWeek.fromDate, nextWeek.toDate);
 
@@ -977,7 +975,8 @@ export async function fetchGamesWithProviders({
 
   for (const providerName of providerOrder) {
     try {
-      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, retryDelaysMs);
+      const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
+      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
       const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
       const meta = Array.isArray(providerResult) ? {} : providerResult?.meta || {};
       if (games?.length) {
