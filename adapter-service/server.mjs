@@ -1161,7 +1161,17 @@ const server = createServer(async (req, res) => {
         regionShortCode: String(payload.regionShortCode || ""),
         jugendId: String(payload.jugendId || ""),
       };
-      const autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx));
+      const requireFreshWeek = payload?.ensureWeekData === true;
+      let autoRefresh = { ran: false, reason: "skipped" };
+      if (requireFreshWeek) {
+        autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx));
+      } else {
+        // Keep /api/games responsive: refresh in background unless caller explicitly requires fresh week data.
+        void maybeAutoRefreshWeek(payload, requestLogger.child(logCtx)).catch((error) => {
+          requestLogger.warn("background week refresh failed", { ...logCtx, error });
+        });
+        autoRefresh = { ran: false, reason: "background" };
+      }
       const requestedTeams = uniqueNormalizedTeams(payload.teams);
       const requestedTeamCount = requestedTeams.length;
       const gamesWithTeamFilter =

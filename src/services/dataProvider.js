@@ -835,7 +835,7 @@ async function fetchGamesAdapter(params) {
               fromDate: candidateRange.fromDate,
               toDate: candidateRange.toDate,
               teams: params.teams,
-              ensureWeekData: true,
+              ensureWeekData: false,
             }),
           },
           ADAPTER_TIMEOUT_MS,
