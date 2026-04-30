@@ -12,7 +12,10 @@ export const DATA_SOURCE_LABELS = {
 const PROFI_KEYWORDS = ["(U)", "Borussia", "Fortuna", "Rot-Weiss", "MSV", "RW Oberhausen"];
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const UNKNOWN_TIME_RE = /^(?:--:--|\*{2}(?::\*{2})?|k\.?\s*a\.?|n\/a|unbekannt)$/i;
-const ADAPTER_TIMEOUT_MS = Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 75000);
+const ADAPTER_TIMEOUT_MS = Math.min(
+  18000,
+  Math.max(3000, Number(import.meta.env?.VITE_ADAPTER_TIMEOUT_MS || 18000) || 18000),
+);
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
 const GENERIC_TEAM_TOKENS = new Set([
@@ -833,7 +836,7 @@ async function fetchGamesAdapter(params) {
               fromDate: candidateRange.fromDate,
               toDate: candidateRange.toDate,
               teams: params.teams,
-              ensureWeekData: false,
+              ensureWeekData: true,
             }),
           },
           ADAPTER_TIMEOUT_MS,
@@ -841,10 +844,17 @@ async function fetchGamesAdapter(params) {
         );
 
         if (!response.ok) {
+          let adapterErrorDetail = "";
+          try {
+            const errorPayload = await response.json();
+            adapterErrorDetail = String(errorPayload?.error || "").trim();
+          } catch {
+            adapterErrorDetail = "";
+          }
           if (response.status === 401) {
             throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
           }
-          throw new Error(`Adapter HTTP ${response.status}`);
+          throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
         }
 
         const nextPayload = await response.json();

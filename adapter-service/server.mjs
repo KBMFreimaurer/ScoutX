@@ -642,7 +642,8 @@ function shouldKeepExistingGameForWeek(game, params, weekRange) {
   return false;
 }
 
-async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
+async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) {
+  const strictLiveData = options?.strictLiveData === true;
   const hasDynamicSource = Boolean(EXPORT_COMMAND || WEEK_SOURCE_TEMPLATE);
   if (!AUTO_REFRESH_WEEK || !hasDynamicSource) {
     return { ran: false, reason: "disabled_or_not_configured" };
@@ -682,8 +683,12 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
 
     const warnings = [];
     const collected = [];
+    const liveSourceErrors = [];
+    let plannedSources = 0;
+    let successfulSources = 0;
 
     if (EXPORT_COMMAND) {
+      plannedSources += 1;
       try {
         const cmd = await runExportCommand({
           command: EXPORT_COMMAND,
@@ -694,6 +699,9 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
 
         if (cmd.warnings?.length) {
           warnings.push(...cmd.warnings);
+          if (strictLiveData) {
+            throw new Error(`Export command warning: ${cmd.warnings.join(" | ")}`);
+          }
         }
 
         const normalized = normalizeGames(cmd.games, {
@@ -701,8 +709,11 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
           source: cmd.source,
         });
         collected.push(...filterGamesToWeek(normalized, weekRange));
+        successfulSources += 1;
       } catch (error) {
-        warnings.push(`Export command failed: ${error.message || error}`);
+        const message = `Export command failed: ${error.message || error}`;
+        warnings.push(message);
+        liveSourceErrors.push(message);
         logger.warn("week export command failed", {
           cacheKey,
           reason: String(error.message || error),
@@ -714,6 +725,7 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
     }
 
     if (WEEK_SOURCE_TEMPLATE) {
+      plannedSources += 1;
       try {
         const remote = await fetchWeekTemplateGames({
           template: WEEK_SOURCE_TEMPLATE,
@@ -724,6 +736,9 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
 
         if (remote.warnings?.length) {
           warnings.push(...remote.warnings);
+          if (strictLiveData) {
+            throw new Error(`Week source warning: ${remote.warnings.join(" | ")}`);
+          }
         }
 
         const normalized = normalizeGames(remote.games, {
@@ -731,8 +746,11 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
           source: remote.source,
         });
         collected.push(...filterGamesToWeek(normalized, weekRange));
+        successfulSources += 1;
       } catch (error) {
-        warnings.push(`Week source failed: ${error.message || error}`);
+        const message = `Week source failed: ${error.message || error}`;
+        warnings.push(message);
+        liveSourceErrors.push(message);
         logger.warn("week template source failed", {
           cacheKey,
           reason: String(error.message || error),
@@ -741,6 +759,10 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger) {
           regionShortCode: params.regionShortCode,
         });
       }
+    }
+
+    if (strictLiveData && plannedSources > 0 && successfulSources === 0) {
+      throw new Error(`Live-Datenabruf fehlgeschlagen: ${liveSourceErrors.join(" | ") || "keine Quelle erfolgreich"}`);
     }
 
     // Reload import/remote baseline after command execution
@@ -1161,10 +1183,10 @@ const server = createServer(async (req, res) => {
         regionShortCode: String(payload.regionShortCode || ""),
         jugendId: String(payload.jugendId || ""),
       };
-      const requireFreshWeek = payload?.ensureWeekData === true;
+      const requireFreshWeek = payload?.ensureWeekData !== false;
       let autoRefresh = { ran: false, reason: "skipped" };
       if (requireFreshWeek) {
-        autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx));
+        autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx), { strictLiveData: true });
       } else {
         // Keep /api/games responsive: refresh in background unless caller explicitly requires fresh week data.
         void maybeAutoRefreshWeek(payload, requestLogger.child(logCtx)).catch((error) => {
@@ -1217,7 +1239,14 @@ const server = createServer(async (req, res) => {
       });
     } catch (error) {
       requestLogger.error("games request failed", { error });
-      sendJson(res, 400, { ok: false, error: "Ungültige Anfrage." }, origin, requestId);
+      const message = String(error?.message || "Ungültige Anfrage.");
+      const isClientError =
+        message.includes("muss") ||
+        message.includes("Ungültig") ||
+        message.includes("Ungültige") ||
+        message.includes("Invalid");
+      const statusCode = isClientError ? 400 : 502;
+      sendJson(res, statusCode, { ok: false, error: message }, origin, requestId);
     }
 
     return;

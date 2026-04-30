@@ -25,7 +25,6 @@ import {
 import { isLikelyTeamMatch } from "../lib/games.js";
 
 const BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
-const DEFAULT_MANDANT = process.env.FUSSBALLDE_MANDANT || "22";
 const REQUEST_TIMEOUT_MS = Number(process.env.FUSSBALLDE_REQUEST_TIMEOUT_MS || 15000);
 const PAGE_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_PAGE_CONCURRENCY || 4));
 const MATCH_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_MATCH_CONCURRENCY || 6));
@@ -46,6 +45,8 @@ const ROBOTS_CHECK_ENABLED = process.env.FUSSBALLDE_ROBOTS_CHECK !== "false";
 const ROBOTS_CACHE_TTL_MS = Math.max(60 * 60 * 1000, Number(process.env.FUSSBALLDE_ROBOTS_TTL_MS || 24 * 60 * 60 * 1000));
 const DEFAULT_STATE_FILE = fileURLToPath(new URL("../data/fussballde.fetch-state.json", import.meta.url));
 const STATE_FILE = process.env.FUSSBALLDE_STATE_FILE || DEFAULT_STATE_FILE;
+const STRICT_REGION_MAPPING = process.env.SCOUTPLAN_STRICT_REGION_MAPPING !== "false";
+const STRICT_RESULT_FILTER = process.env.SCOUTPLAN_STRICT_RESULT_FILTER !== "false";
 
 const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
 const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
@@ -68,7 +69,16 @@ const regionParams = resolveFussballDeRegionParams({
   regionShortCode,
   mapping: fussballDeMapping,
 });
-const MANDANT = String(regionParams.mandant || DEFAULT_MANDANT).trim() || "22";
+const MANDANT = (() => {
+  validateRegionParams(regionParams);
+  const normalizedMandant = normalizeMandant(regionParams.mandant);
+  if (!normalizedMandant) {
+    throw new Error(
+      `Ungültiger fussball.de-Mandant für state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"}`,
+    );
+  }
+  return normalizedMandant;
+})();
 const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
 const fallbackJugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
 const jugendTeamLabel = JUGEND_TO_TEAM_LABEL[jugendId] || "";
@@ -89,6 +99,43 @@ const dynamicConcurrency = {
   recoveryCounter: 0,
 };
 let fetchStateCache = null;
+
+function normalizeMandant(value) {
+  const text = String(value || "").trim();
+  return /^\d{1,3}$/.test(text) ? text : "";
+}
+
+function validateRegionParams(params) {
+  if (!STRICT_REGION_MAPPING) {
+    return;
+  }
+
+  const source = String(params?.source || "");
+  const state = String(params?.stateCode || "").trim();
+  const region = String(params?.regionName || params?.kreisId || "").trim();
+  const mandant = normalizeMandant(params?.mandant);
+  const areaKeywords = Array.isArray(params?.areaKeywords) ? params.areaKeywords.filter(Boolean) : [];
+
+  if (!state) {
+    throw new Error("Fehlender stateCode für fussball.de-Liveabfrage.");
+  }
+
+  if (!region) {
+    throw new Error("Fehlender Region-/Kreisname für fussball.de-Liveabfrage.");
+  }
+
+  if (source !== "mapping") {
+    throw new Error(`Kein fussball.de-Mapping für state=${state} region=${region}.`);
+  }
+
+  if (!mandant) {
+    throw new Error(`Kein gültiger fussball.de-Mandant im Mapping für state=${state} region=${region}.`);
+  }
+
+  if (areaKeywords.length === 0) {
+    throw new Error(`Keine Area-Keywords im Mapping für state=${state} region=${region}.`);
+  }
+}
 
 function toIsoDate(date) {
   return formatIsoDate(date);
@@ -594,7 +641,13 @@ function applyKreisHeuristicFilter(games) {
     return filtered;
   }
 
-  warn("Kreis heuristic filter found no matches. Falling back to unfiltered matches.");
+  warn(
+    `Kreis heuristic filter found no matches for state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"}.`,
+  );
+  if (STRICT_RESULT_FILTER) {
+    return [];
+  }
+  warn("Strict result filter disabled. Falling back to unfiltered matches.");
   return games;
 }
 
@@ -605,7 +658,7 @@ async function discoverCompetitions({ season, competitionType, requestedJugendId
     kinds = await fetchJson(kindsUrl);
   } catch (error) {
     throw new Error(
-      `wam_kinds für mandant=${MANDANT} (verband=${mappingParams?.verband || "?"}) nicht erreichbar: ${error.message || error}. Mandant evtl. inkorrekt – bitte FUSSBALLDE_MANDANT prüfen.`,
+      `wam_kinds für mandant=${MANDANT} (verband=${mappingParams?.verband || "?"}) nicht erreichbar: ${error.message || error}.`,
     );
   }
 
@@ -798,7 +851,7 @@ async function main() {
   const dateRangeSet = new Set(dateRange);
 
   log(
-    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} strictMapping=${STRICT_REGION_MAPPING ? "yes" : "no"} strictResultFilter=${STRICT_RESULT_FILTER ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
   );
 
   const discovery = await discoverCompetitions({

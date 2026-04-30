@@ -567,6 +567,41 @@ describe("data provider", () => {
     ).rejects.toThrow("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
   });
 
+  it("fordert beim Adapter standardmäßig frische Wochendaten an", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        games: [
+          {
+            date: "2026-04-03",
+            time: "12:00",
+            home: "Team A",
+            away: "Team B",
+            venue: "Sportanlage",
+            kreisId: "duesseldorf",
+            jugendId: "e-jugend",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duesseldorf",
+      jugendId: "e-jugend",
+      fromDate: "2026-04-01",
+      toDate: "2026-04-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      retryDelaysMs: [],
+    });
+
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body || "{}"));
+    expect(requestBody.ensureWeekData).toBe(true);
+  });
+
   it("handles empty csv input gracefully", () => {
     const report = parseUploadedGamesReport("date,time,home,away", "games.csv", {
       kreisId: "duesseldorf",
