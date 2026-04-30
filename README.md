@@ -32,9 +32,8 @@ npm run build
 
 - Frontend verwendet standardmäßig `/api/games` (Proxy über Vite/Nginx).
 - Optionales Override: `VITE_ADAPTER_ENDPOINT=https://dein-host/api/games`
-- Optionaler Bearer-Token:
-  - Frontend: `VITE_ADAPTER_TOKEN=<token>`
-  - Adapter: `ADAPTER_TOKEN=<token>`
+- Standard-Bearer-Token ist fest auf `scoutx-internal-2026` gesetzt.
+- Wenn der Token geändert wird, müssen Frontend (`VITE_ADAPTER_TOKEN`) und Adapter (`ADAPTER_TOKEN`) identisch bleiben.
 
 Details: [adapter-service/README.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/adapter-service/README.md)
 
