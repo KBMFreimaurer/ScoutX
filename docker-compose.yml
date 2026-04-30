@@ -31,6 +31,8 @@ services:
       - OLLAMA_HOST=http://localhost:11434/
       - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-}
       - VITE_GOOGLE_MAPS_STRICT=${VITE_GOOGLE_MAPS_STRICT:-true}
+    depends_on:
+      - adapter
     restart: always
     profiles:
       - prod
