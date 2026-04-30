@@ -39,6 +39,7 @@ jobs:
             git reset --hard origin/main
             docker compose --profile prod build --no-cache prod adapter
             docker compose --profile prod up -d --force-recreate --remove-orphans prod adapter
+            docker compose --profile prod ps
             sleep 3
             curl -fsS http://127.0.0.1:8787/health | grep -q '"ok":true'
             INDEX_HTML="$(curl -fsS http://127.0.0.1:5580/)"
