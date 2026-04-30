@@ -38,6 +38,14 @@ npm run build
 
 Details: [adapter-service/README.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/adapter-service/README.md)
 
+## Adapter-Deployment (Server)
+
+Der Live-Adapter ist Teil dieses Repositories (`adapter-service/`) und wird im
+Produktiv-Deploy zusammen mit dem Frontend aus demselben `main`-Commit gebaut
+und gestartet (`prod + adapter`).
+
+Damit ist der Server nicht von einem lokal manuell gestarteten Adapter-Prozess abhängig.
+
 ## Google Maps (optional)
 
 Ohne API-Key nutzt ScoutX OSRM/Haversine-Fallbacks.

@@ -22,19 +22,23 @@ jobs:
           port: 22
           script: |
             set -e
-            cd /opt/Ayoub
-            ./deploy_scoutplan.sh
-            if [ -d /opt/Ayoub/ScoutX ]; then
-              cd /opt/Ayoub/ScoutX
-            elif [ -d /opt/Ayoub/scoutx ]; then
-              cd /opt/Ayoub/scoutx
-            elif [ -d /opt/Ayoub/scoutplan ]; then
-              cd /opt/Ayoub/scoutplan
+            REPO_URL="https://github.com/KBMFreimaurer/ScoutX.git"
+            REPO_DIR="/opt/Ayoub/ScoutX"
+
+            if [ ! -d "/opt/Ayoub" ]; then
+              mkdir -p "/opt/Ayoub"
             fi
+
+            if [ ! -d "${REPO_DIR}/.git" ]; then
+              rm -rf "${REPO_DIR}"
+              git clone "${REPO_URL}" "${REPO_DIR}"
+            fi
+
+            cd "${REPO_DIR}"
             git fetch origin main
             git reset --hard origin/main
             docker compose --profile prod build --no-cache prod adapter
-            docker compose --profile prod up -d --force-recreate prod adapter
+            docker compose --profile prod up -d --force-recreate --remove-orphans prod adapter
             sleep 3
             curl -fsS http://127.0.0.1:8787/health | grep -q '"ok":true'
             INDEX_HTML="$(curl -fsS http://127.0.0.1:5580/)"
