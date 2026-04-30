@@ -14,6 +14,7 @@ services:
       - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-}
       - VITE_GOOGLE_MAPS_STRICT=${VITE_GOOGLE_MAPS_STRICT:-true}
       - VITE_ADAPTER_TOKEN=${ADAPTER_TOKEN:-scoutx-internal-2026}
+      - VITE_ADAPTER_TIMEOUT_MS=${VITE_ADAPTER_TIMEOUT_MS:-75000}
     profiles:
       - dev
 
@@ -26,6 +27,7 @@ services:
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
         VITE_GOOGLE_MAPS_STRICT: ${VITE_GOOGLE_MAPS_STRICT:-true}
         VITE_ADAPTER_TOKEN: ${ADAPTER_TOKEN:-scoutx-internal-2026}
+        VITE_ADAPTER_TIMEOUT_MS: ${VITE_ADAPTER_TIMEOUT_MS:-75000}
     network_mode: "host"
     environment:
       - OLLAMA_HOST=http://localhost:11434/
