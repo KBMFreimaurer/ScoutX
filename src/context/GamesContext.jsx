@@ -627,37 +627,58 @@ export function GamesProvider({ children }) {
     buildRunRef.current = runId;
 
     try {
-      const providerRuns = await Promise.all(
-        requestedKreise.map((selectedKreisId) => {
+      const providerRuns = await mapWithConcurrency(requestedKreise, 2, async (selectedKreisId) => {
           const selectedRegion = getRegionById(selectedKreisId);
-          return fetchGamesWithProviders({
-            mode: "adapter",
-            kreisId: selectedKreisId,
-            stateCode: selectedRegion?.stateCode || "",
-            regionName: selectedRegion?.displayName || selectedRegion?.name || "",
-            regionShortCode: selectedRegion?.shortCode || selectedRegion?.kurz || "",
-            fussballDeMapping: selectedRegion?.fussballDeMapping || null,
-            jugendId,
-            fromDate,
-            toDate,
-            teams: activeTeams,
-            uploadedGames: [],
-            adapterEndpoint,
-            adapterToken,
-            turnier: Boolean(jugend?.turnier),
-          }).then((result) => ({
-            ...result,
-            selectedKreisId,
-          }));
-        }),
-      );
+          try {
+            const result = await fetchGamesWithProviders({
+              mode: "adapter",
+              kreisId: selectedKreisId,
+              stateCode: selectedRegion?.stateCode || "",
+              regionName: selectedRegion?.displayName || selectedRegion?.name || "",
+              regionShortCode: selectedRegion?.shortCode || selectedRegion?.kurz || "",
+              fussballDeMapping: selectedRegion?.fussballDeMapping || null,
+              jugendId,
+              fromDate,
+              toDate,
+              teams: activeTeams,
+              uploadedGames: [],
+              adapterEndpoint,
+              adapterToken,
+              turnier: Boolean(jugend?.turnier),
+            });
+            return {
+              ...result,
+              selectedKreisId,
+              error: "",
+            };
+          } catch (error) {
+            return {
+              source: "adapter",
+              games: [],
+              selectedKreisId,
+              error: error?.message || "Spieldaten konnten nicht geladen werden.",
+            };
+          }
+        });
 
       if (buildRunRef.current !== runId) {
         return;
       }
 
-      const source = providerRuns[0]?.source || "adapter";
-      const fetchedGames = mergeGamesAcrossKreise(providerRuns.map((run) => run?.games || []));
+      const successfulRuns = providerRuns.filter((run) => Array.isArray(run?.games) && run.games.length > 0);
+      const failedRuns = providerRuns.filter((run) => run?.error);
+      if (successfulRuns.length === 0) {
+        if (failedRuns.length === 1) {
+          throw new Error(failedRuns[0].error);
+        }
+        const details = failedRuns
+          .map((run) => `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId}: ${run.error}`)
+          .join(" | ");
+        throw new Error(details || "Keine Spieldaten verfügbar.");
+      }
+
+      const source = successfulRuns[0]?.source || "adapter";
+      const fetchedGames = mergeGamesAcrossKreise(successfulRuns.map((run) => run?.games || []));
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
@@ -685,6 +706,12 @@ export function GamesProvider({ children }) {
       });
       setDataSourceUsed(source);
       setTeamValidation(teamFilterMeta);
+      if (failedRuns.length > 0) {
+        const failedLabels = failedRuns
+          .map((run) => getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId)
+          .join(", ");
+        setErr(`Einige Kreise konnten nicht geladen werden: ${failedLabels}. Der Plan nutzt die erfolgreich geladenen Spiele.`);
+      }
       navigate("/games");
 
       if (initialGames.length === 0) {
