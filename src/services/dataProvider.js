@@ -809,7 +809,8 @@ async function fetchGamesAdapter(params) {
   }
 
   const requestedRange = normalizeRequestedDateRange(params.fromDate, params.toDate);
-  const rangeCandidates = buildAdapterRangeCandidates(requestedRange);
+  const fallbackRangeCandidates = buildAdapterRangeCandidates(requestedRange);
+  const liveRangeCandidates = [requestedRange];
   const endpointCandidates = buildAdapterEndpointCandidates(adapterEndpoint);
   let payload = null;
   let usedRange = requestedRange;
@@ -819,7 +820,7 @@ async function fetchGamesAdapter(params) {
   endpointLoop: for (let index = 0; index < endpointCandidates.length; index += 1) {
     const endpoint = endpointCandidates[index];
 
-    for (const candidateRange of rangeCandidates) {
+    for (const candidateRange of liveRangeCandidates) {
       try {
         const response = await fetchWithTimeout(
           endpoint,
@@ -875,6 +876,71 @@ async function fetchGamesAdapter(params) {
           continue endpointLoop;
         }
         throw error;
+      }
+    }
+
+    // Only if live refresh returned empty for the requested range:
+    // check cached neighboring ranges without forcing another expensive
+    // exporter run for each candidate.
+    if (!payload && sawEmptyResponse) {
+      for (const candidateRange of fallbackRangeCandidates) {
+        if (candidateRange.fromDate === requestedRange.fromDate && candidateRange.toDate === requestedRange.toDate) {
+          continue;
+        }
+        try {
+          const response = await fetchWithTimeout(
+            endpoint,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                kreisId: params.kreisId,
+                stateCode: params.stateCode || "",
+                regionName: params.regionName || "",
+                regionShortCode: params.regionShortCode || "",
+                fussballDeMapping: params.fussballDeMapping || null,
+                jugendId: params.jugendId,
+                fromDate: candidateRange.fromDate,
+                toDate: candidateRange.toDate,
+                teams: params.teams,
+                ensureWeekData: false,
+              }),
+            },
+            ADAPTER_TIMEOUT_MS,
+            "Adapter",
+          );
+
+          if (!response.ok) {
+            let adapterErrorDetail = "";
+            try {
+              const errorPayload = await response.json();
+              adapterErrorDetail = String(errorPayload?.error || "").trim();
+            } catch {
+              adapterErrorDetail = "";
+            }
+            if (response.status === 401) {
+              throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
+            }
+            throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
+          }
+
+          const nextPayload = await response.json();
+          const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
+          if (!nextRawGames.length) {
+            continue;
+          }
+
+          payload = nextPayload;
+          usedRange = candidateRange;
+          connectionError = null;
+          break endpointLoop;
+        } catch (error) {
+          if (isAdapterConnectivityError(error) && index < endpointCandidates.length - 1) {
+            connectionError = error;
+            continue endpointLoop;
+          }
+          throw error;
+        }
       }
     }
   }

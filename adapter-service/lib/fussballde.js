@@ -550,6 +550,15 @@ function pickAreaIdsForLeague(areaMap, kreisId, regionParams = null) {
     return regional;
   }
 
+  // Legacy NRW Kreise (z. B. Duisburg) wurden in älteren Flows über einen
+  // breiteren Abruf plus heuristischen Ergebnisfilter stabil unterstützt.
+  // Falls Labels nicht mehr keyword-matchen, nehmen wir hier kontrolliert alle
+  // verfügbaren Areas dieses Leagues, damit reale Spiele weiterhin gefunden
+  // werden können.
+  if (legacyKeywords.length > 0 && entries.length > 1) {
+    return entries.map(([areaId]) => areaId);
+  }
+
   // Kreis is known but no area match found -> skip this league/area combination
   // instead of broadening to unrelated kreise.
   return [];
