@@ -8,6 +8,7 @@ import { FahrtkostenTabelle } from "../components/FahrtkostenTabelle";
 import { SectionHeader } from "../components/SectionHeader";
 import { STORAGE_KEYS } from "../config/storage";
 import { useScoutX } from "../context/ScoutXContext";
+import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { checkPlanConsistency, isAdapterSyncContext } from "../services/liveConsistency";
 import { C } from "../styles/theme";
 import { normalizePresenceMinutes } from "../utils/arbeitszeit";
@@ -97,6 +98,7 @@ export function PlanPage() {
     onResetHard,
   } = useScoutX();
   const hasManualSelection = Array.isArray(plannedGames) && plannedGames.length > 0;
+  const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
   const activeGames = useMemo(() => {
     if (hasManualSelection) {
       return plannedGames;
@@ -308,23 +310,25 @@ export function PlanPage() {
   }, [activeGames, currentPage, shouldPaginate]);
 
   return (
-    <div className="fu">
+    <div className={`fu${usePinnedActionDock ? " page-with-action-dock" : ""}`}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <GhostButton onClick={onBackGames}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          Spiele
-        </GhostButton>
+        {!usePinnedActionDock ? (
+          <GhostButton onClick={onBackGames}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Spiele
+          </GhostButton>
+        ) : null}
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
@@ -760,22 +764,27 @@ export function PlanPage() {
         </div>
       ) : null}
 
-      <div className="reset-row">
-        <GhostButton onClick={onResetSoft} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>
-          Neuer Plan
-        </GhostButton>
+      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`}>
+        <div className="page-action-dock-row">
+          <GhostButton onClick={onBackGames} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
+            Spiele
+          </GhostButton>
+          <GhostButton onClick={onResetSoft} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            Neuer Plan
+          </GhostButton>
+        </div>
         <GhostButton onClick={onResetHard} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
           <svg
             width="14"

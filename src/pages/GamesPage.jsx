@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { useScoutX } from "../context/ScoutXContext";
+import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
@@ -21,6 +22,7 @@ export function GamesPage() {
     selectedGameIds,
     selectedGameCount,
     pdfExporting,
+    isMobile,
     onSetGameNote,
     onTogglePlannedGame,
     onSelectAllPlannedGames,
@@ -28,6 +30,7 @@ export function GamesPage() {
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
+  const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
   const PAGE_SIZE = 20;
   const requestedTeamCount = Number(teamValidation?.requestedCount || 0);
   const matchedTeamCount = Number(teamValidation?.matchedTeamCount || 0);
@@ -110,23 +113,25 @@ export function GamesPage() {
   };
 
   return (
-    <div className="fu">
+    <div className={`fu${usePinnedActionDock ? " page-with-action-dock" : ""}`}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <GhostButton onClick={onBackSetup}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          Konfiguration
-        </GhostButton>
+        {!usePinnedActionDock ? (
+          <GhostButton onClick={onBackSetup}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Konfiguration
+          </GhostButton>
+        ) : null}
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
@@ -376,10 +381,15 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <div style={{ display: "grid", gap: 8 }}>
-        <GhostButton onClick={onExportCalendar} disabled={games.length === 0} style={{ width: "100%" }}>
-          Spiele als Kalender (.ics)
-        </GhostButton>
+      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`}>
+        <div className="page-action-dock-row">
+          <GhostButton onClick={onBackSetup} style={{ width: "100%" }}>
+            Konfiguration
+          </GhostButton>
+          <GhostButton onClick={onExportCalendar} disabled={games.length === 0} style={{ width: "100%" }}>
+            Kalender (.ics)
+          </GhostButton>
+        </div>
         <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <svg
