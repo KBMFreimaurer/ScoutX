@@ -47,6 +47,18 @@ const DEFAULT_STATE_FILE = fileURLToPath(new URL("../data/fussballde.fetch-state
 const STATE_FILE = process.env.FUSSBALLDE_STATE_FILE || DEFAULT_STATE_FILE;
 const STRICT_REGION_MAPPING = process.env.SCOUTPLAN_STRICT_REGION_MAPPING !== "false";
 const STRICT_RESULT_FILTER = process.env.SCOUTPLAN_STRICT_RESULT_FILTER !== "false";
+const LEGACY_REGION_FALLBACKS = {
+  duesseldorf: { stateCode: "NW", regionName: "Düsseldorf", regionShortCode: "DU" },
+  duisburg: { stateCode: "NW", regionName: "Duisburg", regionShortCode: "DUI" },
+  essen: { stateCode: "NW", regionName: "Essen", regionShortCode: "ES" },
+  krefeld: { stateCode: "NW", regionName: "Krefeld", regionShortCode: "KR" },
+  moenchen: { stateCode: "NW", regionName: "Mönchengladbach", regionShortCode: "MG" },
+  neuss: { stateCode: "NW", regionName: "Neuss/Grevenbroich", regionShortCode: "NE" },
+  oberhausen: { stateCode: "NW", regionName: "Oberhausen", regionShortCode: "OB" },
+  viersen: { stateCode: "NW", regionName: "Viersen", regionShortCode: "VIE" },
+  wesel: { stateCode: "NW", regionName: "Wesel", regionShortCode: "WES" },
+  kleve: { stateCode: "NW", regionName: "Kleve/Geldern", regionShortCode: "KLE" },
+};
 
 const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
 const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
@@ -62,13 +74,14 @@ const fussballDeMapping = (() => {
     return null;
   }
 })();
-const regionParams = resolveFussballDeRegionParams({
+const resolvedRegionParams = resolveFussballDeRegionParams({
   kreisId,
   stateCode,
   regionName,
   regionShortCode,
   mapping: fussballDeMapping,
 });
+const regionParams = applyLegacyRegionFallback(resolvedRegionParams);
 const MANDANT = (() => {
   validateRegionParams(regionParams);
   const normalizedMandant = normalizeMandant(regionParams.mandant);
@@ -103,6 +116,50 @@ let fetchStateCache = null;
 function normalizeMandant(value) {
   const text = String(value || "").trim();
   return /^\d{1,3}$/.test(text) ? text : "";
+}
+
+function uniqueKeywords(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map((item) => normalizeLookup(item)).filter(Boolean))];
+}
+
+function applyLegacyRegionFallback(params) {
+  if (!params || typeof params !== "object") {
+    return params;
+  }
+
+  if (String(params.stateCode || "").trim()) {
+    return params;
+  }
+
+  const key = String(params.kreisId || "").trim().toLowerCase();
+  const fallback = LEGACY_REGION_FALLBACKS[key];
+  if (!fallback) {
+    return params;
+  }
+
+  const name = String(fallback.regionName || key).trim();
+  const mergedKeywords = uniqueKeywords([
+    ...(Array.isArray(params.areaKeywords) ? params.areaKeywords : []),
+    ...(KREIS_AREA_KEYWORDS[key] || []),
+    name,
+    params.kreisId,
+    fallback.regionShortCode,
+  ]);
+
+  return {
+    ...params,
+    stateCode: fallback.stateCode,
+    regionName: String(params.regionName || fallback.regionName || "").trim(),
+    regionShortCode: String(params.regionShortCode || fallback.regionShortCode || "").trim(),
+    searchName: String(params.searchName || name).trim(),
+    verband: "FVN",
+    verbandLabel: "Fußballverband Niederrhein",
+    mandant: "22",
+    kreis: String(params.kreis || name).trim(),
+    areaKeywords: mergedKeywords,
+    primaryAreaKeywords: mergedKeywords,
+    source: "mapping",
+  };
 }
 
 function validateRegionParams(params) {

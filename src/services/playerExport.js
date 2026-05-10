@@ -68,18 +68,7 @@ export function triggerDownload({ filename, content, mimeType = "text/plain;char
   }
 
   const blob = new Blob([String(content || "")], { type: mimeType })
-  const objectUrl = window.URL.createObjectURL(blob)
-
-  try {
-    const link = document.createElement("a")
-    link.href = objectUrl
-    link.download = filename || "export.txt"
-    link.rel = "noopener"
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    return true
-  } finally {
-    window.URL.revokeObjectURL(objectUrl)
-  }
+  void shareOrDownloadBlob(blob, filename || "export.txt", "ScoutX Export")
+  return true
 }
+import { shareOrDownloadBlob } from "../native/share"

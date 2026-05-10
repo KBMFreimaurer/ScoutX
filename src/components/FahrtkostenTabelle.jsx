@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { C, card } from "../styles/theme";
 import { buildAttendanceRows, formatPresenceMinutes, normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { buildFahrtkostenRows } from "../utils/fahrtkosten";
+import { shareOrDownloadBlob } from "../native/share";
 
 const TH = {
   fontSize: 10,
@@ -153,12 +154,7 @@ export function FahrtkostenTabelle({
       .join("\n");
 
     const blob = new Blob([`\uFEFF${head}${body}`], { type: "text/csv;charset=utf-8;" });
-    const link = Object.assign(document.createElement("a"), {
-      href: URL.createObjectURL(blob),
-      download: `Fahrtkosten_ScoutX_${date}.csv`,
-    });
-    link.click();
-    URL.revokeObjectURL(link.href);
+    void shareOrDownloadBlob(blob, `Fahrtkosten_ScoutX_${date}.csv`, "Fahrtkosten exportieren");
   };
 
   const presenceMap = presenceMinutesByGame && typeof presenceMinutesByGame === "object" ? presenceMinutesByGame : {};

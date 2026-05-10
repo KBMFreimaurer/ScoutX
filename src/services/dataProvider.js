@@ -160,9 +160,31 @@ function appendUniqueEndpoint(candidates, endpoint) {
   candidates.push(value);
 }
 
+function isNativeCapacitorPlatform() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const runtime = window.Capacitor;
+  if (!runtime) {
+    return false;
+  }
+  if (typeof runtime.isNativePlatform === "function") {
+    return Boolean(runtime.isNativePlatform());
+  }
+  const platform = String(runtime.getPlatform?.() || "");
+  return platform === "ios" || platform === "android";
+}
+
 function buildAdapterEndpointCandidates(adapterEndpoint) {
   const primary = String(adapterEndpoint || "").trim();
   const candidates = [];
+  const isRelativeDefault = /^\/api\/games\/?$/i.test(primary);
+
+  if (isRelativeDefault && isNativeCapacitorPlatform()) {
+    appendUniqueEndpoint(candidates, "http://localhost:8787/api/games");
+    appendUniqueEndpoint(candidates, "http://127.0.0.1:8787/api/games");
+  }
+
   appendUniqueEndpoint(candidates, primary);
 
   if (!primary || typeof window === "undefined") {
@@ -178,7 +200,7 @@ function buildAdapterEndpointCandidates(adapterEndpoint) {
     appendUniqueEndpoint(candidates, safeDefault);
   }
 
-  if (/^\/api\/games\/?$/i.test(primary) && appProtocol === "http:" && appHostname) {
+  if (isRelativeDefault && appProtocol === "http:" && appHostname) {
     appendUniqueEndpoint(candidates, `http://${appHostname}:8787/api/games`);
   }
 
@@ -188,6 +210,40 @@ function buildAdapterEndpointCandidates(adapterEndpoint) {
 function isAdapterConnectivityError(error) {
   const message = String(error?.message || "").toLowerCase();
   return message.includes("nicht erreichbar") || message.includes("timeout");
+}
+
+function compactResponsePreview(rawValue, maxLength = 180) {
+  return String(rawValue || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+async function parseJsonResponseStrict(response, endpoint) {
+  if (typeof response?.text !== "function") {
+    if (typeof response?.json === "function") {
+      return response.json();
+    }
+    return {};
+  }
+
+  const raw = await response.text();
+  const trimmed = String(raw || "").trim();
+
+  if (!trimmed) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const preview = compactResponsePreview(trimmed);
+    throw new Error(
+      `Adapter lieferte kein gültiges JSON unter ${endpoint}. Prüfe den Adapter-Endpoint in der iOS-App.${
+        preview ? ` Antwortbeginn: ${preview}` : ""
+      }`,
+    );
+  }
 }
 
 function addDays(isoDate, days) {
@@ -845,12 +901,13 @@ async function fetchGamesAdapter(params) {
         );
 
         if (!response.ok) {
+          const rawError = typeof response?.text === "function" ? await response.text() : "";
           let adapterErrorDetail = "";
           try {
-            const errorPayload = await response.json();
+            const errorPayload = rawError ? JSON.parse(rawError) : null;
             adapterErrorDetail = String(errorPayload?.error || "").trim();
           } catch {
-            adapterErrorDetail = "";
+            adapterErrorDetail = compactResponsePreview(rawError);
           }
           if (response.status === 401) {
             throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
@@ -858,7 +915,7 @@ async function fetchGamesAdapter(params) {
           throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
         }
 
-        const nextPayload = await response.json();
+        const nextPayload = await parseJsonResponseStrict(response, endpoint);
         const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
 
         if (!nextRawGames.length) {
@@ -911,12 +968,13 @@ async function fetchGamesAdapter(params) {
           );
 
           if (!response.ok) {
+            const rawError = typeof response?.text === "function" ? await response.text() : "";
             let adapterErrorDetail = "";
             try {
-              const errorPayload = await response.json();
+              const errorPayload = rawError ? JSON.parse(rawError) : null;
               adapterErrorDetail = String(errorPayload?.error || "").trim();
             } catch {
-              adapterErrorDetail = "";
+              adapterErrorDetail = compactResponsePreview(rawError);
             }
             if (response.status === 401) {
               throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
@@ -924,7 +982,7 @@ async function fetchGamesAdapter(params) {
             throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
           }
 
-          const nextPayload = await response.json();
+          const nextPayload = await parseJsonResponseStrict(response, endpoint);
           const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
           if (!nextRawGames.length) {
             continue;

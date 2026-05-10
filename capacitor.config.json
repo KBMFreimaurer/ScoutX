@@ -1,0 +1,12 @@
+{
+  "appId": "com.scoutx.app",
+  "appName": "ScoutX",
+  "webDir": "dist",
+  "experimental": {
+    "ios": {
+      "spm": {
+        "swiftToolsVersion": "6.0"
+      }
+    }
+  }
+}

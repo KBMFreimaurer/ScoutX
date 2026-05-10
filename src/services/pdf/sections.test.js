@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computeVisibleChainTotals, extractReasonMap, inferBadges, parseRouteStops, sanitizePlanText } from "./sections";
+import {
+  computeVisibleChainTotals,
+  drawHeaderFooter,
+  extractReasonMap,
+  inferBadges,
+  parseRouteStops,
+  sanitizePlanText,
+} from "./sections";
 
 describe("pdf/sections", () => {
   it("bereinigt Plantext gemäß Ausgabe-Regeln", () => {
@@ -81,5 +88,32 @@ Begründung: Starkes Spiel für Vergleich auf gutem Niveau.
 
     expect(totals.totalKm).toBeNull();
     expect(totals.totalMinutes).toBeNull();
+  });
+
+  it("rendert Footer-Seitenzähler im Format Seite n/m", () => {
+    const textCalls = [];
+    const doc = {
+      getNumberOfPages: () => 3,
+      setPage: () => {},
+      setDrawColor: () => {},
+      line: () => {},
+      setFont: () => {},
+      setFontSize: () => {},
+      setTextColor: () => {},
+      text: (value) => {
+        textCalls.push(String(value));
+      },
+    };
+
+    drawHeaderFooter(
+      doc,
+      { sections: ["Überblick", "Fahrtkosten", "Arbeitszeit"] },
+      { kreisLabel: "Duisburg", jugendLabel: "U17" },
+      "08.05.2026, 09:00",
+    );
+
+    expect(textCalls).toContain("Seite 1/3");
+    expect(textCalls).toContain("Seite 2/3");
+    expect(textCalls).toContain("Seite 3/3");
   });
 });

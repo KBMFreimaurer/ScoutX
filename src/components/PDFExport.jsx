@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { C } from "../styles/theme";
 import { openScoutPdf } from "../services/pdf";
 
@@ -45,6 +46,10 @@ export function PDFExport({
     setPreviewState(null);
   };
 
+  const iosNativeRuntime =
+    isNativeCapacitorRuntime() && String(globalThis?.window?.Capacitor?.getPlatform?.() || "").toLowerCase() === "ios";
+  const usePreviewFlow = confirmBeforeDownload && !iosNativeRuntime;
+
   const confirmDownload = () => {
     if (!previewState) {
       return;
@@ -72,13 +77,13 @@ export function PDFExport({
         cfg,
         null,
         syncContext,
-        confirmBeforeDownload ? { mode: "preview" } : null,
+        usePreviewFlow ? { mode: "preview" } : null,
       );
       if (!result?.ok) {
         onExportError?.(result?.error || "Unbekannter Fehler");
         return;
       }
-      if (confirmBeforeDownload) {
+      if (usePreviewFlow) {
         setPreviewState({
           url: result.previewUrl,
           fileName: result.fileName,

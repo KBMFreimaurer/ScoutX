@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
@@ -42,6 +42,8 @@ export function GamesPage() {
   const shouldPaginate = games.length > 100;
   const [sortMode, setSortMode] = useState("date");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const actionDockRef = useRef(null);
+  const [dockReservePx, setDockReservePx] = useState(null);
   const firstGameRoute = useMemo(() => {
     const withExactStartRoute = [...games]
       .filter((game) => Number.isFinite(game?.fromStartRouteDistanceKm))
@@ -105,6 +107,50 @@ export function GamesPage() {
     return sortedGames.slice(start, start + PAGE_SIZE);
   }, [sortedGames, currentPage, shouldPaginate]);
 
+  useLayoutEffect(() => {
+    if (!usePinnedActionDock || typeof window === "undefined") {
+      setDockReservePx(null);
+      return undefined;
+    }
+
+    const dockNode = actionDockRef.current;
+    if (!dockNode) {
+      return undefined;
+    }
+
+    let frame = null;
+    const updateReserve = () => {
+      const styles = window.getComputedStyle(dockNode);
+      const bottom = Number.parseFloat(styles.bottom || "0") || 0;
+      const height = dockNode.getBoundingClientRect().height || dockNode.offsetHeight || 0;
+      const nextValue = Math.max(0, Math.ceil(bottom + height + 2));
+      setDockReservePx((prev) => (prev === nextValue ? prev : nextValue));
+    };
+
+    const scheduleUpdate = () => {
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        updateReserve();
+      });
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleUpdate) : null;
+    observer?.observe(dockNode);
+
+    return () => {
+      window.removeEventListener("resize", scheduleUpdate);
+      observer?.disconnect();
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [usePinnedActionDock, isMobile]);
+
   const onExportCalendar = () => {
     const exportGames = selectedGameIds.length > 0 ? games.filter((game) => selectedGameIds.includes(game.id)) : games;
     downloadCalendarIcs(exportGames, {
@@ -113,7 +159,17 @@ export function GamesPage() {
   };
 
   return (
-    <div className={`fu${usePinnedActionDock ? " page-with-action-dock" : ""}`}>
+    <div
+      className={`fu${usePinnedActionDock ? " page-with-action-dock page-with-action-dock-games" : ""}`}
+      style={
+        usePinnedActionDock && Number.isFinite(dockReservePx)
+          ? {
+              "--page-dock-reserve": `${dockReservePx}px`,
+              "--page-dock-reserve-native": `${dockReservePx}px`,
+            }
+          : undefined
+      }
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         {!usePinnedActionDock ? (
           <GhostButton onClick={onBackSetup}>
@@ -381,7 +437,7 @@ export function GamesPage() {
         </div>
       ) : null}
 
-      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`}>
+      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`} ref={actionDockRef}>
         <div className="page-action-dock-row">
           <GhostButton onClick={onBackSetup} style={{ width: "100%" }}>
             Konfiguration

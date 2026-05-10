@@ -1,3 +1,5 @@
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_API_KEY_SOURCE } from "../config/googleMaps";
+
 const GEO_CACHE_KEY = "scoutplan.geo.cache.v1";
 const ROUTE_CACHE_KEY = "scoutplan.route.cache.v1";
 const REQUEST_INTERVAL_MS_OSM = 1000;
@@ -11,9 +13,7 @@ const GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/js
 const GOOGLE_ROUTES_BASE_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const GOOGLE_DIRECTIONS_BASE_URL = "https://maps.googleapis.com/maps/api/directions/json";
 const GOOGLE_ROUTES_FIELD_MASK = "routes.distanceMeters,routes.duration,routes.legs.distanceMeters,routes.legs.duration";
-const ENV_GOOGLE_MAPS_API_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 const GOOGLE_STRICT_ENV = String(import.meta?.env?.VITE_GOOGLE_MAPS_STRICT || "").trim().toLowerCase();
-const GOOGLE_MAPS_RUNTIME_STORAGE_KEY = "scoutplan.googlemaps.apikey.v1";
 const KREIS_GEO_HINTS = {
   duesseldorf: "Düsseldorf, Deutschland",
   duisburg: "Duisburg, Deutschland",
@@ -104,61 +104,12 @@ function getRequestIntervalMs() {
   return hasGoogleMapsApiKey() ? REQUEST_INTERVAL_MS_GOOGLE : REQUEST_INTERVAL_MS_OSM;
 }
 
-function readRuntimeGoogleMapsApiKey() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  try {
-    return String(window.localStorage.getItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY) || "").trim();
-  } catch {
-    return "";
-  }
-}
-
 function getGoogleMapsApiKey() {
-  const runtime = readRuntimeGoogleMapsApiKey();
-  if (runtime) {
-    return runtime;
-  }
-  if (ENV_GOOGLE_MAPS_API_KEY) {
-    return ENV_GOOGLE_MAPS_API_KEY;
-  }
-  return "";
+  return String(GOOGLE_MAPS_API_KEY || "").trim();
 }
 
 function getGoogleMapsApiKeySource() {
-  const runtime = readRuntimeGoogleMapsApiKey();
-  if (runtime) {
-    return "runtime";
-  }
-  if (ENV_GOOGLE_MAPS_API_KEY) {
-    return "env";
-  }
-  return "none";
-}
-
-export function setRuntimeGoogleMapsApiKey(value) {
-  const key = String(value || "").trim();
-  if (!key || typeof window === "undefined") {
-    return false;
-  }
-  try {
-    window.localStorage.setItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY, key);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function clearRuntimeGoogleMapsApiKey() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.removeItem(GOOGLE_MAPS_RUNTIME_STORAGE_KEY);
-  } catch {
-    // Ignore localStorage errors.
-  }
+  return GOOGLE_MAPS_API_KEY_SOURCE;
 }
 
 function isGoogleStrictDisabled() {
@@ -200,8 +151,6 @@ export function getGoogleRoutingConfig() {
     keySource,
     geocodeProvider: getGeocodeProvider(),
     routeProvider: getRouteProvider(),
-    keyEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
-    keyStorageKey: GOOGLE_MAPS_RUNTIME_STORAGE_KEY,
   };
 }
 

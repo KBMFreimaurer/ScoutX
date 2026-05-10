@@ -3,18 +3,16 @@ import {
   calculateDirectStartRoutes,
   calculateRoute,
   calculateRouteWithDriving,
-  clearRuntimeGoogleMapsApiKey,
   fetchDrivingRoute,
   geocodeAddress,
   getGoogleRoutingConfig,
   haversineDistance,
-  setRuntimeGoogleMapsApiKey,
 } from "./geo";
+import { GOOGLE_MAPS_API_KEY } from "../config/googleMaps";
 
 describe("geo utils", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    clearRuntimeGoogleMapsApiKey();
   });
 
   it("berechnet Haversine-Distanz in km", () => {
@@ -155,9 +153,7 @@ describe("geo utils", () => {
     expect(strictResult).toBeNull();
   });
 
-  it("nutzt Google Routes API v2 mit Runtime-Key", async () => {
-    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
-
+  it("nutzt Google Routes API v2 mit festem Key", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -185,7 +181,6 @@ describe("geo utils", () => {
   });
 
   it("nutzt bei Startortsuche den ausgewählten Kreis als Geocoding-Hinweis", async () => {
-    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -216,7 +211,6 @@ describe("geo utils", () => {
   });
 
   it("verwirft Geocoding-Treffer außerhalb des gewählten Kreises", async () => {
-    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -262,8 +256,6 @@ describe("geo utils", () => {
   });
 
   it("fällt ohne Strict-Mode bei Google-Fehlern nicht hart aus", async () => {
-    setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -300,7 +292,6 @@ describe("geo utils", () => {
     const config = getGoogleRoutingConfig();
 
     expect(config).toMatchObject({
-      keyEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
       routeProvider: expect.any(String),
       geocodeProvider: expect.any(String),
       googleConfigured: expect.any(Boolean),
@@ -308,15 +299,13 @@ describe("geo utils", () => {
       strictActive: expect.any(Boolean),
     });
 
-    expect(["env", "none"]).toContain(config.keySource);
+    expect(config.keySource).toBe("code");
+    expect(config.googleConfigured).toBe(true);
   });
 
-  it("nutzt lokal gespeicherten API-Key als Runtime-Quelle", () => {
-    const saved = setRuntimeGoogleMapsApiKey("AIza-test-runtime-key");
-    expect(saved).toBe(true);
-
+  it("stellt den Google API-Key zentral als Code-Konstante bereit", () => {
+    expect(String(GOOGLE_MAPS_API_KEY || "")).toBe("AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc");
     const config = getGoogleRoutingConfig();
-    expect(config.googleConfigured).toBe(true);
-    expect(config.keySource).toBe("runtime");
+    expect(config.keySource).toBe("code");
   });
 });

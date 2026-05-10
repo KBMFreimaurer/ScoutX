@@ -90,6 +90,11 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
         background: "rgba(255,255,255,0.03)",
         borderRadius: 10,
         padding: 3,
+        maxWidth: "100%",
+        overflowX: "auto",
+        overflowY: "hidden",
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
       }}
     >
       {visibleSteps.map((step) => {
@@ -119,6 +124,7 @@ export function StepNav({ currentStep, onStepChange, canAccessGames, canAccessPl
               transition: "all 0.2s ease",
               whiteSpace: "nowrap",
               minHeight: 0,
+              flex: "0 0 auto",
               display: "flex",
               alignItems: "center",
               gap: 6,

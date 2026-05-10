@@ -16,6 +16,7 @@ import {
 import { buildTimeTrackingModel, formatCurrency, formatDuration } from "../services/timeTracking";
 import { C } from "../styles/theme";
 import { normalizePresenceMinutes } from "../utils/arbeitszeit";
+import { shareOrDownloadBlob } from "../native/share";
 
 const FIELD_STYLE = {
   width: "100%",
@@ -514,14 +515,7 @@ export function ScoutingHubPage() {
   const downloadProductExport = () => {
     const content = exportSnapshot({ playerSheets, games, planHistory });
     const blob = new Blob([content], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `scoutx-product-${todayIso()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    void shareOrDownloadBlob(blob, `scoutx-product-${todayIso()}.json`, "ScoutX Datensatz exportieren");
   };
 
   const openSearchResult = (result) => {

@@ -1,15 +1,17 @@
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
 import { C, GCSS } from "./styles/theme";
 import { ADAPTER_ENDPOINT } from "./config/adapter";
+import { ENABLE_ADMIN_SURFACE, PRIVACY_POLICY_URL, SUPPORT_URL } from "./config/release";
 import { ScoutXProvider, useScoutX } from "./context/ScoutXContext";
 import { ScoutXProductProvider } from "./context/ScoutXProductContext";
 import { SetupProvider } from "./context/SetupContext";
 import { GamesProvider } from "./context/GamesContext";
 import { PlanProvider } from "./context/PlanContext";
 import { useScheduleChangeNotifications } from "./hooks/useScheduleChangeNotifications";
+import { isNativeCapacitorRuntime, resolveScoutxDeepLink } from "./native/deepLinks";
 
 const ScoutingHubPage = lazy(() => import("./pages/ScoutingHubPage").then((module) => ({ default: module.ScoutingHubPage })));
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
@@ -18,6 +20,8 @@ const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ defau
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const ScoutSheetPage = lazy(() => import("./pages/ScoutSheetPage").then((module) => ({ default: module.ScoutSheetPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
+const SupportPage = lazy(() => import("./pages/SupportPage").then((module) => ({ default: module.SupportPage })));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = ADAPTER_ENDPOINT;
 
@@ -180,6 +184,7 @@ function AppLayout() {
   } = useScoutX();
   const hasPlanHistory = Array.isArray(planHistory) && planHistory.length > 0;
   const canAccessPlan = Boolean(plan) || hasPlanHistory;
+  const adminEnabled = ENABLE_ADMIN_SURFACE;
   const {
     latestNotice: latestScheduleNotice,
     dismissLatestNotice,
@@ -211,8 +216,16 @@ function AppLayout() {
       return "dashboard";
     }
 
-    if (location.pathname.startsWith("/admin")) {
+    if (adminEnabled && location.pathname.startsWith("/admin")) {
       return "admin";
+    }
+
+    if (location.pathname.startsWith("/support")) {
+      return "support";
+    }
+
+    if (location.pathname.startsWith("/privacy")) {
+      return "privacy";
     }
 
     if (location.pathname.startsWith("/games")) {
@@ -224,9 +237,63 @@ function AppLayout() {
     }
 
     return "setup";
-  }, [location.pathname]);
+  }, [adminEnabled, location.pathname]);
+
+  useEffect(() => {
+    if (!isNativeCapacitorRuntime()) {
+      return undefined;
+    }
+
+    let disposeListener = null;
+    let disposed = false;
+
+    const attach = async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        const launchUrl = await App.getLaunchUrl();
+        const launchTarget = resolveScoutxDeepLink(launchUrl?.url);
+        if (!disposed && launchTarget) {
+          navigate(launchTarget, { replace: true });
+        }
+
+        const handle = await App.addListener("appUrlOpen", ({ url }) => {
+          const target = resolveScoutxDeepLink(url);
+          if (target) {
+            navigate(target);
+          }
+        });
+
+        if (!disposed) {
+          disposeListener = () => {
+            handle.remove();
+          };
+        }
+      } catch {
+        // Native URL-Handoff ist optional; Fehler dürfen den App-Start nicht blockieren.
+      }
+    };
+
+    void attach();
+
+    return () => {
+      disposed = true;
+      disposeListener?.();
+    };
+  }, [navigate]);
 
   const isDesktopShell = width >= 1050;
+  const isNativeApp = isNativeCapacitorRuntime();
+  const useNativeBottomTabs = isNativeApp && !isDesktopShell;
+  const routeUsesPinnedActionDock = currentStep === "setup" || currentStep === "games" || currentStep === "plan";
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const root = document.documentElement;
+    root.setAttribute("data-native-bottom-tabs", useNativeBottomTabs ? "true" : "false");
+  }, [useNativeBottomTabs]);
+
   const onStepChange = (nextStep) => {
     navigate(`/${nextStep}`);
   };
@@ -238,7 +305,7 @@ function AppLayout() {
     ...(canAccessPlan ? [{ id: "plan", label: "Scout-Plan", onClick: () => navigate("/plan") }] : []),
     { id: "sheet", label: "Bewertungsbogen", onClick: () => navigate("/scout-sheet") },
     { id: "dashboard", label: "Dashboard", onClick: () => navigate("/dashboard") },
-    { id: "admin", label: "Adapter-Admin", onClick: () => navigate("/admin") },
+    ...(adminEnabled ? [{ id: "admin", label: "Adapter-Admin", onClick: () => navigate("/admin") }] : []),
   ];
 
   const liveStatus = err
@@ -249,6 +316,49 @@ function AppLayout() {
         ? "Entfernungen werden aktualisiert."
         : "";
 
+  const nativeBottomTabs = [
+    {
+      id: "hub",
+      label: "Cockpit",
+      icon: RAIL_ICONS.hub,
+      onClick: () => navigate("/hub"),
+      enabled: true,
+    },
+    {
+      id: "games",
+      label: "Spiele",
+      icon: RAIL_ICONS.games,
+      onClick: () => navigate("/games"),
+      enabled: games.length > 0,
+    },
+    {
+      id: "setup",
+      label: "Konfiguration",
+      icon: (
+        <span className="native-bottom-tab-center-icon" aria-hidden="true">
+          <BMGBadge size={30} variant="full" />
+        </span>
+      ),
+      onClick: () => navigate("/setup"),
+      enabled: true,
+      center: true,
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      icon: RAIL_ICONS.plan,
+      onClick: () => navigate("/plan"),
+      enabled: canAccessPlan,
+    },
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      icon: RAIL_ICONS.dashboard,
+      onClick: () => navigate("/dashboard"),
+      enabled: true,
+    },
+  ];
+
   return (
     <div
       className="app-shell"
@@ -258,6 +368,7 @@ function AppLayout() {
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
       }}
     >
+      <div className="statusbar-shield" aria-hidden="true" />
       {isDesktopShell ? (
         <aside className="left-rail">
           <div>
@@ -297,8 +408,7 @@ function AppLayout() {
 
       <div className="content-shell">
         <header className="top-strip">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            {!isDesktopShell ? <BMGBadge size={34} variant="full" /> : null}
+          <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
             {isDesktopShell ? (
               <div className="top-strip-title">
                 Scout<span style={{ color: C.green }}>X</span>
@@ -306,68 +416,85 @@ function AppLayout() {
             ) : null}
           </div>
 
-          <StepNav
-            currentStep={currentStep}
-            canAccessGames={games.length > 0}
-            canAccessPlan={canAccessPlan}
-            onStepChange={onStepChange}
-            isMobile={isMobile}
-          />
+          {!isMobile && !useNativeBottomTabs ? (
+            <StepNav
+              currentStep={currentStep}
+              canAccessGames={games.length > 0}
+              canAccessPlan={canAccessPlan}
+              onStepChange={onStepChange}
+              isMobile={false}
+            />
+          ) : (
+            <div style={{ flex: 1 }} />
+          )}
 
-          <div className="top-strip-actions">
-            <button
-              type="button"
-              className="icon-dot"
-              onClick={() => navigate("/admin")}
-              aria-label="Adapter-Admin öffnen"
-              style={{
-                color: currentStep === "admin" ? C.green : C.gray,
-                borderColor: currentStep === "admin" ? C.greenBorder : undefined,
-                background: currentStep === "admin" ? C.greenDim : undefined,
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-            <div className="icon-dot">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={C.gray}
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
+          {!isNativeApp ? (
+            <div className="top-strip-actions">
+              {adminEnabled ? (
+                <button
+                  type="button"
+                  className="icon-dot"
+                  onClick={() => navigate("/admin")}
+                  aria-label="Adapter-Admin öffnen"
+                  style={{
+                    color: currentStep === "admin" ? C.green : C.gray,
+                    borderColor: currentStep === "admin" ? C.greenBorder : undefined,
+                    background: currentStep === "admin" ? C.greenDim : undefined,
+                  }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+              ) : null}
+              <div className="icon-dot">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={C.gray}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              </div>
             </div>
-          </div>
+          ) : null}
         </header>
 
-        {!isDesktopShell ? (
+        {!isDesktopShell && !useNativeBottomTabs ? (
           <div
             style={{
-              display: "flex",
+              display: "grid",
               gap: 8,
-              flexWrap: "wrap",
               padding: "10px 12px",
               borderBottom: `1px solid ${C.border}`,
               background: "rgba(6,6,9,0.85)",
             }}
           >
+            <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
+              <StepNav
+                currentStep={currentStep}
+                canAccessGames={games.length > 0}
+                canAccessPlan={canAccessPlan}
+                onStepChange={onStepChange}
+                isMobile
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={() => navigate("/hub")}
@@ -413,25 +540,37 @@ function AppLayout() {
             >
               Dashboard
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("/admin")}
-              style={{
-                border: currentStep === "admin" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
-                borderRadius: 8,
-                minHeight: 34,
-                padding: "6px 10px",
-                fontSize: 12,
-                background: currentStep === "admin" ? C.greenDim : "rgba(255,255,255,0.03)",
-                color: currentStep === "admin" ? C.greenLight : C.offWhite,
-              }}
-            >
-              Admin
-            </button>
+            {adminEnabled ? (
+              <button
+                type="button"
+                onClick={() => navigate("/admin")}
+                style={{
+                  border: currentStep === "admin" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  minHeight: 34,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  background: currentStep === "admin" ? C.greenDim : "rgba(255,255,255,0.03)",
+                  color: currentStep === "admin" ? C.greenLight : C.offWhite,
+                }}
+              >
+                Admin
+              </button>
+            ) : null}
+            </div>
           </div>
         ) : null}
 
-        <main className="workspace">
+        <main
+          className="workspace"
+          style={{
+            paddingBottom: useNativeBottomTabs
+              ? routeUsesPinnedActionDock
+                ? "calc(12px + var(--safe-bottom))"
+                : "calc(108px + var(--safe-bottom))"
+              : undefined,
+          }}
+        >
           <div
             aria-live="polite"
             style={{
@@ -573,32 +712,137 @@ function AppLayout() {
               />
               <Route path="/scout-sheet" element={<ScoutSheetPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/support" element={<SupportPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/admin" element={adminEnabled ? <AdminPage /> : <Navigate to="/hub" replace />} />
               <Route path="*" element={<Navigate to="/hub" replace />} />
             </Routes>
           </Suspense>
         </main>
 
-        <footer
-          style={{
-            borderTop: `1px solid ${C.border}`,
-            padding: "16px 24px",
-            textAlign: "center",
-          }}
-        >
-          <span
+        {useNativeBottomTabs ? (
+          <nav
+            aria-label="App-Hauptnavigation"
+            className="native-bottom-tabs"
             style={{
-              fontSize: 11,
-              color: C.grayDark,
-              letterSpacing: "0.5px",
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 500,
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 40,
+              borderTop: `1px solid ${C.border}`,
+              background: "rgba(6,6,9,0.95)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              padding: "8px 12px calc(10px + var(--safe-bottom))",
             }}
           >
-            ScoutX v1.0
-          </span>
-        </footer>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 6 }}>
+              {nativeBottomTabs.map((tab) => {
+                const active = currentStep === tab.id;
+                const disabled = !tab.enabled;
+
+                return (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    className={`native-bottom-tab-btn${tab.center ? " native-bottom-tab-btn-center" : ""}`}
+                    onClick={() => !disabled && tab.onClick()}
+                    disabled={disabled}
+                    aria-current={active ? "page" : undefined}
+                    aria-label={tab.label}
+                    style={{
+                      minHeight: tab.center ? 56 : 50,
+                      borderRadius: 12,
+                      border: active ? `1px solid ${C.greenBorder}` : `1px solid transparent`,
+                      background: active ? C.greenDim : "transparent",
+                      color: active ? C.green : disabled ? C.grayDark : C.grayLight,
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 0,
+                      cursor: disabled ? "default" : "pointer",
+                      opacity: disabled ? 0.45 : 1,
+                      padding: 0,
+                    }}
+                  >
+                    <span
+                      className={`native-bottom-tab-icon${tab.center ? " native-bottom-tab-icon-center" : ""}`}
+                      style={{ display: "inline-flex" }}
+                      aria-hidden="true"
+                    >
+                      {tab.icon}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        ) : null}
+
+        {!useNativeBottomTabs ? (
+          <footer
+            style={{
+              borderTop: `1px solid ${C.border}`,
+              padding: `16px calc(24px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(24px + var(--safe-left))`,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => navigate("/support")}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: C.greenLight,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                Support
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/privacy")}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: C.greenLight,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                Datenschutz
+              </button>
+              {SUPPORT_URL.startsWith("/") || PRIVACY_POLICY_URL.startsWith("/") ? null : (
+                <>
+                  <a href={SUPPORT_URL} target="_blank" rel="noreferrer" style={{ color: C.grayLight, fontSize: 12 }}>
+                    Support URL
+                  </a>
+                  <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" style={{ color: C.grayLight, fontSize: 12 }}>
+                    Privacy URL
+                  </a>
+                </>
+              )}
+            </div>
+            <span
+              style={{
+                fontSize: 11,
+                color: C.grayDark,
+                letterSpacing: "0.5px",
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              ScoutX v1.0
+            </span>
+          </footer>
+        ) : null}
       </div>
     </div>
   );

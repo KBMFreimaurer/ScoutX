@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GhostButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
@@ -99,6 +99,9 @@ export function PlanPage() {
   } = useScoutX();
   const hasManualSelection = Array.isArray(plannedGames) && plannedGames.length > 0;
   const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
+  const useStackedTopActions = usePinnedActionDock;
+  const actionDockRef = useRef(null);
+  const [dockReservePx, setDockReservePx] = useState(null);
   const activeGames = useMemo(() => {
     if (hasManualSelection) {
       return plannedGames;
@@ -309,9 +312,72 @@ export function PlanPage() {
     return activeGames.slice(start, start + PAGE_SIZE);
   }, [activeGames, currentPage, shouldPaginate]);
 
+  useLayoutEffect(() => {
+    if (!usePinnedActionDock || typeof window === "undefined") {
+      setDockReservePx(null);
+      return undefined;
+    }
+
+    const dockNode = actionDockRef.current;
+    if (!dockNode) {
+      return undefined;
+    }
+
+    let frame = null;
+    const updateReserve = () => {
+      const styles = window.getComputedStyle(dockNode);
+      const bottom = Number.parseFloat(styles.bottom || "0") || 0;
+      const height = dockNode.getBoundingClientRect().height || dockNode.offsetHeight || 0;
+      const nextValue = Math.max(0, Math.ceil(bottom + height + 2));
+      setDockReservePx((prev) => (prev === nextValue ? prev : nextValue));
+    };
+
+    const scheduleUpdate = () => {
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        updateReserve();
+      });
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleUpdate) : null;
+    observer?.observe(dockNode);
+
+    return () => {
+      window.removeEventListener("resize", scheduleUpdate);
+      observer?.disconnect();
+      if (frame != null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [usePinnedActionDock, isMobile, activeGames.length]);
+
   return (
-    <div className={`fu${usePinnedActionDock ? " page-with-action-dock" : ""}`}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+    <div
+      className={`fu${usePinnedActionDock ? " page-with-action-dock page-with-action-dock-plan" : ""}`}
+      style={
+        usePinnedActionDock && Number.isFinite(dockReservePx)
+          ? {
+              "--page-dock-reserve": `${dockReservePx}px`,
+              "--page-dock-reserve-native": `${dockReservePx}px`,
+            }
+          : undefined
+      }
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: useStackedTopActions ? "stretch" : "center",
+          flexDirection: useStackedTopActions ? "column" : "row",
+          gap: useStackedTopActions ? 10 : 12,
+          marginBottom: 20,
+          flexWrap: useStackedTopActions ? "nowrap" : "wrap",
+        }}
+      >
         {!usePinnedActionDock ? (
           <GhostButton onClick={onBackGames}>
             <svg
@@ -330,7 +396,7 @@ export function PlanPage() {
           </GhostButton>
         ) : null}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: useStackedTopActions ? "0 0 auto" : 1, minWidth: 0, width: useStackedTopActions ? "100%" : "auto" }}>
           <div
             style={{
               fontFamily:
@@ -360,87 +426,108 @@ export function PlanPage() {
           </div>
         </div>
 
-        <PDFExport
-          games={activeGames}
-          plan={plan}
-          cfg={{
-            ...cfg,
-            kreisLabel: displayKreisLabel || cfg?.kreisLabel || "",
-            jugendLabel: displayJugendLabel || cfg?.jugendLabel || "",
-            fromDate: String(activeHistoryMeta?.fromDate || cfg?.fromDate || ""),
-            toDate: String(activeHistoryMeta?.toDate || cfg?.toDate || ""),
-            startLocationLabel: String(activeHistoryMeta?.startLocationLabel || startLocation?.label || cfg?.startLocationLabel || ""),
-            routeOverview,
-            startLocation,
-            scoutName: effectiveScoutName,
-            kmPauschale: kmPauschaleForPdf,
-            kmOverrides,
-            presenceOverrides: presenceMinutesByGame,
-          }}
-          syncContext={
-            planSyncContext || {
-              source: dataSourceUsed,
-              adapterEndpoint,
-              adapterToken,
-              kreisId,
-              kreisIds,
-              jugendId,
-              fromDate,
-              toDate,
-              teams: activeTeams,
-              turnier: Boolean(jugend?.turnier),
-            }
-          }
-          variant="primary"
-          label="PDF herunterladen"
-          confirmBeforeDownload
-          disabled={!String(plan || "").trim() || activeGames.length === 0 || (Boolean(startLocation) && routeCalculating)}
-          onExportSuccess={() => {
-            setErr("");
-          }}
-          onExportError={(message) => {
-            setErr(`PDF konnte nicht erstellt werden: ${String(message || "Unbekannter Fehler")}`);
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => downloadCalendarIcs(activeGames, cfg)}
-          aria-label="In Kalender exportieren"
-          disabled={activeGames.length === 0}
+        <div
           style={{
-            fontSize: 12,
-            padding: "9px 14px",
-            borderRadius: 10,
-            border: `1px solid ${C.border}`,
-            background: "rgba(255,255,255,0.04)",
-            color: C.gray,
-            fontFamily:
-              "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-            fontWeight: 600,
-            minHeight: 44,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            opacity: activeGames.length === 0 ? 0.5 : 1,
-            cursor: activeGames.length === 0 ? "not-allowed" : "pointer",
+            display: "grid",
+            gridTemplateColumns: useStackedTopActions ? "minmax(0,1fr) minmax(0,1fr)" : "none",
+            gap: 8,
+            width: useStackedTopActions ? "100%" : "auto",
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
+          <PDFExport
+            games={activeGames}
+            plan={plan}
+            cfg={{
+              ...cfg,
+              kreisLabel: displayKreisLabel || cfg?.kreisLabel || "",
+              jugendLabel: displayJugendLabel || cfg?.jugendLabel || "",
+              fromDate: String(activeHistoryMeta?.fromDate || cfg?.fromDate || ""),
+              toDate: String(activeHistoryMeta?.toDate || cfg?.toDate || ""),
+              startLocationLabel: String(activeHistoryMeta?.startLocationLabel || startLocation?.label || cfg?.startLocationLabel || ""),
+              routeOverview,
+              startLocation,
+              scoutName: effectiveScoutName,
+              kmPauschale: kmPauschaleForPdf,
+              kmOverrides,
+              presenceOverrides: presenceMinutesByGame,
+            }}
+            syncContext={
+              planSyncContext || {
+                source: dataSourceUsed,
+                adapterEndpoint,
+                adapterToken,
+                kreisId,
+                kreisIds,
+                jugendId,
+                fromDate,
+                toDate,
+                teams: activeTeams,
+                turnier: Boolean(jugend?.turnier),
+              }
+            }
+            variant="primary"
+            label="PDF herunterladen"
+            confirmBeforeDownload
+            style={
+              useStackedTopActions
+                ? {
+                    width: "100%",
+                    minWidth: 0,
+                    justifyContent: "center",
+                  }
+                : undefined
+            }
+            disabled={!String(plan || "").trim() || activeGames.length === 0 || (Boolean(startLocation) && routeCalculating)}
+            onExportSuccess={() => {
+              setErr("");
+            }}
+            onExportError={(message) => {
+              setErr(`PDF konnte nicht erstellt werden: ${String(message || "Unbekannter Fehler")}`);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => downloadCalendarIcs(activeGames, cfg)}
+            aria-label="In Kalender exportieren"
+            disabled={activeGames.length === 0}
+            style={{
+              fontSize: 12,
+              padding: "9px 14px",
+              borderRadius: 10,
+              border: `1px solid ${C.border}`,
+              background: "rgba(255,255,255,0.04)",
+              color: C.gray,
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              fontWeight: 600,
+              minHeight: 44,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: useStackedTopActions ? "center" : "flex-start",
+              gap: 6,
+              opacity: activeGames.length === 0 ? 0.5 : 1,
+              cursor: activeGames.length === 0 ? "not-allowed" : "pointer",
+              width: useStackedTopActions ? "100%" : "auto",
+              minWidth: useStackedTopActions ? 0 : undefined,
+            }}
           >
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          In Kalender exportieren
-        </button>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            In Kalender exportieren
+          </button>
+        </div>
       </div>
 
       {historyEntries.length > 0 ? (
@@ -764,7 +851,7 @@ export function PlanPage() {
         </div>
       ) : null}
 
-      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`}>
+      <div className={`page-action-dock${usePinnedActionDock ? " page-action-dock-mobile" : ""}`} ref={actionDockRef}>
         <div className="page-action-dock-row">
           <GhostButton onClick={onBackGames} style={{ width: "100%", justifyContent: "center", textAlign: "center" }}>
             Spiele

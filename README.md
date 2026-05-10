@@ -5,7 +5,8 @@ ScoutX ist eine React-SPA für die Konfiguration, Sichtung und Planung von Fußb
 ## Architektur
 
 - Frontend: React 19, Vite, React Router v6
-- Haupt-Routen: `/hub`, `/setup`, `/games`, `/plan`, `/scout-sheet`, `/dashboard`, `/admin`
+- Haupt-Routen: `/hub`, `/setup`, `/games`, `/plan`, `/scout-sheet`, `/dashboard`, `/support`, `/privacy`
+- Admin-Route `/admin` ist nur mit `VITE_ENABLE_ADMIN=true` sichtbar
 - State: `SetupContext`, `GamesContext`, `PlanContext`, `ScoutXProductContext` + `ScoutXContext`
 - Adapter: Node.js-Service unter `adapter-service/server.mjs`
 
@@ -32,8 +33,8 @@ npm run build
 
 - Frontend verwendet standardmäßig `/api/games` (Proxy über Vite/Nginx).
 - Optionales Override: `VITE_ADAPTER_ENDPOINT=https://dein-host/api/games`
-- Standard-Bearer-Token ist fest auf `scoutx-internal-2026` gesetzt.
-- Wenn der Token geändert wird, müssen Frontend (`VITE_ADAPTER_TOKEN`) und Adapter (`ADAPTER_TOKEN`) identisch bleiben.
+- `VITE_ADAPTER_TOKEN` ist optional und sollte nur für interne/staging Zwecke genutzt werden.
+- Keine produktiven Secrets im Frontend-Bundle hinterlegen.
 
 Details: [adapter-service/README.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/adapter-service/README.md)
 
@@ -45,19 +46,16 @@ und gestartet (`prod + adapter`).
 
 Damit ist der Server nicht von einem lokal manuell gestarteten Adapter-Prozess abhängig.
 
-## Google Maps (optional)
+## Google Maps
 
-Ohne API-Key nutzt ScoutX OSRM/Haversine-Fallbacks.
-
-Für Google-Geocoding/Routes:
+- Der Google-API-Key ist zentral im Code hinterlegt (kein `.env`-Override, keine Runtime-Eingabe).
+- Optional kann nur der Strict-Mode konfiguriert werden:
 
 ```bash
-VITE_GOOGLE_MAPS_API_KEY=your-key-here
 VITE_GOOGLE_MAPS_STRICT=false
 ```
 
 - `VITE_GOOGLE_MAPS_STRICT=false` ist der Default.
-- Runtime-Key kann in der Setup-UI lokal gespeichert werden.
 
 ## Docker
 
@@ -65,3 +63,15 @@ VITE_GOOGLE_MAPS_STRICT=false
 docker compose --profile dev up --build
 docker compose --profile prod up --build
 ```
+
+## iOS (Capacitor)
+
+```bash
+# Beispiel für Home-Server-Adapter:
+# VITE_ADAPTER_ENDPOINT=https://dein-homeserver.tld/api/games npm run ios:sync
+npm run ios:sync
+```
+
+- Erstellt das aktuelle Web-Bundle und synchronisiert es in `ios/App/App/public`.
+- Für echte iPhones ohne lokalen Adapter muss `VITE_ADAPTER_ENDPOINT` auf einen erreichbaren Host zeigen.
+- Danach kann der Build über Xcode oder über Build-iOS-Apps-Tools erfolgen.

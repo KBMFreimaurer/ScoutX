@@ -1,8 +1,10 @@
 import { C, card } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
+import { useScrollTapGuard } from "../hooks/useScrollTapGuard";
 
 export function StateSelector({ states, selectedStateCode, onSelect, isMobile }) {
   const safeStates = Array.isArray(states) ? states : [];
+  const { touchProps, wrapOnClick } = useScrollTapGuard();
 
   return (
     <div style={card}>
@@ -36,9 +38,10 @@ export function StateSelector({ states, selectedStateCode, onSelect, isMobile })
               type="button"
               key={state.code}
               className="item-btn"
-              onClick={() => onSelect(state.code)}
+              onClick={wrapOnClick(() => onSelect(state.code))}
               aria-pressed={selected}
               aria-label={`Bundesland ${state.name} auswählen`}
+              {...touchProps}
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,

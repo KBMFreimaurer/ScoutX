@@ -15,6 +15,7 @@ function resolveGitCommit() {
 }
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   define: {
     "globalThis.__SCOUTX_BUILD_ID__": JSON.stringify(resolveGitCommit()),

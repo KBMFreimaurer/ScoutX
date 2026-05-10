@@ -198,6 +198,41 @@ describe("SetupPage", () => {
     expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain('"selectedStateCode":"NW"');
   });
 
+  it("ignoriert persistierte Setup-Auswahl in nativer Runtime", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.setup,
+      JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-05-12",
+        toDate: "2026-05-13",
+      }),
+    );
+    window.localStorage.setItem(
+      STORAGE_KEYS.abrechnungMeta,
+      JSON.stringify({
+        scoutName: "Persistierter Scout",
+        kmPauschale: 0.55,
+      }),
+    );
+
+    const previousCapacitor = window.Capacitor;
+    window.Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "ios",
+    };
+
+    try {
+      renderSetupPage();
+
+      expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toHaveAttribute("aria-pressed", "false");
+      clickNextStep();
+      expect(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i })).toBeDisabled();
+    } finally {
+      window.Capacitor = previousCapacitor;
+    }
+  });
+
   it("setzt den Zeitraum initial von heute bis zum nächsten Sonntag", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 24, 10, 0, 0));
@@ -277,6 +312,18 @@ describe("SetupPage", () => {
 
     expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Scouting-Bis direkt eingeben/i)).not.toBeInTheDocument();
+  });
+
+  it("erlaubt Ruecksprung auf fruehere Schritte ueber die obere Schrittleiste", () => {
+    renderSetupPage();
+    goToStepWithRequiredSelections(4);
+
+    const jumpToBundesland = screen.getByRole("button", { name: /Schritt Bundesland öffnen/i });
+    expect(jumpToBundesland).toBeEnabled();
+    fireEvent.click(jumpToBundesland);
+
+    expect(screen.getByRole("button", { name: /Schritt Bundesland nicht verfügbar/i })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toBeInTheDocument();
   });
 
   it("erlaubt Leerzeichen im Scout-Namen", () => {

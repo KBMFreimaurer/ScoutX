@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "ios:sync": "npm run build && npx cap sync ios",
+    "ios:open": "npx cap open ios",
     "preview": "vite preview",
     "adapter:dev": "node adapter-service/server.mjs",
     "adapter:refresh": "curl -X POST http://127.0.0.1:8787/api/admin/refresh",
@@ -21,6 +23,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/ios": "^8.3.1",
+    "@capacitor/share": "^8.0.1",
     "better-sqlite3": "^12.9.0",
     "jspdf": "^4.2.1",
     "react": "^19.0.0",
@@ -29,10 +37,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@playwright/test": "^1.54.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@playwright/test": "^1.54.2",
     "eslint": "^9.22.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",

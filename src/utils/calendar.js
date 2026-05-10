@@ -78,15 +78,7 @@ export function buildScoutCalendarIcs(games, cfg = {}) {
 export function downloadCalendarIcs(games, cfg = {}) {
   const icsContent = buildScoutCalendarIcs(games, cfg);
   const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
   const fileName = `ScoutX-Kalender-${new Date().toISOString().slice(0, 10)}.ics`;
-
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  void shareOrDownloadBlob(blob, fileName, "ScoutX Kalender exportieren");
 }
+import { shareOrDownloadBlob } from "../native/share";

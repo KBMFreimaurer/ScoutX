@@ -6,6 +6,7 @@ import { STORAGE_KEYS } from "../config/storage";
 import { ADAPTER_AUTH_TOKEN, ADAPTER_ENDPOINT } from "../config/adapter";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
 import { getRangeToNextSunday, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
+import { isNativeCapacitorRuntime } from "../native/deepLinks";
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
@@ -236,6 +237,8 @@ function readPersistedSetup(fallback) {
 }
 
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
+  const persistSetupSelection = !isNativeCapacitorRuntime();
+
   const [setupDefaults] = useState(() => {
     const todayIso = toIsoDate(new Date());
     const initialRange = getRangeToNextSunday(todayIso);
@@ -253,7 +256,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       todayIso,
     };
 
-    return readPersistedSetup(fallback);
+    return persistSetupSelection ? readPersistedSetup(fallback) : fallback;
   });
 
   const width = useWindowWidth();
@@ -283,6 +286,10 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [favoriteDraft, setFavoriteDraft] = useState("");
   const [err, setErr] = useState("");
   const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => {
+    if (!persistSetupSelection) {
+      return { scoutName: "", kmPauschale: 0.3 };
+    }
+
     try {
       const raw = window.localStorage.getItem(STORAGE_KEYS.abrechnungMeta);
       if (raw) {
@@ -298,17 +305,22 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     return { scoutName: "", kmPauschale: 0.3 };
   });
 
-  const setAbrechnungMeta = useCallback((partial) => {
-    setAbrechnungMetaRaw((prev) => {
-      const next = { ...prev, ...partial };
-      try {
-        window.localStorage.setItem(STORAGE_KEYS.abrechnungMeta, JSON.stringify(next));
-      } catch {
-        // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
-      }
-      return next;
-    });
-  }, []);
+  const setAbrechnungMeta = useCallback(
+    (partial) => {
+      setAbrechnungMetaRaw((prev) => {
+        const next = { ...prev, ...partial };
+        if (persistSetupSelection) {
+          try {
+            window.localStorage.setItem(STORAGE_KEYS.abrechnungMeta, JSON.stringify(next));
+          } catch {
+            // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
+          }
+        }
+        return next;
+      });
+    },
+    [persistSetupSelection],
+  );
 
   const kreisId = useMemo(() => (Array.isArray(kreisIds) && kreisIds.length > 0 ? kreisIds[0] : ""), [kreisIds]);
   const selectedState = useMemo(() => getStateByCode(selectedStateCode), [selectedStateCode]);
@@ -335,6 +347,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const clearErr = useCallback(() => setErr(""), []);
 
   useEffect(() => {
+    if (!persistSetupSelection) {
+      return;
+    }
     if (typeof window === "undefined") {
       return;
     }
@@ -358,7 +373,32 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     } catch {
       // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
     }
-  }, [kreisIds, kreisId, selectedStateCode, jugendId, selectedTeams, fromDate, toDate, jugendSubLevels, startLocation, favoriteTeams]);
+  }, [
+    persistSetupSelection,
+    kreisIds,
+    kreisId,
+    selectedStateCode,
+    jugendId,
+    selectedTeams,
+    fromDate,
+    toDate,
+    jugendSubLevels,
+    startLocation,
+    favoriteTeams,
+  ]);
+
+  useEffect(() => {
+    if (persistSetupSelection || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.removeItem(STORAGE_KEYS.setup);
+      window.localStorage.removeItem(STORAGE_KEYS.abrechnungMeta);
+    } catch {
+      // localStorage ist optional.
+    }
+  }, [persistSetupSelection]);
 
   const onSelectState = useCallback((code) => {
     const nextCode = String(code || "").trim().toUpperCase();

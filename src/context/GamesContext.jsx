@@ -1,13 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
-import { getRegionById } from "../data/germany_regions";
+import { GERMANY_REGIONS, getRegionById, inferStateCodeFromRegionIds } from "../data/germany_regions";
 import { fetchGamesWithProviders } from "../services/dataProvider";
 import { fetchDrivingRoute, geocodeAddress, hasRoutableVenueAddress, haversineDistance, isGoogleRoutingStrictMode } from "../utils/geo";
 import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const LEGACY_NRW_REGION_FALLBACKS = {
+  duesseldorf: { searchName: "Düsseldorf", shortCode: "DU", areaKeywords: ["dusseldorf", "duesseldorf"] },
+  duisburg: { searchName: "Duisburg", shortCode: "DUI", areaKeywords: ["duisburg", "mulheim", "dinslak"] },
+  essen: { searchName: "Essen", shortCode: "ES", areaKeywords: ["essen"] },
+  krefeld: { searchName: "Krefeld", shortCode: "KR", areaKeywords: ["krefeld", "kempen"] },
+  moenchen: { searchName: "Mönchengladbach", shortCode: "MG", areaKeywords: ["monchengladbach", "moenchengladbach", "viersen"] },
+  neuss: { searchName: "Neuss/Grevenbroich", shortCode: "NE", areaKeywords: ["neuss", "grevenbroich"] },
+  oberhausen: { searchName: "Oberhausen", shortCode: "OB", areaKeywords: ["oberhausen", "bottrop"] },
+  viersen: { searchName: "Viersen", shortCode: "VIE", areaKeywords: ["viersen", "monchengladbach", "moenchengladbach"] },
+  wesel: { searchName: "Wesel", shortCode: "WES", areaKeywords: ["wesel", "moers", "rees", "bocholt"] },
+  kleve: { searchName: "Kleve/Geldern", shortCode: "KLE", areaKeywords: ["kleve", "geldern", "rees", "bocholt"] },
+};
 
 function toIsoDate(value) {
   if (value instanceof Date) {
@@ -47,6 +59,52 @@ function normalizeLookup(value) {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function resolveRegionByLooseId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const direct = getRegionById(raw);
+  if (direct) {
+    return direct;
+  }
+
+  const lookup = normalizeLookup(raw);
+  if (!lookup) {
+    return null;
+  }
+
+  return (
+    GERMANY_REGIONS.find((region) => {
+      const candidates = [region?.id, region?.legacyId, region?.shortCode, region?.kurz, region?.name, region?.displayName];
+      return candidates.some((candidate) => normalizeLookup(candidate) === lookup);
+    }) || null
+  );
+}
+
+function buildLegacyMappingFallback(kreisId, stateCode, regionName, regionShortCode) {
+  const key = String(kreisId || "").trim().toLowerCase();
+  const legacyNw = LEGACY_NRW_REGION_FALLBACKS[key];
+  if (!legacyNw || String(stateCode || "").trim().toUpperCase() !== "NW") {
+    return null;
+  }
+
+  return {
+    searchName: legacyNw.searchName,
+    verband: "FVN",
+    verbandLabel: "Fußballverband Niederrhein",
+    mandant: "22",
+    kreis: legacyNw.searchName,
+    region: "",
+    areaKeywords: legacyNw.areaKeywords,
+    allowRegionalFallback: false,
+    stateCode: "NW",
+    regionName: String(regionName || legacyNw.searchName).trim(),
+    regionShortCode: String(regionShortCode || legacyNw.shortCode).trim(),
+  };
 }
 
 function matchesFavorite(game, favoriteTeams) {
@@ -445,6 +503,7 @@ export function GamesProvider({ children }) {
     startLocation,
     setErr,
     setTeamValidation,
+    selectedStateCode,
   } = setup;
 
   const [games, setGames] = useState([]);
@@ -628,15 +687,23 @@ export function GamesProvider({ children }) {
 
     try {
       const providerRuns = await mapWithConcurrency(requestedKreise, 2, async (selectedKreisId) => {
-          const selectedRegion = getRegionById(selectedKreisId);
+          const selectedRegion = resolveRegionByLooseId(selectedKreisId);
+          const inferredStateCode = inferStateCodeFromRegionIds([selectedKreisId, ...requestedKreise], selectedStateCode || "");
+          const effectiveStateCode = String(selectedRegion?.stateCode || inferredStateCode || "").trim().toUpperCase();
+          const effectiveRegionName = String(selectedRegion?.displayName || selectedRegion?.name || selectedKreisId || "").trim();
+          const effectiveRegionShortCode = String(selectedRegion?.shortCode || selectedRegion?.kurz || "").trim();
+          const effectiveMapping =
+            selectedRegion?.fussballDeMapping ||
+            buildLegacyMappingFallback(selectedKreisId, effectiveStateCode, effectiveRegionName, effectiveRegionShortCode);
+
           try {
             const result = await fetchGamesWithProviders({
               mode: "adapter",
               kreisId: selectedKreisId,
-              stateCode: selectedRegion?.stateCode || "",
-              regionName: selectedRegion?.displayName || selectedRegion?.name || "",
-              regionShortCode: selectedRegion?.shortCode || selectedRegion?.kurz || "",
-              fussballDeMapping: selectedRegion?.fussballDeMapping || null,
+              stateCode: effectiveStateCode,
+              regionName: effectiveRegionName,
+              regionShortCode: effectiveRegionShortCode,
+              fussballDeMapping: effectiveMapping,
               jugendId,
               fromDate,
               toDate,
@@ -739,8 +806,12 @@ export function GamesProvider({ children }) {
       if (buildRunRef.current !== runId) {
         return;
       }
+      const rawMessage = String(error?.message || "Unbekannter Fehler");
+      const normalizedMessage = /did not match the expected pattern/i.test(rawMessage)
+        ? "Adapter-Antwort konnte nicht verarbeitet werden. Bitte iOS-Adapter-Endpoint prüfen (z. B. http://localhost:8787/api/games)."
+        : rawMessage;
       setEnrichingGames(false);
-      setErr(`Spieldaten konnten nicht geladen werden: ${error.message}`);
+      setErr(`Spieldaten konnten nicht geladen werden: ${normalizedMessage}`);
     } finally {
       if (buildRunRef.current === runId) {
         setLoadingGames(false);
@@ -759,6 +830,7 @@ export function GamesProvider({ children }) {
     startLocation,
     setErr,
     setTeamValidation,
+    selectedStateCode,
     navigate,
   ]);
 

@@ -300,7 +300,8 @@ describe("ScoutX Integration", () => {
 
     await screen.findByRole("heading", { name: /Scouting-Plan konfigurieren/i }, { timeout: 5000 });
 
-    fireEvent.click(screen.getByRole("button", { name: /Schritt Plan/i }));
+    const planStepButtons = screen.getAllByRole("button", { name: /Schritt Plan/i });
+    fireEvent.click(planStepButtons[0]);
     await screen.findByText(/Plan-Historie/i, { timeout: 5000 });
 
     fireEvent.click(screen.getByRole("button", { name: /Historischen Plan .* öffnen/i }));

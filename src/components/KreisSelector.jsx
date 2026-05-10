@@ -1,8 +1,10 @@
 import { C, card } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
+import { useScrollTapGuard } from "../hooks/useScrollTapGuard";
 
 export function KreisSelector({ kreise, kreisIds, onSelect, isMobile, stateName = "", disabled = false }) {
   const selectedIds = Array.isArray(kreisIds) ? kreisIds : [];
+  const { touchProps, wrapOnClick } = useScrollTapGuard();
 
   return (
     <div style={card}>
@@ -44,9 +46,10 @@ export function KreisSelector({ kreise, kreisIds, onSelect, isMobile, stateName 
               key={kreis.id}
               disabled={disabled || !kreis.enabled}
               className="item-btn"
-              onClick={() => onSelect(kreis.id)}
+              onClick={wrapOnClick(() => onSelect(kreis.id))}
               aria-pressed={selected}
               aria-label={`Region/Kreis ${label} ${selected ? "abwählen" : "auswählen"}`}
+              {...touchProps}
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,

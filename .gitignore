@@ -9,3 +9,7 @@ adapter-service/imports/*
 .env.local
 .vitest-localstorage*
 test-results/
+adapter-service/data/fussballde.fetch-state.json
+adapter-service/data/games.store.db
+ios/build/
+ios/build-device/

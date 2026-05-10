@@ -1,6 +1,8 @@
 import { CONTENT_TOP, sortGamesByDateTime } from "./layout";
 import { buildFileName } from "./styles";
 import { calculateDirectStartRoutes, calculateRouteWithDriving } from "../../utils/geo";
+import { isNativeCapacitorRuntime } from "../../native/deepLinks";
+import { shareOrDownloadBlob } from "../../native/share";
 import { drawGamesOverviewPage, drawFahrtkostenPage, drawHeaderFooter } from "./sections";
 import {
   applyAuthoritativeGameCorrections,
@@ -16,6 +18,24 @@ const ROUTE_REFRESH_TIMEOUT_MS = Number(import.meta.env?.VITE_PDF_ROUTE_REFRESH_
 const AUTHORITATIVE_SYNC_TIMEOUT_MS = Math.max(2000, Number(import.meta.env?.VITE_PDF_SYNC_TIMEOUT_MS || 8000));
 const activeBlobUrls = new Set();
 let jsPdfCtorPromise = null;
+
+export function isIosNativeRuntime() {
+  if (!isNativeCapacitorRuntime()) {
+    return false;
+  }
+  return String(globalThis?.window?.Capacitor?.getPlatform?.() || "") === "ios";
+}
+
+export function resolvePdfDeliveryMode(options = null) {
+  const previewRequested = String(options?.mode || "").toLowerCase() === "preview";
+  if (previewRequested && !isIosNativeRuntime()) {
+    return "preview";
+  }
+  if (isIosNativeRuntime()) {
+    return "native-share";
+  }
+  return "download";
+}
 
 function withTimeout(promise, timeoutMs, fallbackValue) {
   const safeTimeout = Number(timeoutMs);
@@ -187,18 +207,30 @@ export async function enrichPdfRouteData(cfg, games) {
 
 export async function openScoutPdf(games, _plan, cfg, popupWindow = null, syncContext = null, options = null) {
   try {
-    const previewMode = String(options?.mode || "").toLowerCase() === "preview";
+    const deliveryMode = resolvePdfDeliveryMode(options);
     const prepared = await prepareGamesForPdf(games, syncContext);
     const JsPdfCtor = await loadJsPdfCtor();
     const routeEnrichedCfg = await enrichPdfRouteData(cfg, prepared.games);
     const doc = buildPdf(JsPdfCtor, prepared.games, routeEnrichedCfg);
     const blob = doc.output("blob");
-    const blobUrl = URL.createObjectURL(blob);
     const fileName = buildFileName(routeEnrichedCfg);
 
-    trackBlobUrl(blobUrl, previewMode ? PREVIEW_URL_REVOKE_DELAY_MS : URL_REVOKE_DELAY_MS);
+    if (deliveryMode === "native-share") {
+      const shareResult = await shareOrDownloadBlob(blob, fileName, "ScoutX PDF exportieren");
+      if (!shareResult?.ok) {
+        return {
+          ok: false,
+          fallbackDownloaded: Boolean(shareResult?.fallbackUsed),
+          error: shareResult?.error || "PDF konnte nicht geteilt werden.",
+        };
+      }
+      return { ok: true, correctedCount: prepared.correctedCount, delivery: shareResult.method || "share" };
+    }
 
-    if (previewMode) {
+    const blobUrl = URL.createObjectURL(blob);
+    trackBlobUrl(blobUrl, deliveryMode === "preview" ? PREVIEW_URL_REVOKE_DELAY_MS : URL_REVOKE_DELAY_MS);
+
+    if (deliveryMode === "preview") {
       return {
         ok: true,
         correctedCount: prepared.correctedCount,

@@ -7,8 +7,9 @@ import { KreisSelector } from "../components/KreisSelector";
 import { StateSelector } from "../components/StateSelector";
 import { SectionHeader } from "../components/SectionHeader";
 import { useScoutX } from "../context/ScoutXContext";
+import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { C, card, inp, lbl, secH } from "../styles/theme";
-import { clearRuntimeGoogleMapsApiKey, getGoogleRoutingConfig, setRuntimeGoogleMapsApiKey } from "../utils/geo";
+import { getGoogleRoutingConfig } from "../utils/geo";
 
 const SETUP_STEPS = [
   { id: 1, title: "Bundesland" },
@@ -117,11 +118,11 @@ export function SetupPage() {
   } = useScoutX();
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [googleStatusVersion, setGoogleStatusVersion] = useState(0);
-  const [googleKeyDraft, setGoogleKeyDraft] = useState("");
-  const [googleKeyNotice, setGoogleKeyNotice] = useState("");
 
   const googleRouting = getGoogleRoutingConfig();
+  const isNativeRuntime = isNativeCapacitorRuntime();
+  const usePinnedActionBar = isMobile || isNativeRuntime;
+  const useNativeTabOffset = isNativeRuntime;
   const totalSteps = SETUP_STEPS.length;
   const selectedKreise = useMemo(() => availableRegions.filter((item) => (Array.isArray(kreisIds) ? kreisIds : []).includes(item.id)), [
     availableRegions,
@@ -185,19 +186,6 @@ export function SetupPage() {
     onUseCurrentLocation();
   };
 
-  const onSaveRuntimeGoogleKey = () => {
-    const ok = setRuntimeGoogleMapsApiKey(googleKeyDraft);
-    setGoogleKeyDraft("");
-    setGoogleKeyNotice(ok ? "API-Key lokal im Browser gespeichert." : "Bitte einen gültigen API-Key eintragen.");
-    setGoogleStatusVersion((value) => value + 1);
-  };
-
-  const onClearRuntimeGoogleKey = () => {
-    clearRuntimeGoogleMapsApiKey();
-    setGoogleKeyNotice("Lokal gespeicherter API-Key entfernt.");
-    setGoogleStatusVersion((value) => value + 1);
-  };
-
   const onBackStep = () => {
     setCurrentStep((prev) => Math.max(1, prev - 1));
   };
@@ -207,6 +195,14 @@ export function SetupPage() {
       return;
     }
     setCurrentStep((prev) => Math.min(totalSteps, prev + 1));
+  };
+
+  const onJumpToStep = (targetStep) => {
+    const numericStep = Number(targetStep);
+    if (!Number.isFinite(numericStep) || numericStep >= currentStep || numericStep < 1) {
+      return;
+    }
+    setCurrentStep(numericStep);
   };
 
   const renderStartpunktCard = () => (
@@ -261,102 +257,28 @@ export function SetupPage() {
           {startLocation?.label ? ` · ${startLocation.label}` : ""}
         </div>
         <div
-          key={googleStatusVersion}
           style={{
             marginTop: 8,
             borderRadius: 8,
-            border: `1px solid ${googleRouting.googleConfigured ? C.greenBorder : "rgba(251,191,36,0.2)"}`,
-            background: googleRouting.googleConfigured ? C.greenDim : C.warnDim,
+            border: `1px solid ${C.greenBorder}`,
+            background: C.greenDim,
             padding: "8px 10px",
             fontSize: 11,
             lineHeight: 1.5,
-            color: googleRouting.googleConfigured ? C.grayLight : "#fcd34d",
+            color: C.grayLight,
           }}
         >
-          <strong style={{ color: googleRouting.googleConfigured ? C.greenLight : C.warn }}>
-            Routen-API: {googleRouting.googleConfigured ? "Google Maps aktiv" : "Google Maps API-Key fehlt"}
-          </strong>
+          <strong style={{ color: C.greenLight }}>Routen-API: Google Maps aktiv</strong>
+          <div>Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet.</div>
           <div>
-            {googleRouting.googleConfigured
-              ? "Entfernungen für Route/Fahrtkosten werden über Google Routes API berechnet."
-              : `Für exakte Fahrtkosten bitte ${googleRouting.keyEnvVar} in .env.local setzen und App neu starten.`}
+            Provider: <code>{googleRouting.routeProvider}</code>
+            {googleRouting.strictActive
+              ? " · Strict aktiv"
+              : googleRouting.strictRequested
+                ? " · Strict angefordert"
+                : ""}
+            {googleRouting.keySource ? ` · Key-Quelle: ${googleRouting.keySource}` : ""}
           </div>
-          {!googleRouting.googleConfigured ? (
-            <div style={{ marginTop: 6 }}>
-              <div>
-                Setup: <code>VITE_GOOGLE_MAPS_API_KEY=...</code> · optional <code>VITE_GOOGLE_MAPS_STRICT=true</code> ·{" "}
-                <a
-                  href="https://console.cloud.google.com/apis/credentials"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: C.warn, textDecoration: "underline" }}
-                >
-                  Google Cloud Console
-                </a>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-                <input
-                  type="password"
-                  value={googleKeyDraft}
-                  onChange={(event) => setGoogleKeyDraft(event.target.value)}
-                  placeholder="Google API-Key lokal speichern"
-                  style={{
-                    ...inp,
-                    flex: 1,
-                    minWidth: 210,
-                    height: 34,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={onSaveRuntimeGoogleKey}
-                  style={{
-                    ...inp,
-                    width: "auto",
-                    minWidth: 140,
-                    height: 34,
-                    padding: "6px 10px",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  API-Key speichern
-                </button>
-              </div>
-              {googleKeyNotice ? <div style={{ marginTop: 6, color: C.grayLight }}>{googleKeyNotice}</div> : null}
-            </div>
-          ) : (
-            <div>
-              Provider: <code>{googleRouting.routeProvider}</code>
-              {googleRouting.strictActive
-                ? " · Strict aktiv"
-                : googleRouting.strictRequested
-                  ? " · Strict angefordert"
-                  : ""}
-              {googleRouting.keySource === "runtime" ? " · Key lokal gespeichert" : ""}
-              {googleRouting.keySource === "env" ? " · Key via ENV" : ""}
-              {googleRouting.keySource === "runtime" ? (
-                <button
-                  type="button"
-                  onClick={onClearRuntimeGoogleKey}
-                  style={{
-                    marginLeft: 10,
-                    border: "none",
-                    background: "transparent",
-                    color: C.grayLight,
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                    fontSize: 11,
-                    padding: 0,
-                  }}
-                >
-                  lokalen Key entfernen
-                </button>
-              ) : null}
-            </div>
-          )}
         </div>
         {locationError ? <div style={{ marginTop: 6, fontSize: 12, color: "#fca5a5" }}>{locationError}</div> : null}
         {hasLocation ? (
@@ -498,7 +420,7 @@ export function SetupPage() {
   };
 
   return (
-    <div className="fu">
+    <div className={`setup-screen${usePinnedActionBar ? " setup-screen-mobile" : ""}`}>
       <header className="setup-exec-head">
         <div>
           <span className="setup-exec-eyebrow">Systemkonfiguration</span>
@@ -517,22 +439,36 @@ export function SetupPage() {
         {SETUP_STEPS.map((step) => {
           const isActive = step.id === currentStep;
           const isDone = step.id < currentStep || (step.id === currentStep && stepCompletionMap[step.id]);
+          const canJumpBack = step.id < currentStep;
           const className = `setup-wizard-chip${isActive ? " active" : ""}${isDone ? " done" : ""}`;
 
           return (
-            <div key={step.id} role="listitem" className={className}>
+            <button
+              type="button"
+              key={step.id}
+              className={className}
+              onClick={() => onJumpToStep(step.id)}
+              disabled={!canJumpBack}
+              aria-label={`Schritt ${step.title}${canJumpBack ? " öffnen" : " nicht verfügbar"}`}
+            >
               <span className="setup-wizard-chip-num">{String(step.id).padStart(2, "0")}</span>
               <span className="setup-wizard-chip-title">{step.title}</span>
-            </div>
+            </button>
           );
         })}
       </div>
 
       <div className="setup-exec-grid">
-        <div className="setup-wizard-page">{renderCurrentStep()}</div>
+        <div className="setup-wizard-page">
+          <div className="setup-step-fill">{renderCurrentStep()}</div>
+        </div>
       </div>
 
-      <div className="setup-action-bar">
+      {useNativeTabOffset ? <div className="setup-action-gap-guard" aria-hidden="true" /> : null}
+
+      <div
+        className={`setup-action-bar${usePinnedActionBar ? " setup-action-bar-mobile" : ""}${useNativeTabOffset ? " setup-action-bar-native-tabs" : ""}`}
+      >
         <div className="setup-action-meta">
           <span className="setup-action-eyebrow">
             Schritt {currentStep} von {totalSteps}

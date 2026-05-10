@@ -1,5 +1,6 @@
 import { C, card } from "../styles/theme";
 import { SectionHeader } from "./SectionHeader";
+import { useScrollTapGuard } from "../hooks/useScrollTapGuard";
 
 export function AgeGroupSelector({
   jugendKlassen,
@@ -12,6 +13,7 @@ export function AgeGroupSelector({
   onClearSubLevels,
 }) {
   const showSubLevelControls = Boolean(jugendId) && String(jugend?.id || "").toLowerCase() !== "bambini";
+  const { touchProps, wrapOnClick } = useScrollTapGuard();
 
   return (
     <div style={card}>
@@ -25,9 +27,10 @@ export function AgeGroupSelector({
               type="button"
               key={item.id}
               className="item-btn"
-              onClick={() => onSelect(item.id)}
+              onClick={wrapOnClick(() => onSelect(item.id))}
               aria-pressed={selected}
               aria-label={`${item.label} auswählen`}
+              {...touchProps}
               style={{
                 padding: "8px 14px",
                 borderRadius: 10,
@@ -98,9 +101,10 @@ export function AgeGroupSelector({
                 <button
                   type="button"
                   key={subLevel}
-                  onClick={() => onToggleSubLevel?.(subLevel)}
+                  onClick={wrapOnClick(() => onToggleSubLevel?.(subLevel))}
                   aria-pressed={selected}
                   aria-label={`${subLevel} auswählen`}
+                  {...touchProps}
                   style={{
                     border: `1px solid ${selected ? C.greenBorder : C.border}`,
                     background: selected ? C.greenDim : "rgba(255,255,255,0.03)",

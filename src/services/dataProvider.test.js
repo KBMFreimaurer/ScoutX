@@ -433,6 +433,167 @@ describe("data provider", () => {
     ]);
   });
 
+  it("probiert unter iOS-Capacitor bei /api/games zuerst lokale Adapter-Hosts", async () => {
+    const previousCapacitor = window.Capacitor;
+    window.Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "ios",
+    };
+
+    const fetchMock = vi.fn(async (input) => {
+      const url = String(input);
+      if (url === "http://localhost:8787/api/games") {
+        throw new TypeError("Failed to fetch");
+      }
+      if (url === "http://127.0.0.1:8787/api/games") {
+        return {
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              games: [
+                {
+                  date: "2026-05-01",
+                  time: "12:30",
+                  home: "Team Native X",
+                  away: "Team Native Y",
+                  venue: "Sportpark",
+                  km: 14,
+                  kreisId: "duesseldorf",
+                  jugendId: "e-jugend",
+                },
+              ],
+            }),
+        };
+      }
+      return {
+        ok: false,
+        status: 404,
+        text: async () => "",
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-05-01",
+        toDate: "2026-05-07",
+        teams: ["Team Native X", "Team Native Y"],
+        uploadedGames: [],
+        adapterEndpoint: "/api/games",
+        turnier: false,
+      });
+
+      expect(result.source).toBe("adapter");
+      expect(result.games).toHaveLength(1);
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+        "http://localhost:8787/api/games",
+        "http://127.0.0.1:8787/api/games",
+      ]);
+    } finally {
+      window.Capacitor = previousCapacitor;
+    }
+  });
+
+  it("liefert bei identischem Adapter-Input auf Web und iOS das gleiche fachliche Ergebnis", async () => {
+    const previousCapacitor = window.Capacitor;
+
+    const adapterPayload = {
+      games: [
+        {
+          date: "2026-05-02",
+          time: "11:15",
+          home: "MSV Duisburg U12",
+          away: "Rot-Weiss Oberhausen U12",
+          venue: "Sportpark Mitte",
+          km: 9,
+          kreisId: "duisburg",
+          jugendId: "d-jugend",
+          priority: 4,
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => adapterPayload,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const commonParams = {
+      mode: "adapter",
+      kreisId: "duisburg",
+      stateCode: "NW",
+      regionName: "Duisburg",
+      regionShortCode: "DUI",
+      fussballDeMapping: { searchName: "Duisburg", verband: "FVN", kreis: "Duisburg" },
+      jugendId: "d-jugend",
+      fromDate: "2026-05-01",
+      toDate: "2026-05-07",
+      teams: ["MSV Duisburg (U)"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    };
+
+    try {
+      window.Capacitor = undefined;
+      const webResult = await fetchGamesWithProviders(commonParams);
+
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => "ios",
+      };
+      const iosResult = await fetchGamesWithProviders(commonParams);
+
+      const normalize = (games) =>
+        games.map((game) => ({
+          date: game.date,
+          time: game.time,
+          home: game.home,
+          away: game.away,
+          venue: game.venue,
+          kreisId: game.kreisId,
+          jugendId: game.jugendId,
+          priority: game.priority,
+          selectedTeamMatch: Boolean(game.selectedTeamMatch),
+        }));
+
+      expect(webResult.source).toBe("adapter");
+      expect(iosResult.source).toBe("adapter");
+      expect(normalize(iosResult.games)).toEqual(normalize(webResult.games));
+    } finally {
+      window.Capacitor = previousCapacitor;
+    }
+  });
+
+  it("liefert klare Meldung wenn Adapter statt JSON HTML/Text antwortet", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => "<html><body>Bad Gateway</body></html>",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duesseldorf",
+        jugendId: "e-jugend",
+        fromDate: "2026-05-01",
+        toDate: "2026-05-07",
+        teams: [],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+        turnier: false,
+        retryDelaysMs: [],
+      }),
+    ).rejects.toThrow("Adapter lieferte kein gültiges JSON");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("returns a timeout error when adapter request aborts", async () => {
     const abortError = new Error("aborted");
     abortError.name = "AbortError";
