@@ -6,7 +6,6 @@ import { STORAGE_KEYS } from "../config/storage";
 import { ADAPTER_AUTH_TOKEN, ADAPTER_ENDPOINT } from "../config/adapter";
 import { geocodeAddress, reverseGeocode } from "../utils/geo";
 import { getRangeToNextSunday, normalizeAdapterEndpoint, normalizeTeamParameters } from "./shared";
-import { isNativeCapacitorRuntime } from "../native/deepLinks";
 
 const SetupContext = createContext(null);
 const ROMAN_SUBLEVELS = ["I", "II", "III", "IV"];
@@ -166,79 +165,7 @@ function buildCurrentScoutingRange() {
   return getRangeToNextSunday(toIsoDate(new Date()));
 }
 
-function isBeforeDay(left, right) {
-  const leftDate = parseIsoDate(left);
-  const rightDate = parseIsoDate(right);
-  if (!leftDate || !rightDate) {
-    return false;
-  }
-  return leftDate.getTime() < rightDate.getTime();
-}
-
-function normalizeStartLocation(value) {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const lat = Number(value.lat);
-  const lon = Number(value.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return null;
-  }
-  return {
-    lat,
-    lon,
-    label: String(value.label || `Startpunkt (${lat.toFixed(4)}, ${lon.toFixed(4)})`).trim(),
-  };
-}
-
-function readPersistedSetup(fallback) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEYS.setup);
-    if (!raw) {
-      return fallback;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
-      return fallback;
-    }
-
-    const fromParsed = parseIsoDate(parsed.fromDate);
-    const toParsed = parseIsoDate(parsed.toDate);
-    const parsedFromDate = fromParsed ? toIsoDate(fromParsed) : "";
-    const hasCurrentPersistedFrom = Boolean(parsedFromDate && !isBeforeDay(parsedFromDate, fallback.fromDate));
-    const safeFromDate = hasCurrentPersistedFrom ? parsedFromDate : fallback.fromDate;
-    const defaultToDate = getRangeToNextSunday(safeFromDate).toDate;
-    const parsedToDate = toParsed ? toIsoDate(toParsed) : "";
-    const safeToDate =
-      hasCurrentPersistedFrom && parsedToDate && !isBeforeDay(parsedToDate, safeFromDate)
-        ? parsedToDate
-        : defaultToDate;
-
-    return {
-      ...fallback,
-      kreisIds: normalizeKreisIds(parsed.kreisIds || parsed.kreisId || parsed.selectedRegion),
-      kreisId: String(parsed.kreisId || parsed.selectedRegion || "").trim(),
-      selectedStateCode: normalizeStateCode(parsed.selectedStateCode || parsed.stateCode, parsed.kreisIds || parsed.kreisId || parsed.selectedRegion),
-      jugendId: JUGEND_KLASSEN.some((item) => item.id === parsed.jugendId) ? parsed.jugendId : "",
-      selTeams: normalizeTeamParameters(parsed.selTeams),
-      fromDate: safeFromDate,
-      toDate: safeToDate,
-      jugendSubLevels: normalizeTeamParameters(parsed.jugendSubLevels),
-      startLocation: normalizeStartLocation(parsed.startLocation),
-      favorites: normalizeTeamParameters(parsed.favorites),
-    };
-  } catch {
-    return fallback;
-  }
-}
-
 export function SetupProvider({ children, defaultAdapterEndpoint }) {
-  const persistSetupSelection = !isNativeCapacitorRuntime();
-
   const [setupDefaults] = useState(() => {
     const todayIso = toIsoDate(new Date());
     const initialRange = getRangeToNextSunday(todayIso);
@@ -256,7 +183,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       todayIso,
     };
 
-    return persistSetupSelection ? readPersistedSetup(fallback) : fallback;
+    return fallback;
   });
 
   const width = useWindowWidth();
@@ -285,42 +212,11 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [favoriteTeams, setFavoriteTeams] = useState(() => normalizeTeamParameters(setupDefaults.favorites));
   const [favoriteDraft, setFavoriteDraft] = useState("");
   const [err, setErr] = useState("");
-  const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => {
-    if (!persistSetupSelection) {
-      return { scoutName: "", kmPauschale: 0.3 };
-    }
+  const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => ({ scoutName: "", kmPauschale: 0.3 }));
 
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEYS.abrechnungMeta);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          scoutName: String(parsed?.scoutName || "").trim(),
-          kmPauschale: Number(parsed?.kmPauschale) > 0 ? Number(parsed.kmPauschale) : 0.3,
-        };
-      }
-    } catch {
-      // localStorage kann im Browser-Kontext blockiert sein.
-    }
-    return { scoutName: "", kmPauschale: 0.3 };
-  });
-
-  const setAbrechnungMeta = useCallback(
-    (partial) => {
-      setAbrechnungMetaRaw((prev) => {
-        const next = { ...prev, ...partial };
-        if (persistSetupSelection) {
-          try {
-            window.localStorage.setItem(STORAGE_KEYS.abrechnungMeta, JSON.stringify(next));
-          } catch {
-            // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
-          }
-        }
-        return next;
-      });
-    },
-    [persistSetupSelection],
-  );
+  const setAbrechnungMeta = useCallback((partial) => {
+    setAbrechnungMetaRaw((prev) => ({ ...prev, ...partial }));
+  }, []);
 
   const kreisId = useMemo(() => (Array.isArray(kreisIds) && kreisIds.length > 0 ? kreisIds[0] : ""), [kreisIds]);
   const selectedState = useMemo(() => getStateByCode(selectedStateCode), [selectedStateCode]);
@@ -347,48 +243,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const clearErr = useCallback(() => setErr(""), []);
 
   useEffect(() => {
-    if (!persistSetupSelection) {
-      return;
-    }
     if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEYS.setup,
-        JSON.stringify({
-          kreisIds,
-          kreisId,
-          selectedStateCode,
-          jugendId,
-          selTeams: selectedTeams,
-          fromDate,
-          toDate,
-          jugendSubLevels,
-          startLocation,
-          favorites: favoriteTeams,
-        }),
-      );
-    } catch {
-      // Persistenzfehler sollen den Setup-Flow nicht unterbrechen.
-    }
-  }, [
-    persistSetupSelection,
-    kreisIds,
-    kreisId,
-    selectedStateCode,
-    jugendId,
-    selectedTeams,
-    fromDate,
-    toDate,
-    jugendSubLevels,
-    startLocation,
-    favoriteTeams,
-  ]);
-
-  useEffect(() => {
-    if (persistSetupSelection || typeof window === "undefined") {
       return;
     }
 
@@ -398,7 +253,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     } catch {
       // localStorage ist optional.
     }
-  }, [persistSetupSelection]);
+  }, []);
 
   const onSelectState = useCallback((code) => {
     const nextCode = String(code || "").trim().toUpperCase();

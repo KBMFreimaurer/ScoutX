@@ -171,7 +171,7 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /BAM I auswählen/i })).not.toBeInTheDocument();
   });
 
-  it("stellt persistierte Wizard-Daten bei Reload wieder her", () => {
+  it("ignoriert persistierte Wizard-Daten bei Reload im Browser", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -187,18 +187,13 @@ describe("SetupPage", () => {
 
     renderSetupPage();
 
-    expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toHaveAttribute("aria-pressed", "false");
     clickNextStep();
-    const duisburgButton = screen.getByLabelText(/Region\/Kreis Duisburg (auswählen|abwählen)/i);
-    expect(duisburgButton).toHaveAttribute("aria-pressed", "true");
-
     const nextButton = screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i });
-    expect(nextButton).toBeEnabled();
-
-    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toContain('"selectedStateCode":"NW"');
+    expect(nextButton).toBeDisabled();
   });
 
-  it("ignoriert persistierte Setup-Auswahl in nativer Runtime", () => {
+  it("bereinigt persistierte Setup-Daten beim Laden", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.setup,
       JSON.stringify({
@@ -216,21 +211,10 @@ describe("SetupPage", () => {
       }),
     );
 
-    const previousCapacitor = window.Capacitor;
-    window.Capacitor = {
-      isNativePlatform: () => true,
-      getPlatform: () => "ios",
-    };
+    renderSetupPage();
 
-    try {
-      renderSetupPage();
-
-      expect(screen.getByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).toHaveAttribute("aria-pressed", "false");
-      clickNextStep();
-      expect(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i })).toBeDisabled();
-    } finally {
-      window.Capacitor = previousCapacitor;
-    }
+    expect(window.localStorage.getItem(STORAGE_KEYS.setup)).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEYS.abrechnungMeta)).toBeNull();
   });
 
   it("setzt den Zeitraum initial von heute bis zum nächsten Sonntag", () => {
@@ -244,7 +228,7 @@ describe("SetupPage", () => {
     expect(screen.getByRole("button", { name: /Scouting-Bis-Datum auswählen/i })).toHaveTextContent("26.04.2026");
   });
 
-  it("übernimmt keine veralteten Startdaten aus persistierten Setup-Daten", () => {
+  it("übernimmt keine Startdaten aus persistierten Setup-Daten", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 24, 10, 0, 0));
     window.localStorage.setItem(
