@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,23 @@ import { extractClubSearchResults } from "./lib/fussballde.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
 import { createLogger } from "./lib/logger.js";
 import { fetchWeekTemplateGames, runExportCommand } from "./lib/dynamicSources.js";
+import { persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
 import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } from "./lib/week.js";
+import {
+  appendTeamStateArchive,
+  createInitialTeamState,
+  findAccount,
+  linkObservationReport,
+  markObservationSeen,
+  normalizeTeamState,
+  publishTeamPlan,
+  readTeamState,
+  updateObservationNote,
+  updateTeamGoals,
+  upsertManualGame,
+  upsertTeamMember,
+  writeTeamState,
+} from "./lib/teamBackend.js";
 import { GERMANY_VERBANDS } from "../src/data/germany_regions.js";
 
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
@@ -34,6 +50,13 @@ const SAMPLE_FILE =
   process.env.ADAPTER_DATA_FILE || fileURLToPath(new URL("./data/games.sample.json", import.meta.url));
 const STORE_FILE =
   process.env.ADAPTER_STORE_FILE || fileURLToPath(new URL("./data/games.store.db", import.meta.url));
+const TEAM_STATE_FILE =
+  process.env.ADAPTER_TEAM_STATE_FILE || fileURLToPath(new URL("./data/team-state.json", import.meta.url));
+const TEAM_ARCHIVE_FILE =
+  process.env.ADAPTER_TEAM_ARCHIVE_FILE || fileURLToPath(new URL("./data/team-state.archive.ndjson", import.meta.url));
+const REGISTRATION_TEAM = Object.freeze({
+  key: "borussia-moenchengladbach",
+});
 const CLUB_CATALOG_FILE =
   process.env.ADAPTER_CLUB_CATALOG_FILE || fileURLToPath(new URL("./data/clubs.catalog.json", import.meta.url));
 const CLUB_LOGOS_DIR =
@@ -60,6 +83,8 @@ const WEEK_EXTERNAL_TIMEOUT_MS = 60000;
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.ADAPTER_RATE_LIMIT_WINDOW_MS || 60000);
 const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
+const TEAM_LOGIN_RATE_LIMIT_MAX = Number(process.env.ADAPTER_TEAM_LOGIN_RATE_LIMIT_MAX || 12);
+const TEAM_WRITE_RATE_LIMIT_MAX = Number(process.env.ADAPTER_TEAM_WRITE_RATE_LIMIT_MAX || 60);
 const CLUB_SEARCH_URL = process.env.ADAPTER_CLUB_SEARCH_URL || "https://www.fussball.de/suche";
 const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS || 12000);
 const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
@@ -103,6 +128,18 @@ function checkRateLimit(ip) {
   return entry.count <= RATE_LIMIT_MAX;
 }
 
+function checkScopedRateLimit(store, key, maxRequests, windowMs = RATE_LIMIT_WINDOW_MS) {
+  const now = Date.now();
+  let entry = store.get(key);
+  if (!entry || now - entry.windowStart > windowMs) {
+    entry = { windowStart: now, count: 1 };
+    store.set(key, entry);
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= maxRequests;
+}
+
 // Cleanup stale rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
@@ -116,6 +153,7 @@ setInterval(() => {
 const state = {
   games: [],
   clubs: [],
+  team: createInitialTeamState(),
   meta: null,
   aliasMap: {},
   lastRefreshReason: "startup",
@@ -123,6 +161,9 @@ const state = {
   weekRefreshCache: {},
   weekRefreshPromises: {},
 };
+const teamSessions = new Map();
+const teamLoginRateStore = new Map();
+const teamWriteRateStore = new Map();
 
 function uniqueNormalizedTeams(values) {
   const seen = new Set();
@@ -477,7 +518,9 @@ function setCorsHeaders(res, origin) {
   const normalizedOrigin = String(origin || "").trim();
 
   let allowOrigin = "*";
-  if (!(allowedOrigins.length === 1 && allowedOrigins[0] === "*")) {
+  if (allowedOrigins.length === 1 && allowedOrigins[0] === "*") {
+    allowOrigin = normalizedOrigin || "*";
+  } else {
     const fallbackOrigin = allowedOrigins[0] || "null";
     allowOrigin =
       normalizedOrigin && allowedOrigins.includes(normalizedOrigin)
@@ -486,8 +529,11 @@ function setCorsHeaders(res, origin) {
   }
 
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (allowOrigin !== "*") {
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
   res.setHeader("Vary", "Origin");
 }
 
@@ -561,6 +607,164 @@ function isAuthorized(req) {
 
   const providedToken = extractBearerToken(req.headers.authorization || "");
   return timingSafeTokenEquals(providedToken, AUTH_TOKEN);
+}
+
+function parseCookies(cookieHeader) {
+  const cookies = new Map();
+  for (const part of String(cookieHeader || "").split(";")) {
+    const [name, ...valueParts] = part.trim().split("=");
+    if (!name || valueParts.length === 0) {
+      continue;
+    }
+    cookies.set(name, decodeURIComponent(valueParts.join("=")));
+  }
+  return cookies;
+}
+
+function createSessionCookie(sessionId, maxAgeSeconds = 28800) {
+  const secure = process.env.ADAPTER_TEAM_COOKIE_SECURE === "true" ? "; Secure" : "";
+  return `scoutx_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function clearSessionCookie() {
+  return "scoutx_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+}
+
+function toPublicAccount(account) {
+  if (!account) {
+    return null;
+  }
+  return {
+    id: account.id,
+    name: account.name,
+    role: account.role,
+    teamId: account.teamId,
+  };
+}
+
+function toPublicTeam(team) {
+  return {
+    ...team,
+    accounts: (Array.isArray(team?.accounts) ? team.accounts : []).map(toPublicAccount).filter(Boolean),
+  };
+}
+
+function verifyPassword(password, passwordHash) {
+  const parts = String(passwordHash || "").split("$");
+  if (parts.length !== 4 || parts[0] !== "pbkdf2-sha256") {
+    return false;
+  }
+  const iterations = Number(parts[1]);
+  if (!Number.isFinite(iterations) || iterations < 100000 || iterations > 1000000) {
+    return false;
+  }
+  const expected = Buffer.from(parts[3], "base64url");
+  const actual = pbkdf2Sync(String(password || ""), parts[2], iterations, expected.length, "sha256");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function createPasswordHash(password) {
+  const iterations = 210000;
+  const salt = randomBytes(16).toString("base64url");
+  const hash = pbkdf2Sync(String(password || ""), salt, iterations, 32, "sha256").toString("base64url");
+  return `pbkdf2-sha256$${iterations}$${salt}$${hash}`;
+}
+
+function normalizeAccountId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getTeamSessionContext(req) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const sessionId = cookies.get("scoutx_session") || "";
+  const session = teamSessions.get(sessionId);
+  if (!session) {
+    return null;
+  }
+
+  const account = findAccount(state.team, session.userId);
+  if (!account || account.teamId !== session.teamId || account.teamId !== state.team.team.id) {
+    teamSessions.delete(sessionId);
+    return null;
+  }
+
+  return {
+    sessionId,
+    session,
+    account,
+  };
+}
+
+function requireTeamSession(req, res, origin, requestId) {
+  const context = getTeamSessionContext(req);
+  if (!context) {
+    sendJson(res, 401, { ok: false, error: "Team-Anmeldung erforderlich." }, origin, requestId);
+    return null;
+  }
+  return context;
+}
+
+function requireTeamCsrf(req, context, res, origin, requestId) {
+  const provided = String(req.headers["x-csrf-token"] || "");
+  if (!provided || !timingSafeTokenEquals(provided, context.session.csrfToken)) {
+    sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+    return false;
+  }
+  return true;
+}
+
+function requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp) {
+  if (!checkScopedRateLimit(teamWriteRateStore, `${clientIp}:${context.account.teamId}:${context.account.id}`, TEAM_WRITE_RATE_LIMIT_MAX)) {
+    sendJson(res, 429, { ok: false, error: "Zu viele Team-Schreibzugriffe. Bitte später erneut versuchen." }, origin, requestId);
+    return false;
+  }
+  if (!requireTeamCsrf(req, context, res, origin, requestId)) {
+    return false;
+  }
+  return true;
+}
+
+function buildTeamStatePayload(context) {
+  const normalized = normalizeTeamState(state.team);
+  return {
+    ok: true,
+    user: toPublicAccount(context.account),
+    team: toPublicTeam(normalized.team),
+    manualGames: normalized.manualGames,
+    teamGoals: normalized.teamGoals,
+    observations: normalized.observations,
+    feedItems: normalized.feedItems,
+  };
+}
+
+async function persistTeamState(nextTeamState, logger, reason) {
+  state.team = normalizeTeamState(nextTeamState);
+  try {
+    state.team = await writeTeamState(TEAM_STATE_FILE, state.team);
+    await appendTeamStateArchive(TEAM_ARCHIVE_FILE, {
+      archivedAt: new Date().toISOString(),
+      reason: String(reason || "team-update"),
+      teamStateVersion: state.team.version || 1,
+      teamState: state.team,
+    });
+    await persistTeamArchiveEventToDb(
+      {
+        archivedAt: new Date().toISOString(),
+        reason: String(reason || "team-update"),
+        teamStateVersion: state.team.version || 1,
+        teamState: state.team,
+      },
+      logger,
+    );
+    return true;
+  } catch (error) {
+    logger.error("team state write failed", { reason, error });
+    return false;
+  }
 }
 
 async function writeStoreSafely(reason, payload, logger = rootLogger) {
@@ -1168,6 +1372,442 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/team/auth/login") {
+    try {
+      const payload = await readBody(req);
+      const loginUserId = String(payload?.userId || "").trim().toLowerCase() || "unknown";
+      if (!checkScopedRateLimit(teamLoginRateStore, `${clientIp}:${loginUserId}`, TEAM_LOGIN_RATE_LIMIT_MAX)) {
+        sendJson(res, 429, { ok: false, error: "Zu viele Login-Versuche. Bitte später erneut versuchen." }, origin, requestId);
+        return;
+      }
+      const account = findAccount(state.team, payload?.userId);
+      if (!account || account.teamId !== state.team.team.id || !account.passwordHash || !verifyPassword(payload?.password, account.passwordHash)) {
+        sendJson(res, 401, { ok: false, error: "Unbekannter oder inaktiver Team-Account." }, origin, requestId);
+        return;
+      }
+
+      const sessionId = randomUUID();
+      const csrfToken = randomUUID();
+      teamSessions.set(sessionId, {
+        userId: account.id,
+        teamId: account.teamId,
+        csrfToken,
+        createdAt: new Date().toISOString(),
+      });
+
+      res.setHeader("Set-Cookie", createSessionCookie(sessionId));
+      sendJson(
+        res,
+        200,
+        {
+          ...buildTeamStatePayload({ account }),
+          csrfToken,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      requestLogger.warn("team login failed", { error });
+      sendJson(res, 400, { ok: false, error: "Team-Login fehlgeschlagen." }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/auth/register") {
+    try {
+      const payload = await readBody(req);
+      const loginUserId = String(payload?.userId || "").trim().toLowerCase() || "unknown";
+      if (!checkScopedRateLimit(teamLoginRateStore, `${clientIp}:${loginUserId}`, TEAM_LOGIN_RATE_LIMIT_MAX)) {
+        sendJson(res, 429, { ok: false, error: "Zu viele Registrierungsversuche. Bitte später erneut versuchen." }, origin, requestId);
+        return;
+      }
+
+      const accountId = normalizeAccountId(payload?.userId);
+      const displayName = String(payload?.name || "").trim();
+      const password = String(payload?.password || "");
+      const requestedTeamKey = normalizeAccountId(payload?.teamKey);
+      if (!accountId || accountId.length < 3) {
+        sendJson(res, 400, { ok: false, error: "User-ID muss mindestens 3 Zeichen enthalten." }, origin, requestId);
+        return;
+      }
+      if (!displayName || displayName.length < 2) {
+        sendJson(res, 400, { ok: false, error: "Name muss mindestens 2 Zeichen enthalten." }, origin, requestId);
+        return;
+      }
+      if (!password || password.length < 8) {
+        sendJson(res, 400, { ok: false, error: "Passwort muss mindestens 8 Zeichen enthalten." }, origin, requestId);
+        return;
+      }
+      if (requestedTeamKey !== REGISTRATION_TEAM.key) {
+        sendJson(res, 400, { ok: false, error: "Aktuell ist nur Team Borussia Mönchengladbach verfügbar." }, origin, requestId);
+        return;
+      }
+      const exists = findAccount(state.team, accountId);
+      if (exists) {
+        sendJson(res, 409, { ok: false, error: "Diese User-ID ist bereits vergeben." }, origin, requestId);
+        return;
+      }
+
+      const accounts = Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : [];
+      const nextState = {
+        ...state.team,
+        team: {
+          ...(state.team?.team || {}),
+          accounts: [
+            ...accounts,
+            {
+              id: accountId,
+              name: displayName,
+              role: "scout",
+              teamId: state.team?.team?.id || "team-scoutx",
+              active: true,
+              passwordHash: createPasswordHash(password),
+            },
+          ],
+        },
+      };
+
+      const persisted = await persistTeamState(nextState, requestLogger, "team-register");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-Account konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+
+      const account = findAccount(state.team, accountId);
+      const sessionId = randomUUID();
+      const csrfToken = randomUUID();
+      teamSessions.set(sessionId, {
+        userId: account.id,
+        teamId: account.teamId,
+        csrfToken,
+        createdAt: new Date().toISOString(),
+      });
+      res.setHeader("Set-Cookie", createSessionCookie(sessionId));
+      sendJson(
+        res,
+        201,
+        {
+          ...buildTeamStatePayload({ account }),
+          csrfToken,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      requestLogger.warn("team registration failed", { error });
+      sendJson(res, 400, { ok: false, error: "Registrierung fehlgeschlagen." }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/auth/logout") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    teamSessions.delete(context.sessionId);
+    res.setHeader("Set-Cookie", clearSessionCookie());
+    sendJson(res, 200, { ok: true }, origin, requestId);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/team/state") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+
+    sendJson(res, 200, buildTeamStatePayload(context), origin, requestId);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/plans") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = publishTeamPlan(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-plan");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          observations: result.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team plan publish failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Plan konnte nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/members") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = upsertTeamMember(state.team, context.account, payload);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-member");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          member: result.member,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team member update failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Mitglied konnte nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/manual-games") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = upsertManualGame(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-manual-game");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          manualGame: result.manualGame,
+          manualGames: state.team.manualGames,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team manual game failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Manuelles Spiel konnte nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/goals") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = updateTeamGoals(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-goals");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          manualGames: state.team.manualGames,
+          teamGoals: state.team.teamGoals,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team goals failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Ziele konnten nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/observations/seen") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = markObservationSeen(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-seen");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          observation: result.observation,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team observation seen failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Sichtung konnte nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/observations/report") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = linkObservationReport(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-report");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          observation: result.observation,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team observation report link failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Bericht konnte nicht verknuepft werden.") }, origin, requestId);
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/team/observations/note") {
+    const context = requireTeamSession(req, res, origin, requestId);
+    if (!context) {
+      return;
+    }
+    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
+      return;
+    }
+
+    try {
+      const payload = await readBody(req);
+      const result = updateObservationNote(state.team, context.account, payload, randomUUID);
+      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-note");
+      if (!persisted) {
+        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          user: toPublicAccount(context.account),
+          team: toPublicTeam(state.team.team),
+          observation: result.observation,
+          observations: state.team.observations,
+          feedItems: state.team.feedItems,
+        },
+        origin,
+        requestId,
+      );
+      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode || 400);
+      requestLogger.warn("team observation note failed", { error });
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Sichtungsnotiz konnte nicht gespeichert werden.") }, origin, requestId);
+      return;
+    }
+  }
+
   if (req.method === "POST" && url.pathname === "/api/games") {
     if (!isAuthorized(req)) {
       requestLogger.warn("unauthorized /api/games");
@@ -1447,6 +2087,13 @@ const server = createServer(async (req, res) => {
 });
 
 try {
+  state.team = await readTeamState(TEAM_STATE_FILE);
+} catch (error) {
+  rootLogger.error("team state load failed", { error });
+  state.team = createInitialTeamState();
+}
+
+try {
   state.clubs = await readClubCatalogFile(CLUB_CATALOG_FILE);
 } catch {
   state.clubs = [];
@@ -1474,6 +2121,8 @@ server.listen(PORT, HOST, () => {
     port: PORT,
     authEnabled: Boolean(AUTH_TOKEN),
     store: STORE_FILE,
+    teamStateFile: TEAM_STATE_FILE,
+    teamArchiveFile: TEAM_ARCHIVE_FILE,
     clubCatalog: CLUB_CATALOG_FILE,
     clubsCount: state.clubs.length,
     clubLogosDir: CLUB_LOGOS_DIR,

@@ -15,6 +15,12 @@ automatisch in die Datenbank.
 
 Zusätzlich kann pro angefragter Woche automatisch ein Export-Prozess getriggert werden.
 
+Für Team-Accounts und Team-Workflow gilt zusätzlich:
+
+- `ADAPTER_TEAM_STATE_FILE` speichert den aktuellen Team-State (Snapshot).
+- `ADAPTER_TEAM_ARCHIVE_FILE` speichert im Hintergrund jede Änderung append-only als NDJSON-Event (Archiv).
+- Wenn `ADAPTER_DATABASE_URL` (oder `DATABASE_URL`) gesetzt ist, schreibt der Adapter dieselben Team-Events zusätzlich in PostgreSQL (`team_state_events` in `db/schema.sql`).
+
 ## Vollautomatischer Wochen-Refresh
 
 Bei jedem `POST /api/games` kann der Adapter automatisch Daten für die Woche des `fromDate` laden.
@@ -109,6 +115,7 @@ ADAPTER_WEEK_SOURCE_TOKEN="..."
 - `GET /api/admin/status`
 - `GET /api/admin/mandant-probe?mandant=<code>&season=<yyzz>`
 - `GET /api/admin/verband-status`
+- `POST /api/team/auth/register` (Self-Register, Standardrolle `scout`)
 
 ### Vereinskatalog Import
 
@@ -143,6 +150,10 @@ Wenn `ADAPTER_TOKEN` gesetzt ist, erwarten API-Endpoints den Header:
 - `ADAPTER_HOST` (default: `0.0.0.0`)
 - `ADAPTER_PORT` (default: `8787`)
 - `ADAPTER_STORE_FILE` (default: `adapter-service/data/games.store.db`)
+- `ADAPTER_TEAM_STATE_FILE` (default: `adapter-service/data/team-state.json`)
+- `ADAPTER_TEAM_ARCHIVE_FILE` (default: `adapter-service/data/team-state.archive.ndjson`)
+- `ADAPTER_DATABASE_URL` (optional, PostgreSQL connection string)
+- `DATABASE_URL` (optional fallback für PostgreSQL)
 - `ADAPTER_STORE_MIGRATION_FILE` (optional, explizite Legacy-JSON-Quelle für Erstmigration)
 - `ADAPTER_CLUB_CATALOG_FILE` (default: `adapter-service/data/clubs.catalog.json`)
 - `ADAPTER_CLUB_LOGOS_DIR` (default: `adapter-service/data/logos`)
@@ -189,6 +200,19 @@ Exporter-Härtung (fussball.de):
 
 ```bash
 node adapter-service/server.mjs
+```
+
+## Team-Accounts per Terminal verwalten
+
+Rollen und Passwortverwaltung kannst du bewusst im Terminal halten:
+
+```bash
+npm run adapter:accounts -- list
+npm run adapter:accounts -- create <userId> "<Name>" "<Passwort>"
+npm run adapter:accounts -- set-role <userId> <admin|coordinator|scout|readonly>
+npm run adapter:accounts -- set-password <userId> "<Passwort>"
+npm run adapter:accounts -- activate <userId>
+npm run adapter:accounts -- deactivate <userId>
 ```
 
 ## Vereinskatalog neu scrapen
