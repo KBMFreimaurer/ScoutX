@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "../components/Buttons";
 import { GameCards } from "../components/GameCards";
 import { GameTable } from "../components/GameTable";
 import { useScoutX } from "../context/ScoutXContext";
+import { useScoutXProduct } from "../context/ScoutXProductContext";
 import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
@@ -30,6 +31,7 @@ export function GamesPage() {
     onBackSetup,
     onGeneratePlanPdf,
   } = useScoutX();
+  const { getGameObservationMap } = useScoutXProduct();
   const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
   const PAGE_SIZE = 20;
   const requestedTeamCount = Number(teamValidation?.requestedCount || 0);
@@ -91,6 +93,24 @@ export function GamesPage() {
       return String(a.time || "99:99").localeCompare(String(b.time || "99:99"));
     });
   }, [games, sortMode]);
+  const observationMap = useMemo(() => getGameObservationMap(), [getGameObservationMap]);
+  const gamesWithTeamPlanning = useMemo(
+    () =>
+      sortedGames.map((game) => {
+        const planning = observationMap?.[game.id];
+        if (!planning?.label) {
+          return game;
+        }
+        return {
+          ...game,
+          planningLabel: planning.label,
+          plannedBy: planning.plannedBy,
+          plannedByOtherScouts: planning.plannedByOtherScouts,
+          seenBy: planning.seenBy,
+        };
+      }),
+    [observationMap, sortedGames],
+  );
   const totalPages = shouldPaginate ? Math.ceil(sortedGames.length / PAGE_SIZE) : 1;
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -100,12 +120,12 @@ export function GamesPage() {
 
   const visibleGames = useMemo(() => {
     if (!shouldPaginate) {
-      return sortedGames;
+      return gamesWithTeamPlanning;
     }
 
     const start = (currentPage - 1) * PAGE_SIZE;
-    return sortedGames.slice(start, start + PAGE_SIZE);
-  }, [sortedGames, currentPage, shouldPaginate]);
+    return gamesWithTeamPlanning.slice(start, start + PAGE_SIZE);
+  }, [gamesWithTeamPlanning, currentPage, shouldPaginate]);
 
   useLayoutEffect(() => {
     if (!usePinnedActionDock || typeof window === "undefined") {
@@ -156,6 +176,28 @@ export function GamesPage() {
     downloadCalendarIcs(exportGames, {
       kreisLabel: String(kreisLabel || kreis?.label || "").trim(),
     });
+  };
+
+  const onToggleGameSelection = (gameId) => {
+    const id = String(gameId || "").trim();
+    if (!id) {
+      return;
+    }
+    if (selectedGameIds?.[id]) {
+      onTogglePlannedGame(id);
+      return;
+    }
+    const otherScouts = observationMap?.[id]?.plannedByOtherScouts || [];
+    if (otherScouts.length > 0) {
+      const names = otherScouts.join(", ");
+      const confirmed = window.confirm(
+        `Dieses Spiel ist bereits im Plan von ${names}. Trotzdem in deinen Plan aufnehmen?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    onTogglePlannedGame(id);
   };
 
   return (
@@ -391,7 +433,7 @@ export function GamesPage() {
         onSetNote={onSetGameNote}
         selectionEnabled
         selectedGameIds={selectedGameIds}
-        onToggleSelectedGame={onTogglePlannedGame}
+        onToggleSelectedGame={onToggleGameSelection}
       />
       <GameCards
         games={visibleGames}
@@ -401,7 +443,7 @@ export function GamesPage() {
         onSetNote={onSetGameNote}
         selectionEnabled
         selectedGameIds={selectedGameIds}
-        onToggleSelectedGame={onTogglePlannedGame}
+        onToggleSelectedGame={onToggleGameSelection}
       />
 
       {shouldPaginate ? (

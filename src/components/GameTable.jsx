@@ -55,6 +55,37 @@ function sortGames(games, sortMode) {
   return [...games].sort(sortByPriority);
 }
 
+function PlanningBadge({ game }) {
+  const label = String(game?.planningLabel || "").trim();
+  if (!label) {
+    return null;
+  }
+  return (
+    <span
+      title={label}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        maxWidth: "100%",
+        marginTop: 5,
+        border: `1px solid ${game?.plannedByOtherScouts?.length ? "rgba(251,191,36,0.22)" : C.greenBorder}`,
+        borderRadius: 999,
+        background: game?.plannedByOtherScouts?.length ? C.warnDim : C.greenDim,
+        color: game?.plannedByOtherScouts?.length ? C.warn : C.greenLight,
+        padding: "2px 7px",
+        fontSize: 10,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function GameTable({
   games,
   mode = "games",
@@ -102,6 +133,7 @@ export function GameTable({
                 <strong style={{ color: C.white }}>{game.home}</strong>
                 <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
                 <span style={{ color: C.offWhite }}>{game.away}</span>
+                <PlanningBadge game={game} />
               </span>
               <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
               <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap", marginLeft: 8 }}>{formatKickoff(game.time)}</span>
@@ -222,9 +254,12 @@ export function GameTable({
                   ) : null}
                   <td style={{ padding: "11px 16px", fontSize: 13 }}>
                     {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
-                    <strong style={{ color: C.white }}>{game.home}</strong>
-                    <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
-                    <span style={{ color: C.offWhite }}>{game.away}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ color: C.white }}>{game.home}</strong>
+                      <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
+                      <span style={{ color: C.offWhite }}>{game.away}</span>
+                      <PlanningBadge game={game} />
+                    </div>
                   </td>
                   <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{game.dateLabel}</td>
                   <td style={{ padding: "11px 8px", fontSize: 13, color: C.gray }}>{formatKickoff(game.time)}</td>

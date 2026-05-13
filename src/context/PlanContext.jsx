@@ -10,6 +10,7 @@ const PlanContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 60000);
 const PLAN_HISTORY_LIMIT = 20;
+const TEAM_PLAN_PUBLISHED_EVENT = "scoutx:team-plan-published";
 
 function withTimeout(promise, timeoutMs, fallbackValue) {
   const safeTimeout = Number(timeoutMs);
@@ -432,6 +433,17 @@ export function PlanProvider({ children }) {
       if (historyEntry) {
         setPlanHistory((prev) => [historyEntry, ...prev.filter((entry) => entry.id !== historyEntry.id)].slice(0, PLAN_HISTORY_LIMIT));
         setActiveHistoryId(historyEntry.id);
+        if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+          window.dispatchEvent(
+            new CustomEvent(TEAM_PLAN_PUBLISHED_EVENT, {
+              detail: {
+                games: effectivePlannedGames,
+                planHistoryId: historyEntry.id,
+                note: setup.scoutName ? `Plan von ${setup.scoutName}` : "",
+              },
+            }),
+          );
+        }
       }
 
       setPlan(manualPlan);

@@ -4,7 +4,10 @@ import {
   addWatchlistEntry,
   analyzeReport,
   attachReportAnalysis,
+  buildGameObservationMap,
   buildCalendarModel,
+  buildTeamOverview,
+  buildTeamFeed,
   buildGlobalSearchResults,
   buildPlayerProfiles,
   buildScoutingDashboard,
@@ -12,18 +15,25 @@ import {
   comparePlayers,
   createAssignment,
   createInitialProductState,
+  createObservationMatchReport,
   createReportInput,
   createWatchlist,
   deleteSearchFilter,
   exportProductSnapshot,
   getActiveUser,
+  markGameObservationSeen,
   normalizeProductState,
+  publishTeamPlan,
   removeWatchlistEntry,
   saveSearchFilter,
   switchActiveUser,
   updateAssignmentStatus,
+  updateObservationNote,
   updateReportStatus,
+  updateTeamGoals,
   updateWatchlistEntry,
+  upsertManualGame,
+  upsertTeamAccount,
   upsertReport,
 } from "./scoutxDomain";
 
@@ -50,13 +60,54 @@ describe("scoutxDomain", () => {
   it("normalizes invalid product state to a usable MVP state", () => {
     const state = normalizeProductState(null, fixedOptions);
 
-    expect(state.version).toBe(1);
+    expect(state.version).toBe(2);
+    expect(state.team.accounts.map((account) => account.id)).toContain("user-scout");
+    expect(state.team.accounts.every((account) => account.active)).toBe(true);
     expect(state.users.length).toBeGreaterThanOrEqual(4);
     expect(state.reports).toHaveLength(0);
     expect(state.watchlists).toHaveLength(0);
     expect(state.assignments).toHaveLength(0);
     expect(state.notifications).toHaveLength(0);
+    expect(state.observations).toHaveLength(0);
+    expect(state.feedItems).toHaveLength(0);
     expect(getActiveUser(state).role).toBe("scout");
+  });
+
+  it("migrates v1 product state to team feed state without losing existing data", () => {
+    const legacy = normalizeProductState(
+      {
+        version: 1,
+        activeUserId: "user-scout",
+        users: createInitialProductState(fixedOptions).users,
+        reports: [
+          {
+            id: "report-1",
+            type: "player",
+            title: "Bestandsbericht",
+            ownerId: "user-scout",
+            authorId: "user-scout",
+            visibility: "team",
+            createdAt: "2026-04-22T10:00:00.000Z",
+            updatedAt: "2026-04-22T10:00:00.000Z",
+          },
+        ],
+        watchlists: [],
+        assignments: [],
+        notifications: [],
+        savedFilters: [],
+      },
+      fixedOptions,
+    );
+
+    expect(legacy.version).toBe(2);
+    expect(legacy.reports).toHaveLength(1);
+    expect(legacy.team.accounts.find((account) => account.id === "user-scout")).toMatchObject({
+      name: "Scout",
+      role: "scout",
+      active: true,
+    });
+    expect(legacy.observations).toEqual([]);
+    expect(legacy.feedItems).toEqual([]);
   });
 
   it("removes legacy cockpit seed data from persisted state", () => {
@@ -154,6 +205,585 @@ describe("scoutxDomain", () => {
     expect(dashboard.summary.openAssignments).toBeGreaterThan(0);
     expect(dashboard.priorityPlayers[0].playerName).toBe("Mika Muster");
     expect(next.notifications.length).toBeGreaterThan(state.notifications.length);
+  });
+
+  it("publishes a finalized plan to team observations and feed items", () => {
+    const state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      { id: "game-1", home: "Team A", away: "Team B", dateLabel: "Fr, 01.05.2026", time: "14:00", venue: "Platz A" },
+      { id: "game-2", home: "Team C", away: "Team D", dateLabel: "Sa, 02.05.2026", time: "11:00", venue: "Platz B" },
+    ];
+
+    const next = publishTeamPlan(
+      state,
+      {
+        games,
+        planHistoryId: "plan-1",
+        note: "Wochenendplan",
+      },
+      scout,
+      fixedOptions,
+    );
+
+    expect(next.observations).toHaveLength(2);
+    expect(next.observations[0]).toMatchObject({
+      gameId: "game-1",
+      scoutId: scout.id,
+      status: "planned",
+      planHistoryId: "plan-1",
+      note: "Wochenendplan",
+    });
+    expect(next.feedItems[0]).toMatchObject({
+      type: "plan_published",
+      actorId: scout.id,
+      planHistoryId: "plan-1",
+      gameIds: ["game-1", "game-2"],
+    });
+    expect(next.feedItems[0].title).toMatch(/Scout hat 2 Spiele in seinen Plan genommen/);
+    expect(next.notifications[0]).toMatchObject({
+      type: "team_feed",
+      title: "Team-Plan veröffentlicht",
+    });
+  });
+
+  it("creates an actionable notification for a direct assignment", () => {
+    const state = createInitialProductState(fixedOptions);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const scout = state.users.find((user) => user.id === "user-scout");
+
+    const next = createAssignment(
+      state,
+      {
+        title: "Spiel Team A vs Team B übernehmen",
+        assigneeId: scout.id,
+        dueAt: "2026-04-23",
+      },
+      coordinator,
+      fixedOptions,
+    );
+
+    expect(next.notifications[0]).toMatchObject({
+      type: "direct_assignment",
+      title: "Direkte Zuweisung",
+      body: "Spiel Team A vs Team B übernehmen",
+      entityType: "assignment",
+      entityId: next.assignments[0].id,
+      recipientId: scout.id,
+    });
+  });
+
+  it("notifies assigned scouts when their manual game changes or is cancelled", () => {
+    let state = createInitialProductState(fixedOptions);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const scout = getActiveUser(state);
+
+    state = upsertManualGame(
+      state,
+      {
+        id: "manual-1",
+        home: "Team A",
+        away: "Team B",
+        date: "2026-04-23",
+        time: "14:00",
+        venue: "Platz A",
+      },
+      coordinator,
+      fixedOptions,
+    );
+    state = publishTeamPlan(state, { games: [state.manualGames[0]], planHistoryId: "plan-manual" }, scout, fixedOptions);
+
+    const changed = upsertManualGame(
+      state,
+      {
+        id: "manual-1",
+        home: "Team A",
+        away: "Team B",
+        date: "2026-04-23",
+        time: "15:00",
+        venue: "Platz B",
+      },
+      coordinator,
+      fixedOptions,
+    );
+
+    expect(changed.notifications[0]).toMatchObject({
+      type: "own_game_changed",
+      title: "Eigenes Spiel geändert",
+      recipientId: scout.id,
+      entityType: "game",
+      entityId: "manual-1",
+    });
+
+    const cancelled = upsertManualGame(
+      changed,
+      {
+        id: "manual-1",
+        home: "Team A",
+        away: "Team B",
+        date: "2026-04-23",
+        time: "15:00",
+        venue: "Platz B",
+        status: "cancelled",
+      },
+      coordinator,
+      fixedOptions,
+    );
+
+    expect(cancelled.manualGames[0].status).toBe("cancelled");
+    expect(cancelled.notifications[0]).toMatchObject({
+      type: "game_cancelled",
+      title: "Spielabsage",
+      recipientId: scout.id,
+      entityType: "game",
+      entityId: "manual-1",
+    });
+  });
+
+  it("creates actionable notifications for detected scout conflicts", () => {
+    const state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      { id: "game-1", home: "Team A", away: "Team B", date: "2026-04-23", time: "14:00", durationMinutes: 90 },
+      { id: "game-2", home: "Team C", away: "Team D", date: "2026-04-23", time: "14:30", durationMinutes: 90 },
+    ];
+
+    const next = publishTeamPlan(state, { games, planHistoryId: "plan-conflict" }, scout, fixedOptions);
+
+    expect(next.notifications[0]).toMatchObject({
+      type: "schedule_conflict",
+      title: "Konflikt erkannt",
+      recipientId: scout.id,
+      entityType: "schedule_conflict",
+    });
+    expect(next.notifications[0].body).toMatch(/Team A vs Team B.*Team C vs Team D/);
+  });
+
+  it("keeps multiple scouts per game and aggregates planning markers", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const game = { id: "game-1", home: "Team A", away: "Team B", dateLabel: "Fr, 01.05.2026", time: "14:00" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-b" }, coordinator, {
+      ...fixedOptions,
+      random: () => 0.654321,
+    });
+
+    const map = buildGameObservationMap(state, { user: scout });
+
+    expect(map["game-1"].plannedBy.map((entry) => entry.scoutName)).toEqual(["Koordination", "Scout"]);
+    expect(map["game-1"].plannedByOtherScouts).toEqual(["Koordination"]);
+    expect(map["game-1"].label).toBe("im Plan von Koordination, Scout");
+  });
+
+  it("builds a team overview with today coverage, duplicate games and open games", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const games = [
+      { id: "game-1", home: "Team A", away: "Team B", date: "2026-04-23", time: "14:00" },
+      { id: "game-2", home: "Team C", away: "Team D", date: "2026-04-23", time: "16:00" },
+      { id: "game-3", home: "Team E", away: "Team F", date: "2026-04-24", time: "11:00" },
+    ];
+
+    state = publishTeamPlan(state, { games: [games[0]], planHistoryId: "plan-a" }, scout, fixedOptions);
+    state = publishTeamPlan(state, { games: [games[0]], planHistoryId: "plan-b" }, coordinator, {
+      ...fixedOptions,
+      random: () => 0.654321,
+    });
+
+    const overview = buildTeamOverview(state, { games, date: "2026-04-23", user: scout });
+
+    expect(overview.activeScoutsToday.map((item) => item.scoutName)).toEqual(["Koordination", "Scout"]);
+    expect(overview.duplicateGames[0]).toMatchObject({
+      gameId: "game-1",
+      scoutNames: ["Koordination", "Scout"],
+    });
+    expect(overview.openGames.map((item) => item.gameId)).toEqual(["game-2"]);
+  });
+
+  it("builds weekly scout load and flags overplanned scouts", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      { id: "game-1", home: "Team A", away: "Team B", date: "2026-04-23", time: "10:00" },
+      { id: "game-2", home: "Team C", away: "Team D", date: "2026-04-23", time: "13:00" },
+      { id: "game-3", home: "Team E", away: "Team F", date: "2026-04-23", time: "16:00" },
+      { id: "game-4", home: "Team G", away: "Team H", date: "2026-04-25", time: "11:00" },
+    ];
+
+    state = publishTeamPlan(state, { games, planHistoryId: "plan-a" }, scout, fixedOptions);
+
+    const overview = buildTeamOverview(state, {
+      games,
+      date: "2026-04-23",
+      maxGamesPerScoutPerDay: 2,
+      user: scout,
+    });
+
+    expect(overview.activeScoutsWeek).toEqual([
+      expect.objectContaining({
+        scoutId: scout.id,
+        count: 4,
+        dates: ["2026-04-23", "2026-04-25"],
+      }),
+    ]);
+    expect(overview.overplannedScouts).toEqual([
+      expect.objectContaining({
+        scoutId: scout.id,
+        dateKey: "2026-04-23",
+        count: 3,
+        maxGames: 2,
+      }),
+    ]);
+  });
+
+  it("stores manual games teamwide and adds a feed entry", () => {
+    const state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+
+    const next = upsertManualGame(
+      state,
+      {
+        home: "Inoffizielles Team A",
+        away: "Inoffizielles Team B",
+        date: "2026-04-23",
+        time: "18:00",
+        venue: "Nebenplatz",
+      },
+      scout,
+      fixedOptions,
+    );
+
+    expect(next.manualGames[0]).toMatchObject({
+      source: "manual",
+      home: "Inoffizielles Team A",
+      away: "Inoffizielles Team B",
+      date: "2026-04-23",
+      time: "18:00",
+    });
+    expect(next.feedItems[0]).toMatchObject({
+      type: "manual_game_created",
+      gameIds: [next.manualGames[0].id],
+    });
+  });
+
+  it("stores team goals and reports priority coverage", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      { id: "game-1", home: "MSV Duisburg U13", away: "Team B", date: "2026-04-23", time: "14:00", jugendId: "d-jugend" },
+      { id: "game-2", home: "MSV Duisburg U12", away: "Team C", date: "2026-04-23", time: "16:00", jugendId: "d-jugend" },
+      { id: "game-3", home: "Neutral A", away: "Neutral B", date: "2026-04-23", time: "18:00", jugendId: "c-jugend" },
+    ];
+
+    state = updateTeamGoals(
+      state,
+      {
+        favoriteClubs: ["MSV Duisburg"],
+        leaguePriorities: ["Niederrheinliga"],
+        ageGroups: ["d-jugend"],
+      },
+      scout,
+      fixedOptions,
+    );
+    state = publishTeamPlan(state, { games: [games[0]], planHistoryId: "plan-a" }, scout, fixedOptions);
+
+    const overview = buildTeamOverview(state, { games, date: "2026-04-23", user: scout });
+
+    expect(state.teamGoals).toMatchObject({
+      favoriteClubs: ["MSV Duisburg"],
+      leaguePriorities: ["Niederrheinliga"],
+      ageGroups: ["d-jugend"],
+    });
+    expect(overview.coverage).toMatchObject({
+      priorityGames: 2,
+      coveredPriorityGames: 1,
+      openPriorityGames: 1,
+    });
+  });
+
+  it("derives stale priority teams from explicit team goals", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const oldGame = { id: "old-game", home: "MSV Duisburg U13", away: "Team B", date: "2026-04-01", time: "14:00" };
+    const games = [
+      oldGame,
+      { id: "game-1", home: "MSV Duisburg U13", away: "Team C", date: "2026-04-23", time: "14:00" },
+      { id: "game-2", home: "VfL Test U12", away: "Team D", date: "2026-04-23", time: "16:00" },
+    ];
+
+    state = updateTeamGoals(
+      state,
+      {
+        favoriteTeams: ["MSV Duisburg U13", "VfL Test U12"],
+        favoriteClubs: ["MSV Duisburg"],
+      },
+      scout,
+      fixedOptions,
+    );
+    state = {
+      ...state,
+      observations: [
+        {
+          id: "obs-old",
+          gameId: oldGame.id,
+          scoutId: scout.id,
+          status: "seen",
+          game: oldGame,
+          seenAt: "2026-04-01T10:00:00.000Z",
+          createdAt: "2026-04-01T10:00:00.000Z",
+          updatedAt: "2026-04-01T10:00:00.000Z",
+        },
+      ],
+    };
+
+    const overview = buildTeamOverview(state, {
+      games,
+      date: "2026-04-23",
+      maxPriorityTeamUnseenDays: 14,
+      user: scout,
+    });
+
+    expect(state.teamGoals.favoriteTeams).toEqual(["MSV Duisburg U13", "VfL Test U12"]);
+    expect(overview.coverage.stalePriorityTeams).toEqual([
+      expect.objectContaining({ teamName: "MSV Duisburg U13", daysSinceSeen: 22 }),
+      expect.objectContaining({ teamName: "VfL Test U12", daysSinceSeen: null }),
+    ]);
+  });
+
+  it("flags per-scout time and travel conflicts in the team overview", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      {
+        id: "game-1",
+        home: "Team A",
+        away: "Team B",
+        date: "2026-04-23",
+        time: "14:00",
+        durationMinutes: 60,
+        travelMinutesToNext: 35,
+      },
+      { id: "game-2", home: "Team C", away: "Team D", date: "2026-04-23", time: "15:20", durationMinutes: 80 },
+    ];
+
+    state = publishTeamPlan(state, { games, planHistoryId: "plan-a" }, scout, fixedOptions);
+
+    const overview = buildTeamOverview(state, { games, date: "2026-04-23", user: scout });
+
+    expect(overview.conflicts).toHaveLength(1);
+    expect(overview.conflicts[0]).toMatchObject({
+      scoutId: scout.id,
+      type: "travel",
+      firstGameId: "game-1",
+      secondGameId: "game-2",
+    });
+  });
+
+  it("flags missing start-location buffer before a scout's first game", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const games = [
+      {
+        id: "game-1",
+        home: "Team A",
+        away: "Team B",
+        date: "2026-04-23",
+        time: "14:00",
+        fromStartRouteMinutes: 25,
+      },
+    ];
+
+    state = publishTeamPlan(state, { games, planHistoryId: "plan-start" }, scout, fixedOptions);
+
+    const overview = buildTeamOverview(state, {
+      games,
+      date: "2026-04-23",
+      startTime: "13:30",
+      minBufferMinutes: 10,
+      user: scout,
+    });
+
+    expect(overview.conflicts).toEqual([
+      expect.objectContaining({
+        scoutId: scout.id,
+        type: "start_travel",
+        firstGameId: "",
+        secondGameId: "game-1",
+        gapMinutes: 30,
+        requiredGap: 35,
+      }),
+    ]);
+  });
+
+  it("allows scouts to mark their own planned game as seen and coordinators to correct others", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const game = { id: "game-1", home: "Team A", away: "Team B", dateLabel: "Fr, 01.05.2026", time: "14:00" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+    state = markGameObservationSeen(state, "game-1", scout.id, scout, { ...fixedOptions, random: () => 0.234567 });
+
+    expect(state.observations[0]).toMatchObject({ status: "seen", seenAt: "2026-04-23T10:00:00.000Z" });
+
+    const corrected = markGameObservationSeen(state, "game-1", scout.id, coordinator, {
+      ...fixedOptions,
+      random: () => 0.345678,
+    });
+    expect(corrected.feedItems[0].type).toBe("game_seen");
+  });
+
+  it("creates a match report from a seen observation and links it back to the team state", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const game = { id: "game-1", home: "Team A", away: "Team B", date: "2026-05-01", time: "14:00" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+    state = markGameObservationSeen(state, "game-1", scout.id, scout, { ...fixedOptions, random: () => 0.234567 });
+
+    const next = createObservationMatchReport(state, state.observations[0].id, scout, fixedOptions);
+
+    expect(next.reports[0]).toMatchObject({
+      id: `report-${state.observations[0].id}`,
+      type: "match",
+      title: "Spielbericht: Team A vs Team B",
+      context: {
+        observationId: state.observations[0].id,
+        gameId: "game-1",
+        scoutId: scout.id,
+      },
+    });
+    expect(next.observations[0]).toMatchObject({
+      reportId: next.reports[0].id,
+      reportUrl: `#report-${next.reports[0].id}`,
+    });
+    expect(next.feedItems[0]).toMatchObject({
+      type: "report_linked",
+      observationId: state.observations[0].id,
+      gameIds: ["game-1"],
+    });
+  });
+
+  it("notifies watchlist owners when a new report matches their own target", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+
+    state = createWatchlist(state, { id: "watchlist-1", name: "Prioritäten", visibility: "team" }, scout, fixedOptions);
+    state = addWatchlistEntry(
+      state,
+      "watchlist-1",
+      { playerName: "Max Muster", club: "Team A", priority: 5 },
+      scout,
+      fixedOptions,
+    );
+
+    const next = upsertReport(
+      state,
+      {
+        type: "player",
+        title: "Report Max Muster",
+        ownerId: coordinator.id,
+        visibility: "team",
+        context: { playerName: "Max Muster" },
+      },
+      coordinator,
+      fixedOptions,
+    );
+
+    expect(next.notifications[0]).toMatchObject({
+      type: "target_report_created",
+      title: "Neuer Report zu eigenem Ziel",
+      body: "Report Max Muster",
+      entityType: "report",
+      entityId: next.reports[0].id,
+      recipientId: scout.id,
+    });
+  });
+
+  it("adds a note to a seen observation and records the lifecycle feed entry", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const game = { id: "game-1", home: "Team A", away: "Team B", date: "2026-05-01", time: "14:00" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+    state = markGameObservationSeen(state, "game-1", scout.id, scout, { ...fixedOptions, random: () => 0.234567 });
+
+    const next = updateObservationNote(
+      state,
+      state.observations[0].id,
+      "Nr. 10 im zweiten Drittel nochmal prüfen.",
+      scout,
+      fixedOptions,
+    );
+
+    expect(next.observations[0]).toMatchObject({
+      id: state.observations[0].id,
+      note: "Nr. 10 im zweiten Drittel nochmal prüfen.",
+      updatedAt: "2026-04-23T10:00:00.000Z",
+    });
+    expect(next.feedItems[0]).toMatchObject({
+      type: "observation_note_added",
+      observationId: state.observations[0].id,
+      gameIds: ["game-1"],
+    });
+  });
+
+  it("requires a seen observation before creating an observation match report", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const game = { id: "game-1", home: "Team A", away: "Team B" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+
+    expect(() => createObservationMatchReport(state, state.observations[0].id, scout, fixedOptions)).toThrow(
+      /gesehen/,
+    );
+  });
+
+  it("lets coordinators manage team accounts while guests stay read-only", () => {
+    const state = createInitialProductState(fixedOptions);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const readonly = state.users.find((user) => user.role === "readonly");
+
+    const next = upsertTeamAccount(
+      state,
+      { id: "user-new-scout", name: "Scout Nord", role: "scout", active: false },
+      coordinator,
+    );
+
+    expect(next.team.accounts.find((account) => account.id === "user-new-scout")).toMatchObject({
+      name: "Scout Nord",
+      role: "scout",
+      active: false,
+    });
+    expect(next.users.find((user) => user.id === "user-new-scout")).toMatchObject({
+      name: "Scout Nord",
+      role: "scout",
+    });
+    expect(() => upsertTeamAccount(next, { id: "user-new-scout", name: "Scout Nord", role: "admin" }, readonly)).toThrow(
+      /Team-Accounts verwalten/,
+    );
+  });
+
+  it("exposes visible feed and exports team planning data", () => {
+    const state = publishTeamPlan(
+      createInitialProductState(fixedOptions),
+      { games: [{ id: "game-1", home: "Team A", away: "Team B" }], planHistoryId: "plan-a" },
+      getActiveUser(createInitialProductState(fixedOptions)),
+      fixedOptions,
+    );
+    const feed = buildTeamFeed(state, { user: getActiveUser(state) });
+    const exported = JSON.parse(exportProductSnapshot({ state, user: getActiveUser(state) }));
+
+    expect(feed[0].title).toMatch(/Scout hat 1 Spiel in seinen Plan genommen/);
+    expect(exported.team.accounts).toHaveLength(state.team.accounts.length);
+    expect(exported.observations).toHaveLength(1);
+    expect(exported.feedItems).toHaveLength(1);
   });
 
   it("indexes reports, watchlists, assignments, players, games and history", () => {

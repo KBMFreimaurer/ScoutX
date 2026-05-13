@@ -38,12 +38,15 @@ const TEXTAREA_STYLE = {
 
 const WORKSPACE_TABS = [
   { id: "overview", label: "Heute" },
+  { id: "feed", label: "Feed" },
   { id: "reports", label: "Reports" },
   { id: "shortlists", label: "Shortlists" },
   { id: "planning", label: "Planung" },
   { id: "time", label: "Zeiterfassungen" },
   { id: "profiles", label: "Profile" },
 ];
+
+const REGISTRATION_TEAMS = [{ key: "borussia-moenchengladbach", label: "Borussia Mönchengladbach" }];
 
 const SEARCH_TYPE_LABELS = {
   report: "Report",
@@ -210,7 +213,7 @@ function WorkspaceTabs({ active, onChange, isMobile }) {
       aria-label="Cockpit-Arbeitsbereiche"
       style={{
         display: "grid",
-        gridTemplateColumns: isMobile ? "repeat(2, minmax(0,1fr))" : "repeat(6, minmax(0,1fr))",
+        gridTemplateColumns: isMobile ? "repeat(2, minmax(0,1fr))" : "repeat(7, minmax(0,1fr))",
         gap: 6,
         marginBottom: 14,
       }}
@@ -249,7 +252,11 @@ export function ScoutingHubPage() {
     productState,
     activeUser,
     productError,
+    teamBackendState,
     analysisStateByReportId,
+    onLoginTeamBackend,
+    onLogoutTeamBackend,
+    onRegisterTeamBackend,
     onSwitchUser,
     onUpsertReport,
     onAnalyzeReport,
@@ -262,6 +269,12 @@ export function ScoutingHubPage() {
     onCreateAssignment,
     onUpdateAssignmentStatus,
     onMarkNotificationRead,
+    onMarkGameSeen,
+    onCreateObservationMatchReport,
+    onUpdateObservationNote,
+    onUpsertManualGame,
+    onUpdateTeamGoals,
+    onUpsertTeamAccount,
     onSaveSearchFilter,
     onDeleteSearchFilter,
     getDashboard,
@@ -269,6 +282,8 @@ export function ScoutingHubPage() {
     getPlayerProfiles,
     getPlayerComparison,
     getCalendar,
+    getTeamFeed,
+    getTeamOverview,
     exportSnapshot,
   } = useScoutXProduct();
   const [playerSheets] = useState(() => readPlayerSheets());
@@ -287,6 +302,13 @@ export function ScoutingHubPage() {
   const [selectedProfileKey, setSelectedProfileKey] = useState("");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [selectedTimeMonthKey, setSelectedTimeMonthKey] = useState("");
+  const [teamLoginPassword, setTeamLoginPassword] = useState("");
+  const [teamLoginUserId, setTeamLoginUserId] = useState("");
+  const [teamRegisterName, setTeamRegisterName] = useState("");
+  const [teamRegisterKey, setTeamRegisterKey] = useState(REGISTRATION_TEAMS[0].key);
+  const [teamAuthMode, setTeamAuthMode] = useState("login");
+  const [teamLoginBusy, setTeamLoginBusy] = useState(false);
+  const [observationNoteDrafts, setObservationNoteDrafts] = useState({});
   const [reportForm, setReportForm] = useState({
     title: "",
     type: "player",
@@ -320,6 +342,19 @@ export function ScoutingHubPage() {
     linkedGameId: "",
     description: "",
   });
+  const [manualGameForm, setManualGameForm] = useState({
+    home: "",
+    away: "",
+    date: todayIso(),
+    time: "",
+    venue: "",
+  });
+  const [teamGoalsForm, setTeamGoalsForm] = useState({
+    favoriteTeams: "",
+    favoriteClubs: "",
+    leaguePriorities: "",
+    ageGroups: "",
+  });
 
   const dashboard = useMemo(() => getDashboard(), [getDashboard]);
   const visibleReports = useMemo(
@@ -351,6 +386,34 @@ export function ScoutingHubPage() {
     [compareLeftKey, compareRightKey, getPlayerComparison, playerProfiles],
   );
   const calendarGroups = useMemo(() => getCalendar(visibleAssignments, { limit: 8 }), [getCalendar, visibleAssignments]);
+  const teamFeed = useMemo(() => getTeamFeed({ limit: 40 }), [getTeamFeed]);
+  const allTeamGames = useMemo(() => [...games, ...(productState.manualGames || [])], [games, productState.manualGames]);
+  const teamOverview = useMemo(() => getTeamOverview({ games: allTeamGames }), [allTeamGames, getTeamOverview]);
+  const teamAccountById = useMemo(
+    () => new Map((productState.team?.accounts || []).map((account) => [account.id, account])),
+    [productState.team?.accounts],
+  );
+  const teamObservationRows = useMemo(
+    () =>
+      (productState.observations || [])
+        .map((observation) => {
+          const game = games.find((item) => item.id === observation.gameId);
+          const observationGame = observation.game && typeof observation.game === "object" ? observation.game : null;
+          const account = teamAccountById.get(observation.scoutId);
+          return {
+            ...observation,
+            scoutName: account?.name || observation.scoutId,
+            gameLabel: game
+              ? `${game.home} vs ${game.away}`
+              : observationGame?.home && observationGame?.away
+                ? `${observationGame.home} vs ${observationGame.away}`
+                : observation.gameId,
+          };
+        })
+        .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+        .slice(0, 16),
+    [games, productState.observations, teamAccountById],
+  );
   const selectedReport = useMemo(
     () => visibleReports.find((report) => report.id === selectedReportId) || visibleReports[0] || null,
     [selectedReportId, visibleReports],
@@ -392,8 +455,105 @@ export function ScoutingHubPage() {
     [games.length, planHistory.length, playerProfiles.length, visibleAssignments.length, visibleReports.length, visibleWatchlists.length],
   );
   const canWrite = canRole(activeUser.role, "create");
+  const canManageTeam = activeUser.role === "admin" || activeUser.role === "coordinator";
   const selectedWatchlistId = watchlistEntry.watchlistId || visibleWatchlists[0]?.id || "";
-  const latestGames = games.slice(0, 8);
+  const latestGames = allTeamGames.slice(0, 8);
+
+  const submitTeamBackendLogin = async (event) => {
+    event.preventDefault();
+    if (!teamLoginPassword.trim() || teamLoginBusy) {
+      return;
+    }
+    setTeamLoginBusy(true);
+    try {
+      const userId = teamLoginUserId.trim() || activeUser.id;
+      if (teamAuthMode === "register") {
+        await onRegisterTeamBackend(userId, teamRegisterName.trim(), teamLoginPassword, teamRegisterKey);
+      } else {
+        await onLoginTeamBackend(userId, teamLoginPassword);
+      }
+      if (userId && userId !== activeUser.id) {
+        onSwitchUser(userId);
+      }
+      setTeamRegisterName("");
+      setTeamLoginPassword("");
+    } finally {
+      setTeamLoginBusy(false);
+    }
+  };
+
+  const submitManualGame = () => {
+    if (!manualGameForm.home.trim() || !manualGameForm.away.trim()) {
+      return;
+    }
+    onUpsertManualGame(manualGameForm);
+    setManualGameForm((prev) => ({
+      ...prev,
+      home: "",
+      away: "",
+      time: "",
+      venue: "",
+    }));
+  };
+
+  const submitTeamGoals = () => {
+    onUpdateTeamGoals({
+      favoriteTeams: splitTags(teamGoalsForm.favoriteTeams),
+      favoriteClubs: splitTags(teamGoalsForm.favoriteClubs),
+      leaguePriorities: splitTags(teamGoalsForm.leaguePriorities),
+      ageGroups: splitTags(teamGoalsForm.ageGroups),
+    });
+  };
+
+  const openReportForObservation = (observation) => {
+    if (!observation?.id) {
+      return;
+    }
+    onCreateObservationMatchReport(observation.id);
+    setActiveWorkspace("reports");
+    setSelectedReportId(`report-${observation.id}`);
+  };
+
+  const saveObservationNote = (observation) => {
+    if (!observation?.id) {
+      return;
+    }
+    const note = Object.prototype.hasOwnProperty.call(observationNoteDrafts, observation.id)
+      ? observationNoteDrafts[observation.id]
+      : observation.note || "";
+    onUpdateObservationNote(observation.id, note);
+  };
+
+  const startPlayerHighlightFromObservation = (observation) => {
+    setActiveWorkspace("shortlists");
+    setShowWatchlistForm(true);
+    if (!selectedWatchlistId) {
+      setWatchlistName("Live-Sichtungen");
+    }
+    setWatchlistEntry((prev) => ({
+      ...prev,
+      watchlistId: selectedWatchlistId,
+      labels: "Live-Sichtung",
+      note: `Auffällig in ${observation.gameLabel}.`,
+    }));
+  };
+
+  const createFollowUpFromObservation = (observation) => {
+    if (!observation?.gameId) {
+      return;
+    }
+    onCreateAssignment({
+      title: `Follow-up: ${observation.gameLabel}`,
+      dueAt: todayIso(),
+      assigneeId: observation.scoutId || activeUser.id,
+      linkedGameId: observation.gameId,
+      linkedReportId: observation.reportId || "",
+      description: `Nächste Sichtung oder Berichtsnacharbeit zu ${observation.gameLabel}.`,
+      type: "match_observation",
+      visibility: "team",
+    });
+    setActiveWorkspace("planning");
+  };
 
   const submitReport = () => {
     const title = reportForm.title.trim();
@@ -438,7 +598,9 @@ export function ScoutingHubPage() {
     if (!watchlistName.trim()) {
       return;
     }
-    onCreateWatchlist({ name: watchlistName, visibility: "team" });
+    const id = `watchlist-${Date.now()}`;
+    onCreateWatchlist({ id, name: watchlistName, visibility: "team" });
+    setWatchlistEntry((prev) => ({ ...prev, watchlistId: id }));
     setWatchlistName("");
     setShowWatchlistForm(true);
   };
@@ -617,16 +779,88 @@ export function ScoutingHubPage() {
             <Chip>{playerProfiles.length} Profile</Chip>
           </div>
         </div>
-        <label style={{ display: "grid", gap: 5, minWidth: 220 }}>
-          <span style={{ color: C.gray, fontSize: 11, fontWeight: 700 }}>Aktive Rolle</span>
-          <select value={activeUser.id} onChange={(event) => onSwitchUser(event.target.value)} style={FIELD_STYLE}>
-            {productState.users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name} · {ROLES[user.role]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: "grid", gap: 8, minWidth: isMobile ? "100%" : 340 }}>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ color: C.gray, fontSize: 11, fontWeight: 700 }}>Aktive Rolle</span>
+            <select value={activeUser.id} onChange={(event) => onSwitchUser(event.target.value)} style={FIELD_STYLE}>
+              {productState.users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} · {ROLES[user.role]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <GhostButton type="button" onClick={() => setTeamAuthMode("login")} style={{ minHeight: 34, opacity: teamAuthMode === "login" ? 1 : 0.7 }}>
+              Login
+            </GhostButton>
+            <GhostButton type="button" onClick={() => setTeamAuthMode("register")} style={{ minHeight: 34, opacity: teamAuthMode === "register" ? 1 : 0.7 }}>
+              Registrieren
+            </GhostButton>
+            {teamBackendState.status === "connected" ? (
+              <GhostButton type="button" onClick={onLogoutTeamBackend} style={{ minHeight: 34, marginLeft: "auto" }}>
+                Logout
+              </GhostButton>
+            ) : null}
+          </div>
+          <form onSubmit={submitTeamBackendLogin} style={{ display: "grid", gap: 6, gridTemplateColumns: "minmax(0,1fr) auto" }}>
+            <input
+              type="text"
+              value={teamLoginUserId}
+              onChange={(event) => setTeamLoginUserId(event.target.value)}
+              placeholder={`User-ID (default: ${activeUser.id})`}
+              autoComplete="username"
+              style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
+            />
+            {teamAuthMode === "register" ? (
+              <>
+                <input
+                  type="text"
+                  value={teamRegisterName}
+                  onChange={(event) => setTeamRegisterName(event.target.value)}
+                  placeholder="Anzeigename"
+                  autoComplete="name"
+                  style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
+                />
+                <select value={teamRegisterKey} onChange={(event) => setTeamRegisterKey(event.target.value)} style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}>
+                  {REGISTRATION_TEAMS.map((team) => (
+                    <option key={team.key} value={team.key}>
+                      Teambeitritt: {team.label}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, color: C.grayLight, fontSize: 12 }}>
+                  <img
+                    src="/api/clubs/logo/borussia-monchengladbach.png"
+                    alt="Borussia Mönchengladbach"
+                    width={24}
+                    height={24}
+                    style={{ objectFit: "contain", borderRadius: 4, background: "rgba(255,255,255,0.06)" }}
+                  />
+                  <span>Borussia Mönchengladbach</span>
+                </div>
+              </>
+            ) : null}
+            <input
+              type="password"
+              value={teamLoginPassword}
+              onChange={(event) => setTeamLoginPassword(event.target.value)}
+              placeholder={teamAuthMode === "register" ? "Neues Passwort (mind. 8 Zeichen)" : "Team-Passwort"}
+              autoComplete="current-password"
+              style={FIELD_STYLE}
+            />
+            <GhostButton
+              type="submit"
+              disabled={!teamLoginPassword.trim() || teamLoginBusy || (teamAuthMode === "register" && !teamRegisterName.trim())}
+              style={{ minHeight: 40 }}
+            >
+              {teamLoginBusy ? "..." : teamAuthMode === "register" ? "Account erstellen" : "Anmelden"}
+            </GhostButton>
+          </form>
+          <Chip tone={teamBackendState.status === "connected" ? "green" : "warn"}>
+            {teamBackendState.status === "connected" ? "Backend verbunden" : "Backend lokal"}
+          </Chip>
+        </div>
         <GhostButton onClick={downloadProductExport} style={{ minHeight: 40 }}>
           Domain exportieren
         </GhostButton>
@@ -667,6 +901,345 @@ export function ScoutingHubPage() {
       </section>
 
       <WorkspaceTabs active={activeWorkspace} onChange={setActiveWorkspace} isMobile={isMobile} />
+
+      {activeWorkspace === "feed" ? (
+      <section style={{ display: "grid", gap: 14, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1.1fr) minmax(320px,0.9fr)", marginBottom: 14 }}>
+        <Panel title="Team-Feed">
+          <MiniList
+            items={teamFeed}
+            empty="Noch keine Team-Planung veröffentlicht."
+            renderItem={(item) => (
+              <div key={item.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ color: C.offWhite, fontSize: 13 }}>{item.title}</strong>
+                  <Chip tone={item.type === "game_seen" ? "green" : "accent"}>
+                    {item.type === "game_seen" ? "Gesehen" : "Plan"}
+                  </Chip>
+                </div>
+                {item.body ? <div style={{ color: C.grayLight, fontSize: 12, marginTop: 5 }}>{item.body}</div> : null}
+                <div style={{ color: C.grayDark, fontSize: 11, marginTop: 5 }}>
+                  {formatDateTime(item.createdAt)} · {item.gameIds.length} {item.gameIds.length === 1 ? "Spiel" : "Spiele"}
+                </div>
+              </div>
+            )}
+          />
+        </Panel>
+
+        <Panel title="Team-Übersicht">
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr) 130px 110px" }}>
+              <input
+                value={manualGameForm.home}
+                onChange={(event) => setManualGameForm((prev) => ({ ...prev, home: event.target.value }))}
+                placeholder="Heimteam manuell"
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                value={manualGameForm.away}
+                onChange={(event) => setManualGameForm((prev) => ({ ...prev, away: event.target.value }))}
+                placeholder="Auswärtsteam"
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                type="date"
+                value={manualGameForm.date}
+                onChange={(event) => setManualGameForm((prev) => ({ ...prev, date: event.target.value }))}
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                value={manualGameForm.time}
+                onChange={(event) => setManualGameForm((prev) => ({ ...prev, time: event.target.value }))}
+                placeholder="18:00"
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto" }}>
+              <input
+                value={manualGameForm.venue}
+                onChange={(event) => setManualGameForm((prev) => ({ ...prev, venue: event.target.value }))}
+                placeholder="Ort / Platz"
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <GhostButton
+                onClick={submitManualGame}
+                disabled={!canWrite || !manualGameForm.home.trim() || !manualGameForm.away.trim()}
+                style={{ minHeight: 40 }}
+              >
+                Manuelles Spiel anlegen
+              </GhostButton>
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            <div style={{ color: C.gray, fontSize: 11, fontWeight: 800 }}>Team-Ziele & Prioritäten</div>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0,1fr))" }}>
+              <input
+                value={teamGoalsForm.favoriteTeams}
+                onChange={(event) => setTeamGoalsForm((prev) => ({ ...prev, favoriteTeams: event.target.value }))}
+                placeholder={(productState.teamGoals?.favoriteTeams || []).join(", ") || "Prioritätsteams"}
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                value={teamGoalsForm.favoriteClubs}
+                onChange={(event) => setTeamGoalsForm((prev) => ({ ...prev, favoriteClubs: event.target.value }))}
+                placeholder={(productState.teamGoals?.favoriteClubs || []).join(", ") || "Lieblingsvereine"}
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                value={teamGoalsForm.leaguePriorities}
+                onChange={(event) => setTeamGoalsForm((prev) => ({ ...prev, leaguePriorities: event.target.value }))}
+                placeholder={(productState.teamGoals?.leaguePriorities || []).join(", ") || "Ligenprioritäten"}
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+              <input
+                value={teamGoalsForm.ageGroups}
+                onChange={(event) => setTeamGoalsForm((prev) => ({ ...prev, ageGroups: event.target.value }))}
+                placeholder={(productState.teamGoals?.ageGroups || []).join(", ") || "Jahrgänge"}
+                disabled={!canWrite}
+                style={FIELD_STYLE}
+              />
+            </div>
+            <GhostButton onClick={submitTeamGoals} disabled={!canWrite} style={{ justifySelf: "start", minHeight: 34 }}>
+              Team-Ziele speichern
+            </GhostButton>
+          </div>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "repeat(2, minmax(0,1fr))" : "repeat(6, minmax(0,1fr))", marginBottom: 10 }}>
+            <Stat label="Heute unterwegs" value={teamOverview.activeScoutsToday.length} />
+            <Stat label="Woche unterwegs" value={teamOverview.activeScoutsWeek.length} />
+            <Stat label="Doppelt belegt" value={teamOverview.duplicateGames.length} tone={teamOverview.duplicateGames.length ? "warn" : "ok"} />
+            <Stat label="Konflikte" value={teamOverview.conflicts.length} tone={teamOverview.conflicts.length ? "warn" : "ok"} />
+            <Stat label="Überplant" value={teamOverview.overplannedScouts.length} tone={teamOverview.overplannedScouts.length ? "warn" : "ok"} />
+            <Stat
+              label="Abdeckung offen"
+              value={(teamOverview.coverage.openPriorityGames || teamOverview.openGames.length) + teamOverview.coverage.stalePriorityTeams.length}
+              tone={(teamOverview.coverage.openPriorityGames || teamOverview.openGames.length || teamOverview.coverage.stalePriorityTeams.length) ? "warn" : "ok"}
+            />
+          </div>
+          <MiniList
+            items={teamOverview.activeScoutsToday}
+            empty="Heute ist noch kein Scout verplant."
+            renderItem={(entry) => (
+              <div key={entry.scoutId} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ color: C.offWhite, fontSize: 13 }}>{entry.scoutName}</strong>
+                  <Chip tone="accent">{entry.count} {entry.count === 1 ? "Spiel" : "Spiele"}</Chip>
+                </div>
+                <div style={{ color: C.grayLight, fontSize: 12, marginTop: 5 }}>{entry.gameLabels.join(" · ")}</div>
+              </div>
+            )}
+          />
+          {teamOverview.activeScoutsWeek.length ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: C.gray, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
+                Wochenlast {teamOverview.weekStart} bis {teamOverview.weekEnd}
+              </div>
+              <MiniList
+                items={teamOverview.activeScoutsWeek.slice(0, 5)}
+                empty=""
+                renderItem={(entry) => (
+                  <div key={`week-${entry.scoutId}`} style={{ color: C.grayLight, fontSize: 12 }}>
+                    {entry.scoutName}: {entry.count} {entry.count === 1 ? "Spiel" : "Spiele"} · {entry.dates.join(", ")}
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
+          {teamOverview.duplicateGames.length ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: C.gray, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>Doppelt belegt</div>
+              <MiniList
+                items={teamOverview.duplicateGames.slice(0, 4)}
+                empty=""
+                renderItem={(game) => (
+                  <div key={game.gameId} style={{ color: C.grayLight, fontSize: 12 }}>
+                    {game.gameLabel} · {game.scoutNames.join(", ")}
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
+          {teamOverview.overplannedScouts.length ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: C.gray, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>Überplante Scouts</div>
+              <MiniList
+                items={teamOverview.overplannedScouts.slice(0, 4)}
+                empty=""
+                renderItem={(entry) => (
+                  <div key={`${entry.scoutId}-${entry.dateKey}`} style={{ color: C.grayLight, fontSize: 12 }}>
+                    {entry.scoutName}: {entry.count}/{entry.maxGames} Spiele am {entry.dateKey} · {entry.gameLabels.join(" · ")}
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
+          {teamOverview.conflicts.length ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: C.gray, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>Zeit/Fahrt-Konflikte</div>
+              <MiniList
+                items={teamOverview.conflicts.slice(0, 4)}
+                empty=""
+                renderItem={(conflict) => (
+                  <div key={`${conflict.scoutId}-${conflict.firstGameId}-${conflict.secondGameId}`} style={{ color: C.grayLight, fontSize: 12 }}>
+                    {conflict.scoutName}: {conflict.firstGameLabel} → {conflict.secondGameLabel} ·{" "}
+                    {conflict.type === "overlap" ? "Überschneidung" : `${conflict.gapMinutes} Min Puffer, ${conflict.requiredGap} Min nötig`}
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
+          {teamOverview.coverage.stalePriorityTeams.length ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ color: C.gray, fontSize: 11, fontWeight: 800, marginBottom: 6 }}>Prioritätsteams zu lange ungesehen</div>
+              <MiniList
+                items={teamOverview.coverage.stalePriorityTeams.slice(0, 4)}
+                empty=""
+                renderItem={(entry) => (
+                  <div key={entry.teamName} style={{ color: C.grayLight, fontSize: 12 }}>
+                    {entry.teamName} · {entry.daysSinceSeen === null ? "noch nie gesehen" : `${entry.daysSinceSeen} Tage seit letzter Sichtung`}
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel title="Plan-Status">
+          <MiniList
+            items={teamObservationRows}
+            empty="Noch keine geplanten oder gesehenen Spiele."
+            renderItem={(observation) => {
+              const canMarkSeen =
+                observation.status !== "seen" &&
+                activeUser.role !== "readonly" &&
+                (observation.scoutId === activeUser.id || canManageTeam);
+              return (
+                <div key={observation.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <strong style={{ color: C.offWhite, fontSize: 13 }}>{observation.gameLabel}</strong>
+                    <Chip tone={observation.status === "seen" ? "green" : "warn"}>
+                      {observation.status === "seen" ? "Gesehen" : "Geplant"}
+                    </Chip>
+                  </div>
+                  <div style={{ color: C.gray, fontSize: 12, marginTop: 4 }}>
+                    {observation.scoutName} · {formatDateTime(observation.updatedAt)}
+                  </div>
+                  {canMarkSeen ? (
+                    <GhostButton
+                      onClick={() => onMarkGameSeen(observation.gameId, observation.scoutId)}
+                      style={{ marginTop: 8, minHeight: 30, padding: "4px 8px", fontSize: 12 }}
+                    >
+                      Als gesehen markieren
+                    </GhostButton>
+                  ) : null}
+                  {observation.status === "seen" && activeUser.role !== "readonly" ? (
+                    <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {observation.reportId ? (
+                          <Chip tone="green">Report verknüpft</Chip>
+                        ) : (
+                          <GhostButton
+                            onClick={() => openReportForObservation(observation)}
+                            style={{ minHeight: 30, padding: "4px 8px", fontSize: 12 }}
+                          >
+                            Spielbericht anlegen
+                          </GhostButton>
+                        )}
+                        <GhostButton
+                          onClick={() => startPlayerHighlightFromObservation(observation)}
+                          style={{ minHeight: 30, padding: "4px 8px", fontSize: 12 }}
+                        >
+                          Spieler highlighten
+                        </GhostButton>
+                        <GhostButton
+                          onClick={() => createFollowUpFromObservation(observation)}
+                          style={{ minHeight: 30, padding: "4px 8px", fontSize: 12 }}
+                        >
+                          Follow-up
+                        </GhostButton>
+                      </div>
+                      {observation.note ? <div style={{ color: C.grayLight, fontSize: 12 }}>{observation.note}</div> : null}
+                      <div style={{ display: "grid", gap: 6, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto" }}>
+                        <textarea
+                          aria-label={`Notiz zur Sichtung ${observation.gameLabel}`}
+                          value={
+                            Object.prototype.hasOwnProperty.call(observationNoteDrafts, observation.id)
+                              ? observationNoteDrafts[observation.id]
+                              : observation.note || ""
+                          }
+                          onChange={(event) =>
+                            setObservationNoteDrafts((prev) => ({
+                              ...prev,
+                              [observation.id]: event.target.value,
+                            }))
+                          }
+                          placeholder="Notiz am Spiel ergänzen..."
+                          rows={2}
+                          style={{ ...FIELD_STYLE, minHeight: 54, resize: "vertical" }}
+                        />
+                        <GhostButton
+                          onClick={() => saveObservationNote(observation)}
+                          style={{ minHeight: 34, padding: "5px 9px", fontSize: 12, alignSelf: "start" }}
+                        >
+                          Notiz speichern
+                        </GhostButton>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }}
+          />
+        </Panel>
+
+        <Panel title="Team">
+          <MiniList
+            items={productState.team?.accounts || []}
+            empty="Noch keine Team-Konten."
+            renderItem={(account) => (
+              <div key={account.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ color: C.offWhite, fontSize: 13 }}>{account.name}</strong>
+                  <Chip tone={account.active ? "green" : "default"}>{account.active ? "Aktiv" : "Inaktiv"}</Chip>
+                </div>
+                <div style={{ color: C.gray, fontSize: 12, marginTop: 4 }}>{ROLES[account.role] || account.role}</div>
+                {canManageTeam ? (
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) auto", marginTop: 8 }}>
+                    <select
+                      value={account.role}
+                      onChange={(event) => onUpsertTeamAccount({ ...account, role: event.target.value })}
+                      style={{ ...FIELD_STYLE, minHeight: 32, padding: "5px 7px" }}
+                      aria-label={`Rolle für ${account.name}`}
+                    >
+                      {Object.entries(ROLES).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.grayLight, fontSize: 12 }}>
+                      <input
+                        type="checkbox"
+                        checked={account.active}
+                        onChange={(event) => onUpsertTeamAccount({ ...account, active: event.target.checked })}
+                        style={{ width: 16, height: 16, accentColor: C.green }}
+                      />
+                      Aktiv
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          />
+        </Panel>
+      </section>
+      ) : null}
 
       {activeWorkspace === "profiles" ? (
       <section style={{ display: "grid", gap: 14, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,0.9fr) minmax(360px,1.1fr)", marginBottom: 14 }}>

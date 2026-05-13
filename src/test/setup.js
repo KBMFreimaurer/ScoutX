@@ -26,20 +26,11 @@ function createMemoryStorage() {
 }
 
 function ensureStorage(name) {
-  const candidate = window[name];
-  const hasApi =
-    candidate &&
-    typeof candidate.getItem === "function" &&
-    typeof candidate.setItem === "function" &&
-    typeof candidate.removeItem === "function";
-
-  if (!hasApi) {
-    Object.defineProperty(window, name, {
-      value: createMemoryStorage(),
-      configurable: true,
-      writable: true,
-    });
-  }
+  Object.defineProperty(window, name, {
+    value: createMemoryStorage(),
+    configurable: true,
+    writable: true,
+  });
 }
 
 if (typeof window !== "undefined") {

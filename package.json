@@ -13,6 +13,7 @@
     "ios:open": "npx cap open ios",
     "preview": "vite preview",
     "adapter:dev": "node adapter-service/server.mjs",
+    "adapter:accounts": "node adapter-service/scripts/team-accounts.mjs",
     "adapter:refresh": "curl -X POST http://127.0.0.1:8787/api/admin/refresh",
     "adapter:clubs:scrape": "node adapter-service/scripts/scrape-clubs.mjs",
     "lint": "eslint .",
@@ -31,6 +32,7 @@
     "@capacitor/share": "^8.0.1",
     "better-sqlite3": "^12.9.0",
     "jspdf": "^4.2.1",
+    "pg": "^8.13.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^6.30.1"

@@ -90,4 +90,28 @@ describe("GameTable", () => {
     fireEvent.change(textarea, { target: { value: "Neuer Hinweis" } });
     expect(onSetNote).toHaveBeenCalledWith("game-1", "Neuer Hinweis");
   });
+
+  it("zeigt kompakte Plan-Badges für Spiele anderer Scouts", () => {
+    render(
+      <GameTable
+        games={[
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-05-01T00:00:00"),
+            dateLabel: "Fr, 01.05.2026",
+            time: "14:00",
+            venue: "Platz A",
+            planningLabel: "im Plan von Koordination, Scout",
+            plannedByOtherScouts: ["Koordination"],
+          },
+        ]}
+        selectionEnabled
+      />,
+    );
+
+    expect(screen.getByText("im Plan von Koordination, Scout")).toBeInTheDocument();
+  });
 });

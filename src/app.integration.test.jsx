@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./app";
@@ -73,6 +73,268 @@ describe("ScoutX Integration", () => {
     expect(screen.getByLabelText(/Aktive Rolle/i)).toBeInTheDocument();
   });
 
+  it("zeigt veröffentlichte Team-Planung im Cockpit-Feed", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.productDomain,
+      JSON.stringify({
+        version: 2,
+        activeUserId: "user-scout",
+        users: [
+          { id: "user-scout", name: "Scout", role: "scout", teamId: "team-scoutx", active: true },
+          { id: "user-coordinator", name: "Koordination", role: "coordinator", teamId: "team-scoutx", active: true },
+        ],
+        team: {
+          id: "team-scoutx",
+          name: "ScoutX Team",
+          accounts: [
+            { id: "user-scout", name: "Scout", role: "scout", active: true },
+            { id: "user-coordinator", name: "Koordination", role: "coordinator", active: true },
+          ],
+        },
+        reports: [],
+        watchlists: [],
+        assignments: [],
+        notifications: [],
+        savedFilters: [],
+        observations: [
+          {
+            id: "obs-1",
+            gameId: "game-1",
+            scoutId: "user-coordinator",
+            status: "planned",
+            planHistoryId: "plan-1",
+            note: "",
+            createdAt: "2026-04-23T10:00:00.000Z",
+            updatedAt: "2026-04-23T10:00:00.000Z",
+          },
+        ],
+        feedItems: [
+          {
+            id: "feed-1",
+            type: "plan_published",
+            actorId: "user-coordinator",
+            title: "Koordination hat 1 Spiel in seinen Plan genommen",
+            body: "Team A vs Team B",
+            gameIds: ["game-1"],
+            planHistoryId: "plan-1",
+            createdAt: "2026-04-23T10:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/hub"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+
+    expect(await screen.findByText(/Koordination hat 1 Spiel in seinen Plan genommen/i)).toBeInTheDocument();
+    expect(screen.getByText(/Team A vs Team B/i)).toBeInTheDocument();
+  });
+
+  it("legt aus einer gesehenen Sichtung einen verknüpften Spielbericht an", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.productDomain,
+      JSON.stringify({
+        version: 2,
+        activeUserId: "user-scout",
+        users: [{ id: "user-scout", name: "Scout", role: "scout", teamId: "team-scoutx", active: true }],
+        team: {
+          id: "team-scoutx",
+          name: "ScoutX Team",
+          accounts: [{ id: "user-scout", name: "Scout", role: "scout", active: true }],
+        },
+        reports: [],
+        watchlists: [],
+        assignments: [],
+        notifications: [],
+        savedFilters: [],
+        observations: [
+          {
+            id: "obs-game-1-user-scout",
+            gameId: "game-1",
+            scoutId: "user-scout",
+            status: "seen",
+            planHistoryId: "plan-1",
+            note: "",
+            game: { id: "game-1", home: "Team A", away: "Team B" },
+            createdAt: "2026-04-23T10:00:00.000Z",
+            updatedAt: "2026-04-23T10:00:00.000Z",
+            seenAt: "2026-04-23T10:00:00.000Z",
+          },
+        ],
+        feedItems: [],
+      }),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/hub"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Spielbericht anlegen/i }));
+
+    expect(await screen.findAllByText("Spielbericht: Team A vs Team B")).not.toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    expect(screen.getByText(/Spielbericht verknuepft/i)).toBeInTheDocument();
+  });
+
+  it("ergänzt eine Notiz an einer gesehenen Sichtung", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.productDomain,
+      JSON.stringify({
+        version: 2,
+        activeUserId: "user-scout",
+        users: [{ id: "user-scout", name: "Scout", role: "scout", teamId: "team-scoutx", active: true }],
+        team: {
+          id: "team-scoutx",
+          name: "ScoutX Team",
+          accounts: [{ id: "user-scout", name: "Scout", role: "scout", active: true }],
+        },
+        reports: [],
+        watchlists: [],
+        assignments: [],
+        notifications: [],
+        savedFilters: [],
+        observations: [
+          {
+            id: "obs-game-1-user-scout",
+            gameId: "game-1",
+            scoutId: "user-scout",
+            status: "seen",
+            planHistoryId: "plan-1",
+            note: "",
+            game: { id: "game-1", home: "Team A", away: "Team B" },
+            createdAt: "2026-04-23T10:00:00.000Z",
+            updatedAt: "2026-04-23T10:00:00.000Z",
+            seenAt: "2026-04-23T10:00:00.000Z",
+          },
+        ],
+        feedItems: [],
+      }),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/hub"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: /Notiz zur Sichtung Team A vs Team B/i }), {
+      target: { value: "Nr. 10 mit Linksfuß-Aktionen prüfen." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Notiz speichern/i }));
+
+    expect(await screen.findByText(/Sichtungsnotiz ergänzt/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Nr\. 10 mit Linksfuß-Aktionen prüfen\./i).length).toBeGreaterThan(0);
+  });
+
+  it("führt aus einer gesehenen Sichtung in Spieler-Highlight und Follow-up", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.productDomain,
+      JSON.stringify({
+        version: 2,
+        activeUserId: "user-scout",
+        users: [{ id: "user-scout", name: "Scout", role: "scout", teamId: "team-scoutx", active: true }],
+        team: {
+          id: "team-scoutx",
+          name: "ScoutX Team",
+          accounts: [{ id: "user-scout", name: "Scout", role: "scout", active: true }],
+        },
+        reports: [],
+        watchlists: [],
+        assignments: [],
+        notifications: [],
+        savedFilters: [],
+        observations: [
+          {
+            id: "obs-game-1-user-scout",
+            gameId: "game-1",
+            scoutId: "user-scout",
+            status: "seen",
+            planHistoryId: "plan-1",
+            note: "",
+            game: { id: "game-1", home: "Team A", away: "Team B" },
+            createdAt: "2026-04-23T10:00:00.000Z",
+            updatedAt: "2026-04-23T10:00:00.000Z",
+            seenAt: "2026-04-23T10:00:00.000Z",
+          },
+        ],
+        feedItems: [],
+      }),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/hub"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Follow-up/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Planung" }));
+    expect((await screen.findAllByText(/Follow-up: Team A vs Team B/i)).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Spieler highlighten/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Anlegen" }));
+    expect((await screen.findAllByText("Live-Sichtungen")).length).toBeGreaterThan(0);
+    fireEvent.change(await screen.findByPlaceholderText("Spielername"), {
+      target: { value: "Max Muster" },
+    });
+    const addPlayerButton = screen.getByRole("button", { name: /Spieler hinzufügen/i });
+    await waitFor(() => expect(addPlayerButton).not.toBeDisabled());
+    fireEvent.click(addPlayerButton);
+
+    expect((await screen.findAllByText(/Max Muster/i)).length).toBeGreaterThan(0);
+  });
+
+  it("legt ein manuelles Spiel im Team-Feed an", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/hub"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+    fireEvent.change(screen.getByPlaceholderText("Heimteam manuell"), {
+      target: { value: "Inoffizielles Team A" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Auswärtsteam"), {
+      target: { value: "Inoffizielles Team B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Manuelles Spiel anlegen/i }));
+
+    expect(await screen.findByText(/Manuelles Spiel angelegt/i)).toBeInTheDocument();
+    expect(screen.getByText(/Inoffizielles Team A vs Inoffizielles Team B/i)).toBeInTheDocument();
+  });
+
   it(
     "durchläuft Setup -> Games -> Plan mit schnellem PDF-Flow",
     async () => {
@@ -128,6 +390,10 @@ describe("ScoutX Integration", () => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/games"))).toBe(true);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/generate"))).toBe(false);
       expect(openScoutPdf).not.toHaveBeenCalled();
+      fireEvent.click(screen.getAllByRole("button", { name: /Schritt Cockpit/i })[0]);
+      await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+      fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+      expect(await screen.findByText(/Scout hat 1 Spiel in seinen Plan genommen/i)).toBeInTheDocument();
     },
     15000,
   );

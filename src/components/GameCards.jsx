@@ -2,6 +2,37 @@ import { C } from "../styles/theme";
 import { formatDistanceKm } from "../utils/geo";
 import { resolveGameMatchUrl } from "../utils/gameLinks";
 
+function PlanningBadge({ game }) {
+  const label = String(game?.planningLabel || "").trim();
+  if (!label) {
+    return null;
+  }
+  return (
+    <span
+      title={label}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        maxWidth: "100%",
+        marginTop: 6,
+        border: `1px solid ${game?.plannedByOtherScouts?.length ? "rgba(251,191,36,0.22)" : C.greenBorder}`,
+        borderRadius: 999,
+        background: game?.plannedByOtherScouts?.length ? C.warnDim : C.greenDim,
+        color: game?.plannedByOtherScouts?.length ? C.warn : C.greenLight,
+        padding: "2px 8px",
+        fontSize: 11,
+        fontWeight: 800,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function GameCards({
   games,
   notes = {},
@@ -69,6 +100,9 @@ export function GameCards({
               >
                 {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
                 {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
+                <div>
+                  <PlanningBadge game={game} />
+                </div>
               </div>
             </div>
 
