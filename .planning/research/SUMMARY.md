@@ -1,6 +1,6 @@
 # Project Research Summary
 
-**Project:** ScoutX (ScoutPlan)
+**Project:** ScoutX (ScoutX)
 **Domain:** Youth football scouting match-day planner — fussball.de data ingestion, dark-theme PDF export, Docker + Ollama/Qwen deployment
 **Researched:** 2026-04-02
 **Confidence:** HIGH (stack and architecture), MEDIUM (Ollama sizing)

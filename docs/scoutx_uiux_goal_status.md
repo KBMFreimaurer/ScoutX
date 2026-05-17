@@ -78,13 +78,15 @@ Bis diese drei Real-Device-Punkte bestaetigt sind, ist die Definition of Done au
 
 ## 6) Update 2026-05-07: Google API Key Hardcoding abgeschlossen
 
+Hinweis (2026-05-17): Dieser Stand ist superseded. Der Google-Maps-Key wird jetzt wieder ausschließlich über `VITE_GOOGLE_MAPS_API_KEY` injiziert; harte Schlüssel im Web-/iOS-Code wurden entfernt.
+
 Umgesetzte Aenderungen:
 - Zentrale Web-Konstante angelegt:
   - `src/config/googleMaps.js`
-  - `GOOGLE_MAPS_API_KEY = "AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc"`
+  - `GOOGLE_MAPS_API_KEY` (historisch als Code-Konstante geführt)
 - `src/utils/geo.js` auf reine Code-Quelle umgestellt:
   - Entfernt: ENV-Key-Pfad (`VITE_GOOGLE_MAPS_API_KEY`)
-  - Entfernt: Runtime-/localStorage-Key-Pfad (`scoutplan.googlemaps.apikey.v1`)
+  - Entfernt: Runtime-/localStorage-Key-Pfad (`scoutx.googlemaps.apikey.v1`)
   - Entfernt: Funktionen fuer manuelles Setzen/Loeschen des Runtime-Keys
   - `keySource` ist jetzt deterministisch `code`
 - Setup-UI bereinigt:
@@ -93,7 +95,7 @@ Umgesetzte Aenderungen:
   - Beibehalten: Routing-Status/Provider-Anzeige
 - Native iOS-Konstante hinterlegt:
   - `ios/App/App/AppDelegate.swift`
-  - `ScoutXSecrets.googleMapsApiKey` + Ablage in `UserDefaults` unter `SCOUTX_GOOGLE_MAPS_API_KEY`
+  - `ScoutXSecrets.googleMapsApiKey` + Ablage in `UserDefaults` unter `SCOUTX_GOOGLE_MAPS_API_KEY` (historisch)
 - Build-/Deploy-Pfade bereinigt:
   - `Dockerfile`: entfernt `VITE_GOOGLE_MAPS_API_KEY` Build-ARG/ENV
   - `docker-compose.yml`: entfernt `VITE_GOOGLE_MAPS_API_KEY` aus `environment`/`build.args`

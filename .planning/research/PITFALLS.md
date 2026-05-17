@@ -1,4 +1,4 @@
-# PITFALLS — ScoutX (ScoutPlan)
+# PITFALLS — ScoutX (ScoutX)
 
 **Research Type:** Project Research — Pitfalls dimension
 **Milestone Context:** Subsequent — scraping fussball.de, generating PDFs, and deploying Docker+Ollama
@@ -72,7 +72,7 @@ This document captures specific, actionable pitfalls for the three active milest
 
 ### PITFALL-4: Match detail page HTML structure differs between mobile and desktop UA
 
-**What goes wrong:** `extractMatchDetails()` parses `<h3>Anpfiff</h3><span>` and `<div class="team-name">` using the desktop HTML structure. fussball.de serves a different HTML layout when the `User-Agent` string resembles a mobile browser. The current `User-Agent` header is `ScoutPlanAdapter/1.0 (+https://www.fussball.de)` — a non-standard UA. If fussball.de's CDN categorizes this as a bot and serves a stripped/simplified page, the `time` field will be empty and `venue` will be `""`, causing the fallback `"10:00"` / `"Sportanlage"` values to appear in the output.
+**What goes wrong:** `extractMatchDetails()` parses `<h3>Anpfiff</h3><span>` and `<div class="team-name">` using the desktop HTML structure. fussball.de serves a different HTML layout when the `User-Agent` string resembles a mobile browser. The current `User-Agent` header is `ScoutXAdapter/1.0 (+https://www.fussball.de)` — a non-standard UA. If fussball.de's CDN categorizes this as a bot and serves a stripped/simplified page, the `time` field will be empty and `venue` will be `""`, causing the fallback `"10:00"` / `"Sportanlage"` values to appear in the output.
 
 **Warning signs:**
 - Scraped games consistently show `"10:00"` as kickoff time across all venues (the hardcoded fallback)
@@ -80,7 +80,7 @@ This document captures specific, actionable pitfalls for the three active milest
 - `extractMatchDetails()` unit test passes but real-world output has blank `time` fields
 
 **Prevention strategy:**
-- Set `User-Agent` to a realistic desktop browser string (Chrome/Firefox on Linux) in production runs. Keep `ScoutPlanAdapter/1.0` only in the `X-Scout-Adapter` custom header for identification.
+- Set `User-Agent` to a realistic desktop browser string (Chrome/Firefox on Linux) in production runs. Keep `ScoutXAdapter/1.0` only in the `X-Scout-Adapter` custom header for identification.
 - Add a diagnostic assertion in `enrichMatches()`: if more than 40% of enriched games have `time === "10:00"` (the fallback), emit a warn-level alert indicating a possible UA/layout mismatch.
 - Add a dedicated test fixture for the match-detail HTML format, snapshot the expected parsed fields, and update the fixture when running a live smoke test.
 
@@ -284,7 +284,7 @@ This document captures specific, actionable pitfalls for the three active milest
 **Warning signs:**
 - Scouts report "missing" known teams from the games list
 - Adapter returns games but frontend shows fewer than expected after filtering
-- `SCOUTPLAN_DEBUG_EXPORTER=true` log shows games for a team but frontend filters them out
+- `SCOUTX_DEBUG_EXPORTER=true` log shows games for a team but frontend filters them out
 
 **Prevention strategy:**
 - When `fetchGamesAdapter()` returns games and the filtered count is substantially less than the total count (e.g., filtered < 30% of raw), surface a diagnostic warning in the UI: "N games received, M matched your team selection. Are the team names correct?"

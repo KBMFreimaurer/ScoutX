@@ -1,0 +1,141 @@
+{
+  "source_prompt": "src/prompt.md",
+  "updated_at_utc": "2026-05-17T15:35:01.995Z",
+  "overall_status": "not_complete",
+  "items": [
+    {
+      "id": "1-analysis-note",
+      "requirement": "Analyse der ScoutX-Datenstruktur und Dokumentation in /docs/hrworks-import-plan.md",
+      "status": "fulfilled",
+      "evidence": [
+        "docs/hrworks-import-plan.md"
+      ]
+    },
+    {
+      "id": "2-domain-model-validation",
+      "requirement": "Internes HRworksImportPayload + Validierung inkl. Duplikatschutz",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/services/hrworksImport.test.js"
+      ]
+    },
+    {
+      "id": "3-ui-review-flow",
+      "requirement": "Button \"In HRworks importieren\" + Review-Modal + Blockierung bei Fehlern",
+      "status": "fulfilled",
+      "evidence": [
+        "src/pages/PlanPage.jsx",
+        "src/components/HrworksImportReviewModal.jsx",
+        "src/pages/PlanPage.test.jsx",
+        "src/components/HrworksImportReviewModal.test.jsx"
+      ]
+    },
+    {
+      "id": "4-api-first-check",
+      "requirement": "API/CSV-Strategie zuerst prüfen und dokumentieren",
+      "status": "partial",
+      "evidence": [
+        "docs/hrworks-import-plan.md"
+      ],
+      "gap": "Tenant-spezifische finale Entscheidung/Freigabe ausstehend"
+    },
+    {
+      "id": "5-browser-automation-login",
+      "requirement": "Browser-Automation mit manuellem Login, Confirm-before-save, robuste Abbrüche",
+      "status": "partial",
+      "evidence": [
+        "src/services/hrworksAutomationRuntime.js",
+        "e2e/helpers/hrworksAutomation.js",
+        "docs/hrworks-live-session-runbook.md"
+      ],
+      "gap": "Realer E2E-Nachweis im echten HRworks-DOM noch ausstehend"
+    },
+    {
+      "id": "6-selector-mapping",
+      "requirement": "Selector-Mapping/Setup-Modus mit stabilen Selektoren und Fallback-Fehlern",
+      "status": "fulfilled",
+      "evidence": [
+        "config/hrworks.selectors.json",
+        "src/services/hrworksSelectorMapping.js",
+        "src/services/hrworksSelectorMapping.test.js"
+      ]
+    },
+    {
+      "id": "7-excel-reference-model",
+      "requirement": "Excel/Arbeitszeitdaten berücksichtigen (Parsing/Mapping/Validierung)",
+      "status": "partial",
+      "evidence": [
+        "src/services/hrworksExcelParser.js",
+        "src/services/hrworksExcelParser.test.js"
+      ],
+      "gap": "Direkter XLSX-Parser nicht umgesetzt; CSV/TXT-Referenzflow aktiv"
+    },
+    {
+      "id": "8-audit-log-reimport-warning",
+      "requirement": "Importstatus/Audit-Log + Re-Import-Warnung",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/pages/PlanPage.jsx",
+        "src/services/hrworksAuditExport.js"
+      ]
+    },
+    {
+      "id": "9-error-handling",
+      "requirement": "Robuste Fehlerbehandlung mit klaren Nutzerhinweisen",
+      "status": "partial",
+      "evidence": [
+        "src/services/hrworksAutomationRuntime.js",
+        "src/components/HrworksImportReviewModal.jsx"
+      ],
+      "gap": "Vollständige reale Fehlerfall-Abdeckung gegen HRworks-Produktiv-UI offen"
+    },
+    {
+      "id": "10-security-privacy",
+      "requirement": "Keine Credentials speichern, datensparsame Logs, keine Session-Persistenz",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksAutomationRuntime.js",
+        "src/services/hrworksImport.js",
+        "docs/hrworks-live-session-runbook.md"
+      ]
+    },
+    {
+      "id": "11-tests",
+      "requirement": "Tests für Datenmodell, Parser, UI, Automation",
+      "status": "fulfilled",
+      "evidence": [
+        "package.json",
+        "src/services/hrworksImport.test.js",
+        "src/services/hrworksExcelParser.test.js",
+        "src/components/HrworksImportReviewModal.test.jsx",
+        "e2e/helpers/hrworksAutomation.unit.test.js"
+      ]
+    },
+    {
+      "id": "12-iterative-dev-doc-updates",
+      "requirement": "Iteratives Vorgehen mit aktualisierter Doku/Runbooks",
+      "status": "fulfilled",
+      "evidence": [
+        "docs/hrworks-import-plan.md",
+        "docs/hrworks-import-completion-audit.md",
+        "docs/hrworks-live-session-runbook.md"
+      ]
+    },
+    {
+      "id": "13-acceptance-complete",
+      "requirement": "Akzeptanzkriterien vollständig erfüllt inkl. Realbetrieb",
+      "status": "not_complete",
+      "evidence": [
+        "docs/hrworks-acceptance-status.json",
+        "docs/hrworks-status-report-20260517T151449Z.txt"
+      ],
+      "gap": "ac8/ac9 bleiben partial bis echte Live-Evidence mit echten Nutzer-/Tenantwerten vorliegt"
+    }
+  ],
+  "blocking_external_steps": [
+    "npm run run:hrworks:final-closeout -- \"docs/hrworks-live-session-evidence-20260517T131103Z.md\" --user=\"ECHTER NAME\" --tenant=\"ECHTER HRWORKS-MANDANT\"",
+    "npm run check:hrworks:go-no-go"
+  ]
+}

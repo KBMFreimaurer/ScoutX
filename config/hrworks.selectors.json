@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "travelExpenseButton": "button:has-text('Reisekostenabrechnung')",
+  "newTravelExpenseButton": "button:has-text('Neue Reisekostenabrechnung')",
+  "purposeInput": "input[name='purpose']",
+  "noteTextarea": "textarea[name='note']",
+  "dateRangeInput": "input[name='dateRange']",
+  "startTimeInput": "input[name='startTime']",
+  "endTimeInput": "input[name='endTime']",
+  "departureLocationSelect": "input[name='departureLocation']",
+  "destinationLocationSelect": "input[name='destinationLocation']",
+  "costCenterSelect": "input[name='costCenter']",
+  "saveButton": "button:has-text('Speichern')",
+  "nextToReceiptsButton": "button:has-text('Weiter zu den digitalen Belegen')"
+}

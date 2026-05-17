@@ -1,6 +1,6 @@
 # ScoutX App Store Release Status
 
-Stand: 2026-05-05
+Stand: 2026-05-17
 
 ## Phase 1: Product And Release Strategy
 
@@ -60,23 +60,28 @@ Erledigt:
 - Erste Intent-Suite implementiert (`OpenScoutXDestinationIntent`, `OpenNextScoutingGameIntent`, `StartScoutSheetIntent`).
 - `AppShortcutsProvider` ergänzt (deutsche Phrasen, kein fremdes Branding).
 - Zentraler Handoff über `scoutx://`-Deeplinks eingebaut.
+- Simulator-Runtime erneut verifiziert: `build_run_sim` erfolgreich auf iPhone 17 Pro / iOS 26.4; App-Start inkl. Runtime-Logs stabil.
+- Deep-Link-Zielrouting der Intent-URLs testseitig abgesichert (`src/native/deepLinks.test.js`).
 
 Offene Risiken:
-- Runtime-Verifikation der Intents in Shortcuts/Siri steht bis zum funktionierenden Simulator aus.
+- Siri-/Shortcuts-UI-Interaktion auf echtem Gerät steht noch aus (rein funktionale URL-Öffnung ist verifiziert).
 
 Nächste Schritte:
-- Intent-Ausführung auf Simulator/Gerät testen und ggf. Phrase-Tuning für bessere Discoverability vornehmen.
+- Phrase-Tuning und echte Siri-/Shortcuts-Ausführung im Device-Testflight-Durchlauf mit dokumentierten Screenshots nachziehen.
 
 ## Phase 5: Backend And Data
 
 Erledigt:
 - Release-seitig kritische Frontend-Härtung: harter Client-Fallback-Token entfernt.
+- Übergang aus Phase 4 erfolgt (Intent-/Deep-Link-Parität verifiziert, App-Shell stabil).
+- P5-Backend/Data-Gate als ausführbares Script ergänzt (`ops/check-p5-backend-data-gates.sh`, `npm run release:p5:gate`).
+- Gate deckt Test/Build/Health/DB-Readiness/Metrics sowie HTTPS-/IPv6-Smokes und Demo-Artefaktlage ab.
 
 Offene Risiken:
-- Produktions-HTTPS-Endpoint, Monitoring, IPv6-only-Test und Review-stabiler Demo-Modus sind noch nicht final verifiziert.
+- Externe Produktions-/Staging-Live-Verifikation (echter HTTPS-Host, reales IPv6-Only-Netz) bleibt umgebungsabhängig und muss im Release-Run protokolliert werden.
 
 Nächste Schritte:
-- Live-Review-Backend verbindlich festlegen und mit Health-/Fallback-Szenarien dokumentieren.
+- P6 starten: Privacy/Compliance-Details in App Store Connect finalisieren und mit Dateninventar 1:1 abgleichen.
 
 ## Phase 6: Privacy, Security And Legal
 
@@ -85,30 +90,37 @@ Erledigt:
 - In-App Datenschutz-/Support-Flows ergänzt (`/privacy`, `/support`).
 - Statische öffentliche Seiten vorbereitet (`public/privacy-policy.html`, `public/support.html`).
 - Hardcoded produktiver Frontend-Token entfernt.
+- Dateninventar finalisiert (`docs/scoutx_privacy_data_inventory.md`).
+- App-Store-Privacy-Mapping finalisiert (`docs/scoutx_app_store_privacy_labels.md`).
+- Drittanbieter-/Datenquellen-Rechteprüfung dokumentiert (`docs/scoutx_third_party_rights_review.md`).
+- P6-Gate ergänzt (`ops/check-p6-privacy-compliance-gates.sh`, `npm run release:p6:gate`).
 
 Offene Risiken:
-- Vollständige App Privacy Details (App Store Connect Formular) noch nicht befüllt.
-- Drittanbieter-/Datenquellen-Rechteprüfung muss finalisiert werden.
+- ASC-Formulareingabe muss noch operativ im App Store Connect durchgeführt und als Artefakt exportiert werden.
 
 Nächste Schritte:
-- Dateninventar final auflisten und mit App Privacy Labels 1:1 abgleichen.
+- P7 starten: App-Store-Metadaten (DE/EN) final paketieren und in ASC eintragen.
 
 ## Phase 7: App Store Metadata
 
 Erledigt:
 - Baseline-Namen/Positionierung für `ScoutX` und v1-Feature-Umfang intern definiert.
+- Metadatenpaket in DE finalisiert (`docs/scoutx_app_store_metadata_de.md`).
+- Metadatenpaket in EN finalisiert (`docs/scoutx_app_store_metadata_en.md`).
+- Screenshot-/Submission-Checklist finalisiert (`docs/scoutx_app_store_screenshot_checklist.md`).
+- P7-Gate ergänzt (`ops/check-p7-app-store-metadata-gates.sh`, `npm run release:p7:gate`).
 
 Offene Risiken:
-- Finale ASC-Metadaten (Subtitle, Description, Keywords, Rating, Screenshots, Review Notes) noch nicht in ASC eingetragen.
+- Operative ASC-Eingabe und Upload der Screenshots stehen noch aus (manueller Store-Connect-Schritt).
 
 Nächste Schritte:
-- Metadata-Paket in deutscher und englischer Review-tauglicher Fassung finalisieren.
+- P8 starten: vollständige QA-/TestFlight-Durchläufe und Artefaktprotokoll vervollständigen.
 
 ## Phase 8: QA And TestFlight
 
 Erledigt:
 - `npm run lint`: bestanden.
-- `npm run test`: bestanden (35 Dateien, 222 Tests).
+- `npm run test`: bestanden (aktuell 50 Dateien, 346 Tests inkl. Skips).
 - `npm run build`: bestanden.
 - `npx cap sync ios`: erfolgreich.
 - `npm run ios:sync`: erfolgreich am 2026-05-05 erneut ausgeführt.
@@ -116,22 +128,27 @@ Erledigt:
   - `build_sim`: bestanden für Scheme `App`.
   - `build_run_sim`: bestanden auf iPhone 17 Pro / iOS 26.4.
   - Smoke-Test: Cockpit, Dashboard und Scout-Bewertungsbogen visuell geprüft.
+- Release-E2E-Smoketest ausführbar und im lokalen Modus ohne DB-URL sauber `skipped` (`npm run test:e2e:release`).
+- P8-Gate ergänzt (`ops/check-p8-qa-testflight-gates.sh`, `npm run release:p8:gate`).
+- P8-Checklist dokumentiert (`docs/scoutx_p8_qa_testflight_checklist.md`).
+- P8-Gate auf Strict-Mode gehärtet: kein Sandbox-Fallback, `skipped` im Release-E2E gilt als Fehler.
 
 Offene Risiken:
-- Vollständiger Kernflow-Smoke-Test ist noch nicht abgeschlossen (Setup, Spiele, Plan, Export/Share, Offline/API-Ausfall).
-- Echtes Gerät und TestFlight-Installation stehen noch aus.
+- Vollständiger Kernflow-Smoke-Test auf physischem Gerät ist noch offen (inkl. Offline/API-Ausfall).
+- Internal TestFlight-Durchlauf in ASC ist noch offen.
 
 Nächste Schritte:
-- Vollständigen Kernflow-Smoke-Test auf Simulator durchführen und Screenshots/Notizen für App Store Metadata ableiten.
-- Danach echten Geräte-Test und TestFlight-Internal-Testing vorbereiten.
+- P9 starten: Archive/Upload in App Store Connect, Compliance-Formulare finalisieren und zur Review einreichen.
 
 ## Phase 9: Submission
 
 Erledigt:
-- Noch keine Submission-Aktionen ausgeführt.
+- Submission-Runbook für ASC erstellt (`docs/scoutx_p9_submission_runbook.md`).
+- P9-Readiness-Gate ergänzt (`ops/check-p9-submission-readiness-gates.sh`, `npm run release:p9:gate`).
+- Formale P9-Abschlussdoku ergänzt (`docs/scoutx_p9_completion.md`).
 
 Offene Risiken:
-- Archive/Upload/Compliance/Privacy/Review Notes in App Store Connect stehen aus.
+- Manuelle ASC-Submission (Archive/Upload/Compliance/Privacy/Review Notes) steht weiterhin aus.
 
 Nächste Schritte:
-- Nach abgeschlossener Simulator-/Geräte-QA Release Candidate archivieren und in ASC einreichen.
+- Runbook in ASC operativ abarbeiten und Review-Submission auslösen.

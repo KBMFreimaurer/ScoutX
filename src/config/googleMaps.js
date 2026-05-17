@@ -1,2 +1,4 @@
-export const GOOGLE_MAPS_API_KEY = "AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc";
-export const GOOGLE_MAPS_API_KEY_SOURCE = "code";
+const ENV_KEY = String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+
+export const GOOGLE_MAPS_API_KEY = ENV_KEY;
+export const GOOGLE_MAPS_API_KEY_SOURCE = ENV_KEY ? "env" : "none";

@@ -1,0 +1,43 @@
+groups:
+  - name: scoutx-adapter-alerts
+    interval: 30s
+    rules:
+      - alert: ScoutXIngestionJobsFailed
+        expr: scoutx_ingestion_jobs_failed >= 1
+        for: 2m
+        labels:
+          severity: warning
+          service: scoutx-adapter
+        annotations:
+          summary: "ScoutX ingestion jobs failed"
+          description: "{{ $value }} ingestion job(s) are in failed state."
+
+      - alert: ScoutXMissingGameProvenance
+        expr: scoutx_game_provenance_missing >= 1
+        for: 5m
+        labels:
+          severity: warning
+          service: scoutx-adapter
+        annotations:
+          summary: "ScoutX game provenance missing"
+          description: "{{ $value }} game(s) currently have no provenance metadata."
+
+      - alert: ScoutXAdapterErrorResponsesHigh
+        expr: rate(scoutx_adapter_runtime_error_responses_total[10m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: scoutx-adapter
+        annotations:
+          summary: "ScoutX adapter error response rate elevated"
+          description: "Error response rate is {{ $value }} per second over the last 10 minutes."
+
+      - alert: ScoutXMetricsUnavailable
+        expr: absent(scoutx_adapter_uptime_seconds)
+        for: 2m
+        labels:
+          severity: critical
+          service: scoutx-adapter
+        annotations:
+          summary: "ScoutX metrics unavailable"
+          description: "Prometheus cannot scrape /api/admin/metrics from scoutx-adapter."

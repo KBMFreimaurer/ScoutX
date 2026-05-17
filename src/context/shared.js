@@ -105,7 +105,7 @@ export function normalizeTeamParameters(values) {
   return teams;
 }
 
-export function cleanScoutPlanText(rawText) {
+export function cleanScoutXText(rawText) {
   const lines = String(rawText || "")
     .replace(/[#*]/g, "")
     .split("\n")

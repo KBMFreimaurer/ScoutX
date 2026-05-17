@@ -1,7 +1,7 @@
 import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_API_KEY_SOURCE } from "../config/googleMaps";
 
-const GEO_CACHE_KEY = "scoutplan.geo.cache.v1";
-const ROUTE_CACHE_KEY = "scoutplan.route.cache.v1";
+const GEO_CACHE_KEY = "scoutx.geo.cache.v1";
+const ROUTE_CACHE_KEY = "scoutx.route.cache.v1";
 const REQUEST_INTERVAL_MS_OSM = 1000;
 const REQUEST_INTERVAL_MS_GOOGLE = 150;
 const REQUEST_TIMEOUT_MS = Math.max(2000, Number(import.meta?.env?.VITE_GEO_REQUEST_TIMEOUT_MS || 12000));

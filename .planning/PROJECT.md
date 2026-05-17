@@ -2,7 +2,7 @@
 
 ## What This Is
 
-ScoutX (ScoutPlan) ist eine React-SPA für Jugend-Scouting im Fußball (FVN/Niederrhein). Scouts wählen Kreis, Jugendklasse und Teams, die App holt echte Spieldaten von fussball.de und erzeugt einen druckfertigen PDF-Tagesplan. Die App läuft auf einem eigenen Server mit Docker und nutzt perspektivisch Qwen via Ollama für KI-gestützte Spielpriorisierung.
+ScoutX (ScoutX) ist eine React-SPA für Jugend-Scouting im Fußball (FVN/Niederrhein). Scouts wählen Kreis, Jugendklasse und Teams, die App holt echte Spieldaten von fussball.de und erzeugt einen druckfertigen PDF-Tagesplan. Die App läuft auf einem eigenen Server mit Docker und nutzt perspektivisch Qwen via Ollama für KI-gestützte Spielpriorisierung.
 
 ## Core Value
 

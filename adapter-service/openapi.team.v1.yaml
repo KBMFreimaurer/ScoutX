@@ -1,0 +1,412 @@
+openapi: 3.0.3
+info:
+  title: ScoutX Adapter API
+  version: 1.0.0
+  description: |
+    OpenAPI-like Referenz für Team- und Admin-Endpunkte des ScoutX Adapter-Service.
+    Diese Spezifikation priorisiert produktionsrelevante Flows (Auth, Team-State, Planung, Notifications, Admin-Diagnostics).
+servers:
+  - url: http://127.0.0.1:8787
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Service health
+      security: []
+      responses:
+        '200':
+          description: Health payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/team/auth/login:
+    post:
+      summary: Team login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, password]
+              properties:
+                userId: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+        '401':
+          description: Invalid credentials
+
+  /api/team/auth/logout:
+    post:
+      summary: Logout current team session
+      responses:
+        '200':
+          description: Logout success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /api/team/state:
+    get:
+      summary: Fetch current team state
+      responses:
+        '200':
+          description: Team state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/plans:
+    post:
+      summary: Publish team plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [games]
+              properties:
+                planHistoryId: { type: string }
+                games:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Game'
+      responses:
+        '200':
+          description: Plan published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/manual-games:
+    post:
+      summary: Create/update manual game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Game'
+      responses:
+        '200':
+          description: Updated manual games
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/goals:
+    post:
+      summary: Update team goals
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamGoals'
+      responses:
+        '200':
+          description: Updated team goals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/observations/seen:
+    post:
+      summary: Mark game observation as seen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gameId]
+              properties:
+                gameId: { type: string }
+                scoutId: { type: string }
+      responses:
+        '200':
+          description: Observation updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/observations/report:
+    post:
+      summary: Link observation to report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observationId]
+              properties:
+                observationId: { type: string }
+                reportId: { type: string }
+                reportUrl: { type: string }
+      responses:
+        '200':
+          description: Observation/report link updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/observations/note:
+    post:
+      summary: Save follow-up note on observation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observationId, note]
+              properties:
+                observationId: { type: string }
+                note: { type: string }
+      responses:
+        '200':
+          description: Observation note updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatePayload'
+
+  /api/team/notifications:
+    get:
+      summary: List team notifications
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [unread, read]
+        - in: query
+          name: type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+
+  /api/team/notifications/read:
+    post:
+      summary: Mark notifications as read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Read status updated
+
+  /api/team/audit-log:
+    get:
+      summary: List audit log entries with optional actor/action filter
+      parameters:
+        - in: query
+          name: actorId
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  count: { type: integer }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        actorId: { type: string }
+                        action: { type: string }
+                        title: { type: string }
+                        message: { type: string }
+                        createdAt: { type: string, format: date-time }
+
+  /api/admin/status:
+    get:
+      summary: Admin diagnostics status
+      responses:
+        '200':
+          description: Status payload
+
+  /api/admin/jobs:
+    get:
+      summary: Ingestion job diagnostics
+      responses:
+        '200':
+          description: Job list
+
+  /api/admin/metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      responses:
+        '200':
+          description: Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        service: { type: string }
+        timestamp: { type: string, format: date-time }
+        lastRefreshReason: { type: string }
+        lastError: { type: string, nullable: true }
+        dbFirstMode: { type: boolean }
+        dbUrlConfigured: { type: boolean }
+
+    TeamStatePayload:
+      type: object
+      properties:
+        ok: { type: boolean }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            role: { type: string }
+            teamId: { type: string }
+        team:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+        manualGames:
+          type: array
+          items:
+            $ref: '#/components/schemas/Game'
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Observation'
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        feedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedItem'
+
+    TeamGoals:
+      type: object
+      properties:
+        favoriteTeams:
+          type: array
+          items: { type: string }
+        favoriteClubs:
+          type: array
+          items: { type: string }
+        leaguePriorities:
+          type: array
+          items: { type: string }
+        ageGroups:
+          type: array
+          items: { type: string }
+
+    Game:
+      type: object
+      properties:
+        id: { type: string }
+        source: { type: string }
+        date: { type: string }
+        time: { type: string }
+        home: { type: string }
+        away: { type: string }
+        venue: { type: string }
+        status: { type: string }
+        note: { type: string }
+
+    Observation:
+      type: object
+      properties:
+        id: { type: string }
+        gameId: { type: string }
+        scoutId: { type: string }
+        status: { type: string }
+        note: { type: string }
+        reportId: { type: string }
+        reportUrl: { type: string }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        unread: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    FeedItem:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        createdAt: { type: string, format: date-time }
+        actorId: { type: string }
+        title: { type: string }
+        body: { type: string }

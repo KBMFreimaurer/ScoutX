@@ -1,5 +1,6 @@
 import { JUGEND_KLASSEN, KICKOFF_ZEITEN } from "../data/altersklassen";
 import { VENUES_JE_KREIS } from "../data/kreise";
+import { importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
 
 export const DATA_SOURCE_LABELS = {
   csv: "CSV/JSON Import",
@@ -1059,6 +1060,60 @@ async function fetchGamesMock(params) {
   };
 }
 
+function tournamentToGame(item, index, params) {
+  const dateText = String(item?.dateFrom || item?.dateTo || params?.fromDate || "").trim();
+  const dateObj = normalizeDate(dateText, params?.fromDate || "1970-01-01").value;
+  const tournamentName = String(item?.name || "Turnier").trim();
+  const venue = String(item?.venue || item?.location || "Turnierort").trim();
+  const matchUrl = String(item?.url || "").trim();
+
+  return {
+    id: String(item?.id || `mtp-${index}`),
+    home: tournamentName,
+    away: "Turnier",
+    dateObj,
+    dateLabel: formatDate(dateObj),
+    date: toIsoDate(dateObj),
+    time: "--:--",
+    venue,
+    matchUrl,
+    km: null,
+    priority: 5,
+    turnier: true,
+    source: "tournament",
+    provider: "meinturnierplan.de",
+    tournamentId: String(item?.externalId || item?.id || ""),
+    jugendId: String(params?.jugendId || ""),
+    kreisId: String(params?.kreisId || ""),
+  };
+}
+
+async function fetchGamesTournament(params) {
+  const payload = await importTeamTournamentsFromMeinturnierplan({
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+    teams: Array.isArray(params.teams) ? params.teams : [],
+    kreisId: params.kreisId,
+    kreisLabel: params.regionName || params.kreisId || "",
+    jugendId: params.jugendId,
+    jugendLabel: params.jugendId || "",
+  });
+
+  const tournaments = Array.isArray(payload?.tournaments) ? payload.tournaments : [];
+  if (tournaments.length === 0) {
+    throw new Error("Keine passenden Turniere von meinturnierplan.de gefunden.");
+  }
+
+  const games = tournaments.map((item, index) => tournamentToGame(item, index, params)).sort(compareGamesByDateTime);
+  return {
+    games: markSelectedTeamGames(games, params.teams),
+    meta: {
+      teamFilter: createTeamFilterMeta(games, params.teams),
+      provider: "meinturnierplan.de",
+    },
+  };
+}
+
 /**
  * DataProvider Interface: fetchGames(kreis, jugend, dateRange) -> Game[]
  */
@@ -1097,10 +1152,21 @@ export async function fetchGamesWithProviders({
   };
 
   const providerOrder =
-    mode === "mock" ? ["mock"] : mode === "csv" ? ["csv"] : mode === "adapter" ? ["adapter"] : ["csv", "adapter"];
+    mode === "mock"
+      ? ["mock"]
+      : mode === "csv"
+        ? ["csv"]
+        : mode === "adapter"
+          ? turnier
+            ? ["tournament", "adapter"]
+            : ["adapter"]
+          : turnier
+            ? ["csv", "tournament", "adapter"]
+            : ["csv", "adapter"];
 
   const providerMap = {
     csv: fetchGamesCsv,
+    tournament: fetchGamesTournament,
     adapter: fetchGamesAdapter,
     mock: fetchGamesMock,
   };

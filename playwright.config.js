@@ -14,12 +14,14 @@ export default defineConfig({
     baseURL,
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${PORT}`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: process.env.PLAYWRIGHT_NO_WEBSERVER === "true"
+    ? undefined
+    : {
+        command: `npm run dev -- --host 127.0.0.1 --port ${PORT}`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: "chromium",

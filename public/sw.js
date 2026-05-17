@@ -130,3 +130,54 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
 });
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    (async () => {
+      let payload = {};
+      try {
+        payload = event.data ? event.data.json() : {};
+      } catch {
+        payload = {};
+      }
+      const title = String(payload?.title || "ScoutX Update").trim() || "ScoutX Update";
+      const body = String(payload?.body || "Neue Team-Aktivität verfügbar.").trim() || "Neue Team-Aktivität verfügbar.";
+      const tag = String(payload?.tag || payload?.eventId || "scoutx-update").trim() || "scoutx-update";
+      const targetUrl = String(payload?.url || "/hub").trim() || "/hub";
+      await self.registration.showNotification(title, {
+        body,
+        icon: "/scoutx-icon-192.png",
+        badge: "/scoutx-icon-192.png",
+        tag,
+        renotify: true,
+        data: {
+          url: targetUrl,
+          eventId: String(payload?.eventId || "").trim(),
+        },
+      });
+    })(),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification?.close();
+  event.waitUntil(
+    (async () => {
+      const rawUrl = String(event.notification?.data?.url || "/hub").trim() || "/hub";
+      const target = new URL(rawUrl, self.location.origin).toString();
+      const windowClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of windowClients) {
+        if (client.url === target) {
+          await client.focus();
+          return;
+        }
+      }
+      if (windowClients.length > 0) {
+        await windowClients[0].focus();
+        windowClients[0].postMessage({ type: "SCOUTX_NAVIGATE", url: rawUrl });
+        return;
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
+});

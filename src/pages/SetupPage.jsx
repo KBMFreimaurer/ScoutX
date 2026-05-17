@@ -56,7 +56,7 @@ function buildKreisSelectionLabel(kreise) {
   return `${safeKreise.length} Kreise (${safeKreise.map((item) => item.shortCode || item.kurz).join(", ")})`;
 }
 
-function buildStepCompletionMap({ selectedStateCode, kreisIds, jugendId, fromDate, toDate, scoutName, kmPauschale }) {
+function buildStepCompletionMap({ selectedStateCode, kreisIds, jugendIds, fromDate, toDate, scoutName, kmPauschale }) {
   const hasValidRange = Boolean(fromDate && toDate && String(toDate) >= String(fromDate));
   const hasScoutName = Boolean(String(scoutName || "").trim());
   const hasKmPauschale = Number(kmPauschale) > 0;
@@ -65,16 +65,22 @@ function buildStepCompletionMap({ selectedStateCode, kreisIds, jugendId, fromDat
   return {
     1: Boolean(selectedStateCode),
     2: hasKreisSelection,
-    3: Boolean(jugendId),
+    3: Array.isArray(jugendIds) && jugendIds.length > 0,
     4: hasValidRange,
     5: true,
     6: hasScoutName && hasKmPauschale,
-    7: canBuildStepCompletion({ hasKreisSelection, jugendId, hasValidRange, hasScoutName, hasKmPauschale }),
+    7: canBuildStepCompletion({
+      hasKreisSelection,
+      hasJugendSelection: Array.isArray(jugendIds) && jugendIds.length > 0,
+      hasValidRange,
+      hasScoutName,
+      hasKmPauschale,
+    }),
   };
 }
 
-function canBuildStepCompletion({ hasKreisSelection, jugendId, hasValidRange, hasScoutName, hasKmPauschale }) {
-  return Boolean(hasKreisSelection && jugendId && hasValidRange && hasScoutName && hasKmPauschale);
+function canBuildStepCompletion({ hasKreisSelection, hasJugendSelection, hasValidRange, hasScoutName, hasKmPauschale }) {
+  return Boolean(hasKreisSelection && hasJugendSelection && hasValidRange && hasScoutName && hasKmPauschale);
 }
 
 export function SetupPage() {
@@ -86,6 +92,7 @@ export function SetupPage() {
     availableRegions,
     kreisIds,
     jugendId,
+    jugendIds,
     jugend,
     jugendSubLevels,
     availableJugendSubLevels,
@@ -132,7 +139,7 @@ export function SetupPage() {
   const stepCompletionMap = buildStepCompletionMap({
     selectedStateCode,
     kreisIds,
-    jugendId,
+    jugendIds,
     fromDate,
     toDate,
     scoutName,
@@ -142,7 +149,7 @@ export function SetupPage() {
   const nextStepMeta = SETUP_STEPS[currentStep] || null;
   const summaryParts = [
     selectedKreisLabel,
-    jugend?.label || "Keine Altersklasse",
+    Array.isArray(jugendIds) && jugendIds.length > 1 ? `${jugendIds.length} Altersklassen` : jugend?.label || "Keine Altersklasse",
     hasLocation ? "Startpunkt gesetzt" : "Ohne Startpunkt",
   ];
   const statusLabel = loadingGames || resolvingLocation ? "System arbeitet..." : "System bereit / Live-Daten";
@@ -161,7 +168,7 @@ export function SetupPage() {
     if (currentStep === 2 && (!Array.isArray(kreisIds) || kreisIds.length === 0)) {
       return "Region & Kreis auswählen";
     }
-    if (currentStep === 3 && !jugendId) {
+    if (currentStep === 3 && (!Array.isArray(jugendIds) || jugendIds.length === 0)) {
       return "Altersklasse auswählen";
     }
     if (currentStep === 4 && (!fromDate || !toDate || String(toDate) < String(fromDate))) {
@@ -171,7 +178,7 @@ export function SetupPage() {
       return "Scout-Name eintragen";
     }
     return nextStepMeta ? `Weiter zu ${nextStepMeta.title}` : "Weiter";
-  }, [currentStep, fromDate, toDate, jugendId, kreisIds, scoutName, nextStepMeta, selectedStateCode]);
+  }, [currentStep, fromDate, toDate, jugendIds, kreisIds, scoutName, nextStepMeta, selectedStateCode]);
 
   const onConfirmUseCurrentLocation = () => {
     const shouldProceed =
@@ -398,6 +405,7 @@ export function SetupPage() {
           <AgeGroupSelector
             jugendKlassen={JUGEND_KLASSEN}
             jugendId={jugendId}
+            jugendIds={jugendIds}
             onSelect={onSelectJugend}
             jugend={jugend}
             availableSubLevels={availableJugendSubLevels}

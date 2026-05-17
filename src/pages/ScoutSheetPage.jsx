@@ -7,7 +7,7 @@ import { buildPlayersCsv, buildPlayersJson, triggerDownload } from "../services/
 import { C } from "../styles/theme";
 
 const MAX_PROFILE_IMAGE_EDGE = 320;
-const CLUB_LOGO_CACHE_KEY = "scoutplan.clubLogos.v1";
+const CLUB_LOGO_CACHE_KEY = "scoutx.clubLogos.v1";
 const DOMINANT_FOOT_LABELS = {
   left: "Linksfuß",
   both: "Beidfüßig",

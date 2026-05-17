@@ -174,6 +174,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       kreisId: "",
       selectedStateCode: "",
       jugendId: "",
+      jugendIds: [],
       selTeams: [],
       fromDate: initialRange.fromDate,
       toDate: initialRange.toDate,
@@ -193,7 +194,11 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [selectedStateCode, setSelectedStateCode] = useState(() =>
     normalizeStateCode(setupDefaults.selectedStateCode, setupDefaults.kreisIds || setupDefaults.kreisId),
   );
-  const [jugendId, setJugendId] = useState(setupDefaults.jugendId);
+  const [jugendIds, setJugendIds] = useState(() => {
+    const fromDefaults = Array.isArray(setupDefaults.jugendIds) ? setupDefaults.jugendIds : [];
+    const fallback = setupDefaults.jugendId ? [setupDefaults.jugendId] : [];
+    return normalizeTeamParameters(fromDefaults.length ? fromDefaults : fallback);
+  });
   const [selectedTeams, setSelectedTeams] = useState(() => normalizeTeamParameters(setupDefaults.selTeams));
   const [teamDraft, setTeamDraft] = useState("");
   const [teamValidation, setTeamValidation] = useState(null);
@@ -227,6 +232,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   );
   const kreis = useMemo(() => (kreise.length > 0 ? kreise[0] : null), [kreise]);
   const kreisLabel = useMemo(() => buildKreisLabel(kreise), [kreise]);
+  const jugendId = useMemo(() => (Array.isArray(jugendIds) && jugendIds.length > 0 ? jugendIds[0] : ""), [jugendIds]);
   const jugend = useMemo(() => JUGEND_KLASSEN.find((item) => item.id === jugendId), [jugendId]);
   const availableJugendSubLevels = useMemo(() => buildJugendSubLevelOptions(jugend), [jugend]);
   const jugendSubLevelHints = useMemo(() => buildJugendSubLevelHints(jugendSubLevels), [jugendSubLevels]);
@@ -235,7 +241,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     [selectedTeams, jugendSubLevelHints],
   );
   const favorites = useMemo(() => normalizeTeamParameters(favoriteTeams), [favoriteTeams]);
-  const canBuild = Boolean(kreisIds.length > 0 && jugendId);
+  const canBuild = Boolean(kreisIds.length > 0 && jugendIds.length > 0);
   const hasLocation = Boolean(
     startLocation && Number.isFinite(startLocation.lat) && Number.isFinite(startLocation.lon),
   );
@@ -297,7 +303,15 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   );
 
   const onSelectJugend = useCallback((id) => {
-    setJugendId(id);
+    const nextId = String(id || "").trim();
+    if (!nextId) {
+      return;
+    }
+    setJugendIds((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const next = current.includes(nextId) ? current.filter((item) => item !== nextId) : [...current, nextId];
+      return normalizeTeamParameters(next);
+    });
     setJugendSubLevels([]);
     setTeamValidation(null);
     setErr("");
@@ -507,7 +521,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     const currentRange = buildCurrentScoutingRange();
     setKreisIds([]);
     setSelectedStateCode("");
-    setJugendId("");
+    setJugendIds([]);
     setSelectedTeams([]);
     setTeamDraft("");
     setTeamValidation(null);
@@ -542,6 +556,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       availableRegions,
       kreise,
       jugendId,
+      jugendIds,
       kreis,
       kreisLabel,
       jugend,
@@ -609,6 +624,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       availableRegions,
       kreise,
       jugendId,
+      jugendIds,
       kreis,
       kreisLabel,
       jugend,

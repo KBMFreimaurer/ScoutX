@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
 import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
-import { cleanScoutPlanText } from "./shared";
+import { cleanScoutXText } from "./shared";
 import { useGames } from "./GamesContext";
 import { useSetup } from "./SetupContext";
 
@@ -53,7 +53,7 @@ function toSortableKickoff(value) {
   return KNOWN_TIME_RE.test(text) ? text : "99:99";
 }
 
-function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier, usedFallbackAll = false }) {
+function buildManualScoutX({ games, jugendLabel, kreisLabel, isTurnier, usedFallbackAll = false }) {
   const sortedGames = [...(Array.isArray(games) ? games : [])].sort((a, b) => {
     const dateDelta = a.dateObj - b.dateObj;
     if (dateDelta !== 0) {
@@ -89,7 +89,7 @@ function buildManualScoutPlan({ games, jugendLabel, kreisLabel, isTurnier, usedF
   lines.push("Hinweis:");
   lines.push("Fahrtkosten-Abrechnung und PDF basieren auf den Spielen dieses Plans.");
 
-  return cleanScoutPlanText(lines.join("\n"));
+  return cleanScoutXText(lines.join("\n"));
 }
 
 function serializeGameForHistory(game) {
@@ -391,7 +391,7 @@ export function PlanProvider({ children }) {
       const selectedGames = Array.isArray(gamesCtx.plannedGames) ? gamesCtx.plannedGames : [];
       const usedFallbackAll = selectedGames.length === 0;
 
-      const manualPlan = buildManualScoutPlan({
+      const manualPlan = buildManualScoutX({
         games: effectivePlannedGames,
         jugendLabel: setup.jugend?.label,
         kreisLabel: setup.kreisLabel || setup.kreis?.label,

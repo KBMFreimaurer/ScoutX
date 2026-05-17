@@ -270,6 +270,7 @@ export function ScoutingHubPage() {
     onUpdateAssignmentStatus,
     onMarkNotificationRead,
     onMarkGameSeen,
+    onReassignObservation,
     onCreateObservationMatchReport,
     onUpdateObservationNote,
     onUpsertManualGame,
@@ -309,6 +310,11 @@ export function ScoutingHubPage() {
   const [teamAuthMode, setTeamAuthMode] = useState("login");
   const [teamLoginBusy, setTeamLoginBusy] = useState(false);
   const [observationNoteDrafts, setObservationNoteDrafts] = useState({});
+  const [notificationStatusFilter, setNotificationStatusFilter] = useState("unread");
+  const [notificationTypeFilter, setNotificationTypeFilter] = useState("");
+  const [feedTypeFilter, setFeedTypeFilter] = useState("");
+  const [feedActorFilter, setFeedActorFilter] = useState("");
+  const [feedQuery, setFeedQuery] = useState("");
   const [reportForm, setReportForm] = useState({
     title: "",
     type: "player",
@@ -357,6 +363,26 @@ export function ScoutingHubPage() {
   });
 
   const dashboard = useMemo(() => getDashboard(), [getDashboard]);
+  const inboxNotifications = useMemo(() => {
+    const notifications = Array.isArray(productState.notifications) ? productState.notifications : [];
+    return notifications.filter((notification) => {
+      const recipientId = String(notification?.recipientId || "").trim();
+      if (recipientId && recipientId !== activeUser.id && activeUser.role !== "admin") {
+        return false;
+      }
+      const isRead = Boolean(notification?.readAt);
+      if (notificationStatusFilter === "unread" && isRead) {
+        return false;
+      }
+      if (notificationStatusFilter === "read" && !isRead) {
+        return false;
+      }
+      if (notificationTypeFilter && String(notification?.type || "").trim().toLowerCase() !== notificationTypeFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [activeUser.id, activeUser.role, notificationStatusFilter, notificationTypeFilter, productState.notifications]);
   const visibleReports = useMemo(
     () => filterVisibleEntities(productState.reports, activeUser),
     [activeUser, productState.reports],
@@ -386,7 +412,28 @@ export function ScoutingHubPage() {
     [compareLeftKey, compareRightKey, getPlayerComparison, playerProfiles],
   );
   const calendarGroups = useMemo(() => getCalendar(visibleAssignments, { limit: 8 }), [getCalendar, visibleAssignments]);
-  const teamFeed = useMemo(() => getTeamFeed({ limit: 40 }), [getTeamFeed]);
+  const teamFeed = useMemo(() => getTeamFeed({ limit: 80 }), [getTeamFeed]);
+  const filteredTeamFeed = useMemo(() => {
+    return (Array.isArray(teamFeed) ? teamFeed : []).filter((item) => {
+      const type = String(item?.type || "").trim().toLowerCase();
+      const actorId = String(item?.actorId || "").trim().toLowerCase();
+      const title = String(item?.title || "").trim().toLowerCase();
+      const body = String(item?.body || "").trim().toLowerCase();
+      if (feedTypeFilter && type !== feedTypeFilter) {
+        return false;
+      }
+      if (feedActorFilter && actorId !== feedActorFilter) {
+        return false;
+      }
+      if (feedQuery) {
+        const needle = feedQuery.trim().toLowerCase();
+        if (needle && !title.includes(needle) && !body.includes(needle)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [feedActorFilter, feedQuery, feedTypeFilter, teamFeed]);
   const allTeamGames = useMemo(() => [...games, ...(productState.manualGames || [])], [games, productState.manualGames]);
   const teamOverview = useMemo(() => getTeamOverview({ games: allTeamGames }), [allTeamGames, getTeamOverview]);
   const teamAccountById = useMemo(
@@ -905,8 +952,32 @@ export function ScoutingHubPage() {
       {activeWorkspace === "feed" ? (
       <section style={{ display: "grid", gap: 14, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1.1fr) minmax(320px,0.9fr)", marginBottom: 14 }}>
         <Panel title="Team-Feed">
+          <div style={{ display: "grid", gap: 8, marginBottom: 10, gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 180px 180px" }}>
+            <input
+              value={feedQuery}
+              onChange={(event) => setFeedQuery(event.target.value)}
+              placeholder="Feed durchsuchen..."
+              style={FIELD_STYLE}
+            />
+            <select value={feedTypeFilter} onChange={(event) => setFeedTypeFilter(event.target.value)} style={FIELD_STYLE}>
+              <option value="">Alle Typen</option>
+              <option value="plan_published">Plan veröffentlicht</option>
+              <option value="game_seen">Gesehen</option>
+              <option value="report_linked">Report verknüpft</option>
+              <option value="observation_note_added">Notiz ergänzt</option>
+              <option value="observation_reassigned">Umverteilung</option>
+            </select>
+            <select value={feedActorFilter} onChange={(event) => setFeedActorFilter(event.target.value)} style={FIELD_STYLE}>
+              <option value="">Alle Scouts</option>
+              {(productState.team?.accounts || []).map((account) => (
+                <option key={`feed-actor-${account.id}`} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <MiniList
-            items={teamFeed}
+            items={filteredTeamFeed}
             empty="Noch keine Team-Planung veröffentlicht."
             renderItem={(item) => (
               <div key={item.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
@@ -1088,7 +1159,12 @@ export function ScoutingHubPage() {
                 renderItem={(conflict) => (
                   <div key={`${conflict.scoutId}-${conflict.firstGameId}-${conflict.secondGameId}`} style={{ color: C.grayLight, fontSize: 12 }}>
                     {conflict.scoutName}: {conflict.firstGameLabel} → {conflict.secondGameLabel} ·{" "}
-                    {conflict.type === "overlap" ? "Überschneidung" : `${conflict.gapMinutes} Min Puffer, ${conflict.requiredGap} Min nötig`}
+                    {conflict.type === "overlap" ? "Überschneidung" : `${conflict.gapMinutes} Min Puffer, ${conflict.requiredGap} Min nötig`} ·{" "}
+                    {conflict.severity === "hard-conflict"
+                      ? "Hard-Conflict"
+                      : conflict.severity === "warn"
+                        ? "Warnung"
+                        : "Info"}
                   </div>
                 )}
               />
@@ -1119,6 +1195,7 @@ export function ScoutingHubPage() {
                 observation.status !== "seen" &&
                 activeUser.role !== "readonly" &&
                 (observation.scoutId === activeUser.id || canManageTeam);
+              const canReassign = canManageTeam && observation.scoutId !== "";
               return (
                 <div key={observation.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: "rgba(255,255,255,0.025)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -1130,6 +1207,24 @@ export function ScoutingHubPage() {
                   <div style={{ color: C.gray, fontSize: 12, marginTop: 4 }}>
                     {observation.scoutName} · {formatDateTime(observation.updatedAt)}
                   </div>
+                  {canReassign ? (
+                    <div style={{ marginTop: 8 }}>
+                      <select
+                        aria-label={`Sichtung ${observation.gameLabel} umverteilen`}
+                        value={observation.scoutId}
+                        onChange={(event) => onReassignObservation(observation.id, event.target.value)}
+                        style={{ ...FIELD_STYLE, minHeight: 32, fontSize: 12 }}
+                      >
+                        {(productState.team?.accounts || [])
+                          .filter((account) => account.active !== false && account.role !== "readonly")
+                          .map((account) => (
+                            <option key={`obs-reassign-${observation.id}-${account.id}`} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  ) : null}
                   {canMarkSeen ? (
                     <GhostButton
                       onClick={() => onMarkGameSeen(observation.gameId, observation.scoutId)}
@@ -1640,9 +1735,28 @@ export function ScoutingHubPage() {
         </Panel>
 
         <div style={{ display: "grid", gap: 14 }}>
-        <Panel title="Benachrichtigungen">
+        <Panel
+          title="Benachrichtigungen"
+          action={<Chip tone={inboxNotifications.length ? "green" : "default"}>{inboxNotifications.length}</Chip>}
+        >
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "150px 1fr", marginBottom: 10 }}>
+            <select value={notificationStatusFilter} onChange={(event) => setNotificationStatusFilter(event.target.value)} style={FIELD_STYLE}>
+              <option value="unread">Ungelesen</option>
+              <option value="read">Gelesen</option>
+              <option value="all">Alle</option>
+            </select>
+            <select value={notificationTypeFilter} onChange={(event) => setNotificationTypeFilter(event.target.value)} style={FIELD_STYLE}>
+              <option value="">Alle Typen</option>
+              <option value="plan">Plan</option>
+              <option value="seen">Seen</option>
+              <option value="absage">Absage</option>
+              <option value="konflikt">Konflikt</option>
+              <option value="followup">Follow-up</option>
+              <option value="mention">Mentions</option>
+            </select>
+          </div>
           <MiniList
-            items={dashboard.notifications}
+            items={inboxNotifications.slice(0, 40)}
             empty="Keine Benachrichtigungen."
             renderItem={(notification) => (
               <div

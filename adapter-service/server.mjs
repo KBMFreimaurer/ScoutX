@@ -5,17 +5,63 @@ import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
 import { extractClubSearchResults } from "./lib/fussballde.js";
+import { createJobRegistry } from "./lib/jobRunner.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
 import { createLogger } from "./lib/logger.js";
 import { fetchWeekTemplateGames, runExportCommand } from "./lib/dynamicSources.js";
-import { persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
+import { handleTeamNotificationsRoutes } from "./routes/teamNotificationsRoutes.js";
+import { handleTeamInvitationRoutes } from "./routes/teamInvitationRoutes.js";
+import { handleTeamPasswordResetRoutes } from "./routes/teamPasswordResetRoutes.js";
+import { handleTeamAuthRoutes } from "./routes/teamAuthRoutes.js";
+import { handleAdminRoutes } from "./routes/adminRoutes.js";
+import { handleTeamPlanningRoutes } from "./routes/teamPlanningRoutes.js";
+import { handleTeamImportTournamentRoutes } from "./routes/teamImportTournamentRoutes.js";
+import { handlePublicDataRoutes } from "./routes/publicDataRoutes.js";
+import { handleTeamAuditRoutes } from "./routes/teamAuditRoutes.js";
+import { createTeamRouteBaseContext } from "./routes/routeContextFactory.js";
+import { fetchRecentTeamArchiveEvents, persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
+import { fetchTeamAccountByIdFromDb, syncTeamAccountsToDb } from "./lib/teamAccountsDb.js";
+import { fetchTeamFeedItemsFromDb, syncTeamFeedItemsToDb } from "./lib/teamFeedDb.js";
+import { fetchTeamNotificationsFromDb, syncTeamNotificationsToDb } from "./lib/teamNotificationsDb.js";
+import { fetchTeamObservationsFromDb, syncTeamObservationsToDb } from "./lib/teamObservationsDb.js";
+import { fetchTeamReportMapFromDb, syncTeamReportsToDb } from "./lib/teamReportsDb.js";
+import { fetchTeamStateFromDb, persistTeamStateToDb } from "./lib/teamStateDb.js";
+import { ensureTeamDbMirrorsSynced } from "./lib/teamDbPersistence.js";
+import {
+  fetchPushRuntimeSnapshot,
+  persistPushOutboxEvent,
+  persistPushSubscription,
+  removePushOutboxEventsAndMarkAcked,
+} from "./lib/teamPushDb.js";
+import {
+  checkAndBumpRuntimeRateLimit,
+  deleteRuntimeInvitation,
+  deleteRuntimeKreisPdfPreview,
+  deleteRuntimePasswordResetToken,
+  fetchRuntimeInvitationByToken,
+  fetchRuntimeKreisPdfPreviewByToken,
+  fetchRuntimePasswordResetToken,
+  fetchRuntimeTeamSessionById,
+  persistRuntimeInvitation,
+  persistRuntimeKreisPdfPreview,
+  persistRuntimePasswordResetToken,
+  persistRuntimeTeamSession,
+  pruneExpiredRuntimeTeamSessions,
+  pruneExpiredRuntimeTokens,
+  pruneRuntimeRateLimits,
+  revokeRuntimeTeamSessionsForAccount,
+  revokeRuntimeTeamSession,
+} from "./lib/teamRuntimeDb.js";
 import { buildWeekCacheKey, getWeekRange, isDateInRange, shouldRefreshWeek } from "./lib/week.js";
 import {
   appendTeamStateArchive,
+  canWriteTeamState,
+  canManageTeamMembers,
   createInitialTeamState,
   findAccount,
   linkObservationReport,
   markObservationSeen,
+  reassignObservation,
   normalizeTeamState,
   publishTeamPlan,
   readTeamState,
@@ -27,9 +73,47 @@ import {
 } from "./lib/teamBackend.js";
 import { GERMANY_VERBANDS } from "../src/data/germany_regions.js";
 
+function envNumber(name, fallback, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY } = {}) {
+  const raw = process.env[name];
+  const value = Number(raw ?? fallback);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Ungültige ENV ${name}: '${raw}'`);
+  }
+  if (value < min || value > max) {
+    throw new Error(`ENV ${name} außerhalb erlaubter Grenze (${min}..${max}): ${value}`);
+  }
+  return value;
+}
+
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
-const PORT = Number(process.env.ADAPTER_PORT || 8787);
-const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "*";
+const PORT = envNumber("ADAPTER_PORT", 8787, { min: 1, max: 65535 });
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173";
+const EXPOSE_RESET_TOKEN_ON_REQUEST = process.env.ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST === "true";
+const AUTH_READS_FROM_DB = process.env.ADAPTER_AUTH_READS_FROM_DB === "true";
+const SESSION_READS_FROM_DB = process.env.ADAPTER_SESSION_READS_FROM_DB === "true";
+const TEAM_STATE_READS_FROM_DB = process.env.ADAPTER_TEAM_STATE_READS_FROM_DB === "true";
+const NOTIFICATIONS_READS_FROM_DB = process.env.ADAPTER_NOTIFICATIONS_READS_FROM_DB === "true";
+const OBSERVATIONS_READS_FROM_DB = process.env.ADAPTER_OBSERVATIONS_READS_FROM_DB === "true";
+const REPORTS_READS_FROM_DB = process.env.ADAPTER_REPORTS_READS_FROM_DB === "true";
+const FEED_READS_FROM_DB = process.env.ADAPTER_FEED_READS_FROM_DB === "true";
+const DB_FIRST_MODE = process.env.ADAPTER_DB_FIRST_MODE === "true";
+const DATABASE_URL_CONFIGURED = Boolean(String(process.env.ADAPTER_DATABASE_URL || process.env.DATABASE_URL || "").trim());
+const RUNTIME_FILE_CONFIGURED = Boolean(String(process.env.ADAPTER_RUNTIME_STATE_FILE || "").trim());
+const EFFECTIVE_AUTH_READS_FROM_DB = DB_FIRST_MODE || AUTH_READS_FROM_DB;
+const EFFECTIVE_SESSION_READS_FROM_DB = DB_FIRST_MODE || SESSION_READS_FROM_DB;
+const EFFECTIVE_TEAM_STATE_READS_FROM_DB = DB_FIRST_MODE || TEAM_STATE_READS_FROM_DB;
+const EFFECTIVE_NOTIFICATIONS_READS_FROM_DB = DB_FIRST_MODE || NOTIFICATIONS_READS_FROM_DB;
+const EFFECTIVE_OBSERVATIONS_READS_FROM_DB = DB_FIRST_MODE || OBSERVATIONS_READS_FROM_DB;
+const EFFECTIVE_REPORTS_READS_FROM_DB = DB_FIRST_MODE || REPORTS_READS_FROM_DB;
+const EFFECTIVE_FEED_READS_FROM_DB = DB_FIRST_MODE || FEED_READS_FROM_DB;
+const RUNTIME_DB_ENABLED = DATABASE_URL_CONFIGURED || RUNTIME_FILE_CONFIGURED;
+if (DB_FIRST_MODE && !DATABASE_URL_CONFIGURED) {
+  throw new Error("ADAPTER_DB_FIRST_MODE=true benötigt ADAPTER_DATABASE_URL oder DATABASE_URL.");
+}
+const COOKIE_SECURE = process.env.ADAPTER_TEAM_COOKIE_SECURE
+  ? process.env.ADAPTER_TEAM_COOKIE_SECURE === "true"
+  : process.env.NODE_ENV !== "development";
+const COOKIE_SAME_SITE = String(process.env.ADAPTER_TEAM_COOKIE_SAMESITE || "Lax").trim();
 const AUTH_TOKEN = String(process.env.ADAPTER_TOKEN || "").trim();
 const MAX_BODY_BYTES = (() => {
   const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
@@ -67,30 +151,47 @@ const ALIASES_FILE =
   process.env.ADAPTER_ALIASES_FILE || fileURLToPath(new URL("./data/team-aliases.json", import.meta.url));
 const REMOTE_URL = process.env.ADAPTER_REMOTE_URL || "";
 const REMOTE_TOKEN = process.env.ADAPTER_REMOTE_TOKEN || "";
-const REMOTE_TIMEOUT_MS = Number(process.env.ADAPTER_REMOTE_TIMEOUT_MS || 10000);
-const REFRESH_INTERVAL_SEC = Number(process.env.ADAPTER_REFRESH_INTERVAL_SEC || 0);
+const REMOTE_TIMEOUT_MS = envNumber("ADAPTER_REMOTE_TIMEOUT_MS", 10000, { min: 1000, max: 120000 });
+const REFRESH_INTERVAL_SEC = envNumber("ADAPTER_REFRESH_INTERVAL_SEC", 0, { min: 0, max: 86400 });
 
 // Fully automatic week refresh for every scouting request
 const AUTO_REFRESH_WEEK = process.env.ADAPTER_AUTO_REFRESH_WEEK !== "false";
-const WEEK_REFRESH_TTL_SEC = Number(process.env.ADAPTER_WEEK_REFRESH_TTL_SEC || 300);
+const WEEK_REFRESH_TTL_SEC = envNumber("ADAPTER_WEEK_REFRESH_TTL_SEC", 300, { min: 0, max: 86400 });
 const WEEK_SOURCE_TEMPLATE = process.env.ADAPTER_WEEK_SOURCE_URL_TEMPLATE || "";
 const WEEK_SOURCE_TOKEN = process.env.ADAPTER_WEEK_SOURCE_TOKEN || "";
 const DEFAULT_EXPORT_SCRIPT = fileURLToPath(new URL("./scripts/fetch-week.fussballde.mjs", import.meta.url));
 const EXPORT_COMMAND =
   process.env.ADAPTER_EXPORT_COMMAND !== undefined ? process.env.ADAPTER_EXPORT_COMMAND : `node "${DEFAULT_EXPORT_SCRIPT}"`;
-const WEEK_COMMAND_TIMEOUT_MS = Number(process.env.ADAPTER_WEEK_COMMAND_TIMEOUT_MS || 60000);
+const WEEK_COMMAND_TIMEOUT_MS = envNumber("ADAPTER_WEEK_COMMAND_TIMEOUT_MS", 60000, { min: 1000, max: 300000 });
 const WEEK_EXTERNAL_TIMEOUT_MS = 60000;
 
-const RATE_LIMIT_WINDOW_MS = Number(process.env.ADAPTER_RATE_LIMIT_WINDOW_MS || 60000);
-const RATE_LIMIT_MAX = Number(process.env.ADAPTER_RATE_LIMIT_MAX || 60);
-const TEAM_LOGIN_RATE_LIMIT_MAX = Number(process.env.ADAPTER_TEAM_LOGIN_RATE_LIMIT_MAX || 12);
-const TEAM_WRITE_RATE_LIMIT_MAX = Number(process.env.ADAPTER_TEAM_WRITE_RATE_LIMIT_MAX || 60);
+const RATE_LIMIT_WINDOW_MS = envNumber("ADAPTER_RATE_LIMIT_WINDOW_MS", 60000, { min: 1000, max: 300000 });
+const RATE_LIMIT_MAX = envNumber("ADAPTER_RATE_LIMIT_MAX", 60, { min: 1, max: 10000 });
+const TEAM_LOGIN_RATE_LIMIT_MAX = envNumber("ADAPTER_TEAM_LOGIN_RATE_LIMIT_MAX", 12, { min: 1, max: 10000 });
+const TEAM_LOGIN_LOCK_THRESHOLD = envNumber("ADAPTER_TEAM_LOGIN_LOCK_THRESHOLD", 8, { min: 2, max: 1000 });
+const TEAM_LOGIN_LOCK_DURATION_SEC = envNumber("ADAPTER_TEAM_LOGIN_LOCK_DURATION_SEC", 300, { min: 5, max: 86400 });
+const TEAM_WRITE_RATE_LIMIT_MAX = envNumber("ADAPTER_TEAM_WRITE_RATE_LIMIT_MAX", 60, { min: 1, max: 10000 });
+const TEAM_SESSION_TTL_SEC = envNumber("ADAPTER_TEAM_SESSION_TTL_SEC", 28800, { min: 1, max: 86400 * 30 });
+const TEAM_INVITATION_TTL_SEC = envNumber("ADAPTER_TEAM_INVITATION_TTL_SEC", 604800, { min: 300, max: 86400 * 365 });
+const TEAM_PASSWORD_RESET_TTL_SEC = envNumber("ADAPTER_TEAM_PASSWORD_RESET_TTL_SEC", 3600, { min: 300, max: 86400 * 30 });
+const MEINTURNIERPLAN_BASE_URL = String(process.env.ADAPTER_MEINTURNIERPLAN_BASE_URL || "https://www.meinturnierplan.de").trim();
+const DFB_NATIONAL_SOURCE_URL_TEMPLATE = String(process.env.ADAPTER_DFB_NATIONAL_SOURCE_URL_TEMPLATE || "").trim();
+const DFB_NATIONAL_SOURCE_TOKEN = String(process.env.ADAPTER_DFB_NATIONAL_SOURCE_TOKEN || "").trim();
+const DFB_NATIONAL_SOURCE_TIMEOUT_MS = envNumber("ADAPTER_DFB_NATIONAL_SOURCE_TIMEOUT_MS", 20000, { min: 1000, max: 120000 });
 const CLUB_SEARCH_URL = process.env.ADAPTER_CLUB_SEARCH_URL || "https://www.fussball.de/suche";
 const CLUB_SEARCH_TIMEOUT_MS = Number(process.env.ADAPTER_CLUB_SEARCH_TIMEOUT_MS || 12000);
 const CLUB_SEARCH_MAX_LIMIT = Number(process.env.ADAPTER_CLUB_SEARCH_MAX_LIMIT || 20);
 const MANDANT_PROBE_BASE_URL = process.env.FUSSBALLDE_BASE_URL || "https://www.fussball.de";
 const MANDANT_PROBE_TIMEOUT_MS = Number(process.env.ADAPTER_MANDANT_PROBE_TIMEOUT_MS || 15000);
 const VERBAND_STATUS_MAX = Math.max(1, Number(process.env.ADAPTER_VERBAND_STATUS_MAX || 8));
+const INGESTION_RETRY_MAX = envNumber("ADAPTER_INGESTION_RETRY_MAX", 2, { min: 0, max: 10 });
+const INGESTION_BACKOFF_MS = envNumber("ADAPTER_INGESTION_BACKOFF_MS", 750, { min: 0, max: 30000 });
+const METRICS_PROVENANCE_MISSING_WARN_THRESHOLD = envNumber("ADAPTER_METRICS_PROVENANCE_MISSING_WARN_THRESHOLD", 1, { min: 0, max: 1000000 });
+const METRICS_JOB_FAILED_WARN_THRESHOLD = envNumber("ADAPTER_METRICS_JOB_FAILED_WARN_THRESHOLD", 1, { min: 0, max: 1000000 });
+const PUSH_OUTBOX_MAX_AGE_MS = envNumber("ADAPTER_PUSH_OUTBOX_MAX_AGE_MS", 14 * 24 * 60 * 60 * 1000, {
+  min: 60 * 1000,
+  max: 90 * 24 * 60 * 60 * 1000,
+});
 const LOGO_CONTENT_TYPES = Object.freeze({
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -102,6 +203,7 @@ const LOGO_CONTENT_TYPES = Object.freeze({
 
 const rateLimitStore = new Map();
 const rootLogger = createLogger({ service: "scoutx-adapter" });
+const ingestionJobs = createJobRegistry();
 
 const KNOWN_VERBANDS = Object.values(GERMANY_VERBANDS || {})
   .filter((entry) => entry && typeof entry === "object")
@@ -114,7 +216,13 @@ const KNOWN_VERBANDS = Object.values(GERMANY_VERBANDS || {})
   .filter((entry) => entry.mandant)
   .sort((left, right) => left.code.localeCompare(right.code, "de-DE"));
 
-function checkRateLimit(ip) {
+async function checkRateLimit(ip) {
+  if (RUNTIME_DB_ENABLED) {
+    const dbAllowed = await checkAndBumpRuntimeRateLimit(`global:${ip}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, rootLogger);
+    if (typeof dbAllowed === "boolean") {
+      return dbAllowed;
+    }
+  }
   const now = Date.now();
   let entry = rateLimitStore.get(ip);
 
@@ -128,7 +236,13 @@ function checkRateLimit(ip) {
   return entry.count <= RATE_LIMIT_MAX;
 }
 
-function checkScopedRateLimit(store, key, maxRequests, windowMs = RATE_LIMIT_WINDOW_MS) {
+async function checkScopedRateLimit(store, key, maxRequests, windowMs = RATE_LIMIT_WINDOW_MS) {
+  if (RUNTIME_DB_ENABLED) {
+    const dbAllowed = await checkAndBumpRuntimeRateLimit(key, maxRequests, windowMs, rootLogger);
+    if (typeof dbAllowed === "boolean") {
+      return dbAllowed;
+    }
+  }
   const now = Date.now();
   let entry = store.get(key);
   if (!entry || now - entry.windowStart > windowMs) {
@@ -143,11 +257,40 @@ function checkScopedRateLimit(store, key, maxRequests, windowMs = RATE_LIMIT_WIN
 // Cleanup stale rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
+  const nowTimestamp = new Date(now).toISOString();
   for (const [ip, entry] of rateLimitStore) {
     if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
       rateLimitStore.delete(ip);
     }
   }
+  for (const [token, invitation] of teamInvitations) {
+    const expiresAtMs = Date.parse(String(invitation?.expiresAt || ""));
+    if (!Number.isFinite(expiresAtMs) || now > expiresAtMs) {
+      teamInvitations.delete(token);
+    }
+  }
+  for (const [token, reset] of teamPasswordResetTokens) {
+    const expiresAtMs = Date.parse(String(reset?.expiresAt || ""));
+    if (!Number.isFinite(expiresAtMs) || now > expiresAtMs) {
+      teamPasswordResetTokens.delete(token);
+    }
+  }
+  for (const [token, preview] of teamKreisPdfPreviews) {
+    const expiresAtMs = Date.parse(String(preview?.expiresAt || ""));
+    if (!Number.isFinite(expiresAtMs) || now > expiresAtMs) {
+      teamKreisPdfPreviews.delete(token);
+    }
+  }
+  for (const [userId, lock] of teamLoginLockStore) {
+    const lockedUntilMs = Date.parse(String(lock?.lockedUntil || ""));
+    if (!Number.isFinite(lockedUntilMs) || lockedUntilMs <= now) {
+      teamLoginLockStore.delete(userId);
+    }
+  }
+  prunePushOutbox(now, PUSH_OUTBOX_MAX_AGE_MS);
+  void pruneExpiredRuntimeTeamSessions(nowTimestamp, rootLogger);
+  void pruneExpiredRuntimeTokens(nowTimestamp, rootLogger);
+  void pruneRuntimeRateLimits(RATE_LIMIT_WINDOW_MS * 2, rootLogger);
 }, 300000);
 
 const state = {
@@ -158,12 +301,60 @@ const state = {
   aliasMap: {},
   lastRefreshReason: "startup",
   lastError: null,
+  startedAt: nowIso(),
+  lastSuccessfulRefreshAt: "",
   weekRefreshCache: {},
   weekRefreshPromises: {},
+  runtimeMetrics: {
+    totalResponses: 0,
+    errorResponses: 0,
+    statusCounts: {},
+  },
 };
 const teamSessions = new Map();
+const teamInvitations = new Map();
+const teamPasswordResetTokens = new Map();
+const teamPushSubscriptions = new Map();
+const teamPushOutbox = new Map();
+const pushedCriticalEventIds = new Set();
+const teamPushStreams = new Map();
+const teamKreisPdfPreviews = new Map();
 const teamLoginRateStore = new Map();
+const teamLoginLockStore = new Map();
 const teamWriteRateStore = new Map();
+
+async function createTeamSessionForAccount(account, clientIp = "", userAgent = "") {
+  const sessionId = randomUUID();
+  const csrfToken = randomUUID();
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + TEAM_SESSION_TTL_SEC * 1000).toISOString();
+  if (!RUNTIME_DB_ENABLED) {
+    teamSessions.set(sessionId, {
+      userId: account.id,
+      teamId: account.teamId,
+      csrfToken,
+      createdAt,
+      expiresAt,
+    });
+  }
+  const persisted = await persistRuntimeTeamSession(
+    {
+      sessionId,
+      accountId: account.id,
+      teamId: account.teamId,
+      csrfToken,
+      createdAt,
+      expiresAt,
+      userAgent,
+      ipAddress: clientIp,
+    },
+    rootLogger,
+  );
+  if (RUNTIME_DB_ENABLED && !persisted) {
+    throw new Error("Team-Session konnte nicht persistent gespeichert werden.");
+  }
+  return { sessionId, csrfToken };
+}
 
 function uniqueNormalizedTeams(values) {
   const seen = new Set();
@@ -218,6 +409,328 @@ function normalizeSearchQuery(value) {
   return String(value || "")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function formatWizardDateForMeinturnierplan(date, endOfDay = false) {
+  const text = String(date || "").trim();
+  if (!text) {
+    return "";
+  }
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  const [, year, month, day] = match;
+  return `${day}.${month}.${year} ${endOfDay ? "23:59" : "00:00"}`;
+}
+
+function parseGermanDateToIso(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) {
+    return "";
+  }
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
+function extractMeinturnierplanJson(html) {
+  const match = String(html || "").match(/window\.mapSearchTournaments\s*=\s*(\{[\s\S]*?\});/);
+  if (!match || !match[1]) {
+    return null;
+  }
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function toFilterKeywords(payload) {
+  const keywords = [];
+  const teams = Array.isArray(payload?.teams) ? payload.teams : [];
+  for (const team of teams) {
+    const normalized = normalizeSearchQuery(team).toLowerCase();
+    if (normalized.length >= 3) {
+      keywords.push(normalized);
+    }
+  }
+  const extras = [payload?.jugendLabel, payload?.jugendId, payload?.kreisLabel, payload?.kreisId];
+  for (const value of extras) {
+    const normalized = normalizeSearchQuery(value).toLowerCase();
+    if (normalized.length >= 2) {
+      keywords.push(normalized);
+    }
+  }
+  return [...new Set(keywords)];
+}
+
+function toKickoffMs(date, time) {
+  const dateText = String(date || "").trim();
+  const timeText = String(time || "").trim();
+  const match = timeText.match(/^(\d{2}):(\d{2})$/);
+  if (!dateText || !match) {
+    return NaN;
+  }
+  const [, hh, mm] = match;
+  return Date.parse(`${dateText}T${hh}:${mm}:00Z`);
+}
+
+function buildTeamConflicts(observations) {
+  const byScoutDate = new Map();
+  for (const item of Array.isArray(observations) ? observations : []) {
+    if (item?.status !== "planned" && item?.status !== "seen" && item?.status !== "reported" && item?.status !== "followup") {
+      continue;
+    }
+    const game = item?.game || {};
+    const date = String(game?.date || "").trim();
+    const time = String(game?.time || "").trim();
+    const kickoffMs = toKickoffMs(date, time);
+    if (!date || Number.isNaN(kickoffMs)) {
+      continue;
+    }
+    const key = `${String(item?.scoutId || "")}:${date}`;
+    const bucket = byScoutDate.get(key) || [];
+    bucket.push({
+      observationId: String(item?.id || ""),
+      scoutId: String(item?.scoutId || ""),
+      gameId: String(item?.gameId || game?.id || ""),
+      date,
+      time,
+      venue: String(game?.venue || "").trim(),
+      kickoffMs,
+    });
+    byScoutDate.set(key, bucket);
+  }
+
+  const conflicts = [];
+  for (const entries of byScoutDate.values()) {
+    const sorted = [...entries].sort((a, b) => a.kickoffMs - b.kickoffMs);
+    for (let index = 0; index < sorted.length - 1; index += 1) {
+      const left = sorted[index];
+      const right = sorted[index + 1];
+      const deltaMinutes = Math.round((right.kickoffMs - left.kickoffMs) / 60000);
+      const sameVenue = left.venue && right.venue && left.venue.toLowerCase() === right.venue.toLowerCase();
+      if (deltaMinutes < 120) {
+        conflicts.push({
+          id: `conflict-overlap-${left.gameId}-${right.gameId}`,
+          type: "time_overlap",
+          scoutId: left.scoutId,
+          gameIds: [left.gameId, right.gameId],
+          severity: "high",
+          message: `Zeitueberlappung zwischen ${left.time} und ${right.time}.`,
+        });
+      } else if (!sameVenue && deltaMinutes < 90) {
+        conflicts.push({
+          id: `conflict-travel-${left.gameId}-${right.gameId}`,
+          type: "travel_risk",
+          scoutId: left.scoutId,
+          gameIds: [left.gameId, right.gameId],
+          severity: "medium",
+          message: `Knappes Reisefenster (${deltaMinutes} Minuten) zwischen unterschiedlichen Spielorten.`,
+        });
+      }
+    }
+  }
+  return conflicts;
+}
+
+function parseKreisPdfDate(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) {
+    return "";
+  }
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
+function parseKreisPdfGamesFromText(extractedText) {
+  const games = [];
+  const text = String(extractedText || "").replace(/\r/g, "\n");
+  const gamePattern = /(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+([^\n]+)/g;
+
+  for (const match of text.matchAll(gamePattern)) {
+    const rawDate = String(match[1] || "").trim();
+    const time = String(match[2] || "").trim();
+    const body = String(match[3] || "").trim();
+    const teamParts = String(body || "").split(/\s+-\s+/);
+    if (teamParts.length < 2) {
+      continue;
+    }
+    const home = String(teamParts[0] || "").trim();
+    const rightSide = String(teamParts.slice(1).join(" - ") || "").trim();
+    let away = "";
+    let venue = "";
+    if (rightSide.includes(" | ")) {
+      const [awayPart, venuePart] = rightSide.split(/\s+\|\s+/, 2);
+      away = String(awayPart || "").trim();
+      venue = String(venuePart || "").trim();
+    } else {
+      const tokens = rightSide.split(/\s+/).filter(Boolean);
+      if (tokens.length >= 4) {
+        venue = tokens.slice(-2).join(" ");
+        away = tokens.slice(0, -2).join(" ");
+      } else {
+        away = rightSide;
+        venue = "";
+      }
+    }
+    const date = parseKreisPdfDate(rawDate);
+    if (!date || !home || !away) {
+      continue;
+    }
+    games.push({
+      id: `kreis-pdf-${randomUUID()}`,
+      source: "manual",
+      tournamentId: "",
+      date,
+      time: String(time || "").trim(),
+      home: String(home || "").trim(),
+      away: String(away || "").trim(),
+      venue: String(venue || "").trim(),
+      status: "scheduled",
+      note: "",
+    });
+  }
+  return games;
+}
+
+function createGameProvenance({
+  source,
+  method,
+  provider = "",
+  importedBy = "",
+  requestId = "",
+  jobId = "",
+  ingestedAt = nowIso(),
+}) {
+  const normalizedSource = String(source || "manual").trim() || "manual";
+  const normalizedProvider = String(provider || normalizedSource).trim() || normalizedSource;
+  return {
+    source: normalizedSource,
+    method: String(method || "import").trim() || "import",
+    provider: normalizedProvider,
+    importedBy: String(importedBy || "").trim(),
+    ingestedAt: String(ingestedAt || nowIso()).trim() || nowIso(),
+    requestId: String(requestId || "").trim(),
+    jobId: String(jobId || "").trim(),
+  };
+}
+
+function buildGameProvenanceSummary() {
+  const catalogGames = Array.isArray(state.games) ? state.games : [];
+  const manualGames = Array.isArray(state.team?.manualGames) ? state.team.manualGames : [];
+  const combined = [...catalogGames, ...manualGames];
+  const bySource = {};
+  const byMethod = {};
+  let withProvenance = 0;
+  let missingProvenance = 0;
+
+  for (const game of combined) {
+    const source = String(game?.source || "unknown").trim() || "unknown";
+    bySource[source] = (bySource[source] || 0) + 1;
+    const provenance = game?.provenance && typeof game.provenance === "object" ? game.provenance : null;
+    if (provenance) {
+      withProvenance += 1;
+      const method = String(provenance.method || "unknown").trim() || "unknown";
+      byMethod[method] = (byMethod[method] || 0) + 1;
+    } else {
+      missingProvenance += 1;
+    }
+  }
+
+  return {
+    totalGames: combined.length,
+    catalogGames: catalogGames.length,
+    manualGames: manualGames.length,
+    withProvenance,
+    missingProvenance,
+    bySource,
+    byMethod,
+  };
+}
+
+function buildMonitoringAlerts() {
+  const alerts = [];
+  const jobs = ingestionJobs.listJobs();
+  const failedJobs = jobs.filter((job) => job?.status === "failed");
+  const provenance = buildGameProvenanceSummary();
+
+  if (METRICS_JOB_FAILED_WARN_THRESHOLD > 0 && failedJobs.length >= METRICS_JOB_FAILED_WARN_THRESHOLD) {
+    alerts.push({
+      code: "INGESTION_JOB_FAILED",
+      severity: "warning",
+      message: `${failedJobs.length} Ingestion-Job(s) im Status failed.`,
+      value: failedJobs.length,
+      threshold: METRICS_JOB_FAILED_WARN_THRESHOLD,
+    });
+  }
+
+  if (
+    METRICS_PROVENANCE_MISSING_WARN_THRESHOLD > 0 &&
+    provenance.missingProvenance >= METRICS_PROVENANCE_MISSING_WARN_THRESHOLD
+  ) {
+    alerts.push({
+      code: "MISSING_GAME_PROVENANCE",
+      severity: "warning",
+      message: `${provenance.missingProvenance} Spiel(e) ohne Provenance.`,
+      value: provenance.missingProvenance,
+      threshold: METRICS_PROVENANCE_MISSING_WARN_THRESHOLD,
+    });
+  }
+
+  if (state.lastError) {
+    alerts.push({
+      code: "ADAPTER_LAST_ERROR",
+      severity: "warning",
+      message: String(state.lastError),
+      value: 1,
+      threshold: 0,
+    });
+  }
+
+  return alerts;
+}
+
+function buildPrometheusMetricsText() {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const startedAtMs = Date.parse(String(state.startedAt || ""));
+  const uptimeSeconds = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : 0;
+  const jobs = ingestionJobs.listJobs();
+  const failedJobs = jobs.filter((job) => job?.status === "failed").length;
+  const runningJobs = jobs.filter((job) => job?.status === "running").length;
+  const alerts = buildMonitoringAlerts();
+  const provenance = buildGameProvenanceSummary();
+
+  const lines = [
+    "# HELP scoutx_adapter_uptime_seconds Adapter uptime in seconds.",
+    "# TYPE scoutx_adapter_uptime_seconds gauge",
+    `scoutx_adapter_uptime_seconds ${uptimeSeconds}`,
+    "# HELP scoutx_adapter_games_total Number of games in adapter state.",
+    "# TYPE scoutx_adapter_games_total gauge",
+    `scoutx_adapter_games_total ${Number(state.games.length || 0)}`,
+    "# HELP scoutx_adapter_runtime_responses_total Total number of HTTP responses.",
+    "# TYPE scoutx_adapter_runtime_responses_total counter",
+    `scoutx_adapter_runtime_responses_total ${Number(state.runtimeMetrics.totalResponses || 0)}`,
+    "# HELP scoutx_adapter_runtime_error_responses_total Total number of HTTP 4xx/5xx responses.",
+    "# TYPE scoutx_adapter_runtime_error_responses_total counter",
+    `scoutx_adapter_runtime_error_responses_total ${Number(state.runtimeMetrics.errorResponses || 0)}`,
+    "# HELP scoutx_ingestion_jobs_failed Number of ingestion jobs currently failed.",
+    "# TYPE scoutx_ingestion_jobs_failed gauge",
+    `scoutx_ingestion_jobs_failed ${failedJobs}`,
+    "# HELP scoutx_ingestion_jobs_running Number of ingestion jobs currently running.",
+    "# TYPE scoutx_ingestion_jobs_running gauge",
+    `scoutx_ingestion_jobs_running ${runningJobs}`,
+    "# HELP scoutx_game_provenance_missing Number of games without provenance.",
+    "# TYPE scoutx_game_provenance_missing gauge",
+    `scoutx_game_provenance_missing ${Number(provenance.missingProvenance || 0)}`,
+    "# HELP scoutx_monitoring_alerts Number of currently active monitoring alerts.",
+    "# TYPE scoutx_monitoring_alerts gauge",
+    `scoutx_monitoring_alerts ${alerts.length}`,
+    `scoutx_metrics_timestamp_seconds ${nowSeconds}`,
+  ];
+  return `${lines.join("\n")}\n`;
 }
 
 function toLookupKey(value) {
@@ -516,25 +1029,17 @@ function setCorsHeaders(res, origin) {
     .map((entry) => entry.trim())
     .filter(Boolean);
   const normalizedOrigin = String(origin || "").trim();
-
-  let allowOrigin = "*";
-  if (allowedOrigins.length === 1 && allowedOrigins[0] === "*") {
-    allowOrigin = normalizedOrigin || "*";
-  } else {
-    const fallbackOrigin = allowedOrigins[0] || "null";
-    allowOrigin =
-      normalizedOrigin && allowedOrigins.includes(normalizedOrigin)
-        ? normalizedOrigin
-        : fallbackOrigin;
+  const hasWildcard = allowedOrigins.includes("*");
+  const allowed = hasWildcard ? Boolean(normalizedOrigin) : normalizedOrigin && allowedOrigins.includes(normalizedOrigin);
+  if (!allowed) {
+    return false;
   }
-
-  res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+  res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  if (allowOrigin !== "*") {
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Vary", "Origin");
+  return true;
 }
 
 function extractBearerToken(authorizationHeader) {
@@ -563,6 +1068,12 @@ function timingSafeTokenEquals(left, right) {
 
 function sendJson(res, statusCode, payload, origin, requestId = "") {
   setCorsHeaders(res, origin);
+  state.runtimeMetrics.totalResponses += 1;
+  if (statusCode >= 400) {
+    state.runtimeMetrics.errorResponses += 1;
+  }
+  const statusKey = String(statusCode);
+  state.runtimeMetrics.statusCounts[statusKey] = Number(state.runtimeMetrics.statusCounts[statusKey] || 0) + 1;
   const text = JSON.stringify(payload);
   const headers = { "Content-Type": "application/json; charset=utf-8" };
   if (requestId) {
@@ -578,13 +1089,14 @@ async function readBody(req) {
     let totalBytes = 0;
 
     req.on("data", (chunk) => {
-      totalBytes += chunk.length;
+      const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += chunkBuffer.length;
       if (totalBytes > MAX_BODY_BYTES) {
         reject(new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`));
         req.destroy();
         return;
       }
-      chunks.push(chunk);
+      chunks.push(chunkBuffer);
     });
 
     req.on("end", () => {
@@ -598,6 +1110,102 @@ async function readBody(req) {
 
     req.on("error", reject);
   });
+}
+
+async function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let totalBytes = 0;
+
+    req.on("data", (chunk) => {
+      const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += chunkBuffer.length;
+      if (totalBytes > MAX_BODY_BYTES) {
+        reject(new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunkBuffer);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks));
+    });
+
+    req.on("error", reject);
+  });
+}
+
+function parseMultipartFormData(bodyBuffer, contentType) {
+  const boundaryMatch = String(contentType || "").match(/boundary=([^;]+)/i);
+  if (!boundaryMatch) {
+    return { fields: {}, files: [] };
+  }
+  const boundary = boundaryMatch[1].trim().replace(/^"|"$/g, "");
+  const marker = `--${boundary}`;
+  const text = bodyBuffer.toString("latin1");
+  const parts = text.split(marker).slice(1, -1);
+  const fields = {};
+  const files = [];
+
+  for (const partRaw of parts) {
+    const part = partRaw.replace(/^\r?\n/, "");
+    const headerEnd = part.indexOf("\r\n\r\n") >= 0 ? part.indexOf("\r\n\r\n") : part.indexOf("\n\n");
+    if (headerEnd < 0) {
+      continue;
+    }
+    const separatorLength = part.startsWith("\r\n\r\n", headerEnd) ? 4 : 2;
+    const headerText = part.slice(0, headerEnd);
+    const bodyText = part.slice(headerEnd + separatorLength).replace(/\r?\n$/, "");
+    const headers = headerText.split(/\r?\n/);
+    const disposition = headers.find((line) => /^content-disposition:/i.test(line)) || "";
+    const nameMatch = disposition.match(/name="([^"]+)"/i);
+    if (!nameMatch) {
+      continue;
+    }
+    const fieldName = nameMatch[1];
+    const fileNameMatch = disposition.match(/filename="([^"]*)"/i);
+    const contentTypeLine = headers.find((line) => /^content-type:/i.test(line)) || "";
+    const mimeType = contentTypeLine.replace(/^content-type:\s*/i, "").trim() || "application/octet-stream";
+    const contentBuffer = Buffer.from(bodyText, "latin1");
+
+    if (fileNameMatch && fileNameMatch[1]) {
+      files.push({
+        fieldName,
+        fileName: fileNameMatch[1],
+        mimeType,
+        content: contentBuffer,
+      });
+    } else {
+      fields[fieldName] = Buffer.from(bodyText, "latin1").toString("utf8");
+    }
+  }
+
+  return { fields, files };
+}
+
+function extractTextFromPdfBuffer(pdfBuffer) {
+  const text = pdfBuffer.toString("latin1");
+  const pieces = [];
+
+  for (const match of text.matchAll(/\(([^()]*)\)\s*Tj/g)) {
+    pieces.push(match[1]);
+  }
+  for (const match of text.matchAll(/\[(.*?)\]\s*TJ/gs)) {
+    for (const inner of match[1].matchAll(/\(([^()]*)\)/g)) {
+      pieces.push(inner[1]);
+    }
+  }
+  const decoded = pieces
+    .map((piece) =>
+      String(piece || "")
+        .replace(/\\\(/g, "(")
+        .replace(/\\\)/g, ")")
+        .replace(/\\\\/g, "\\"),
+    )
+    .join("\n")
+    .trim();
+  return decoded;
 }
 
 function isAuthorized(req) {
@@ -621,13 +1229,16 @@ function parseCookies(cookieHeader) {
   return cookies;
 }
 
-function createSessionCookie(sessionId, maxAgeSeconds = 28800) {
-  const secure = process.env.ADAPTER_TEAM_COOKIE_SECURE === "true" ? "; Secure" : "";
-  return `scoutx_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+function createSessionCookie(sessionId, maxAgeSeconds = TEAM_SESSION_TTL_SEC) {
+  const sameSite = ["Lax", "Strict", "None"].includes(COOKIE_SAME_SITE) ? COOKIE_SAME_SITE : "Lax";
+  const secure = COOKIE_SECURE || sameSite === "None" ? "; Secure" : "";
+  return `scoutx_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
 }
 
 function clearSessionCookie() {
-  return "scoutx_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+  const sameSite = ["Lax", "Strict", "None"].includes(COOKIE_SAME_SITE) ? COOKIE_SAME_SITE : "Lax";
+  const secure = COOKIE_SECURE || sameSite === "None" ? "; Secure" : "";
+  return `scoutx_session=; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=0${secure}`;
 }
 
 function toPublicAccount(account) {
@@ -639,6 +1250,7 @@ function toPublicAccount(account) {
     name: account.name,
     role: account.role,
     teamId: account.teamId,
+    active: account.active !== false,
   };
 }
 
@@ -678,17 +1290,134 @@ function normalizeAccountId(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function hasTokenExpired(expiresAt) {
+  const expiresAtMs = Date.parse(String(expiresAt || ""));
+  return !Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs;
+}
+
+function findTeamAccountRecordById(userId) {
+  const id = normalizeAccountId(userId);
+  return (Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : []).find((item) => item?.id === id) || null;
+}
+
+async function resolveAccountForAuth(userId, logger) {
+  const normalizedId = normalizeAccountId(userId);
+  if (!normalizedId) {
+    return null;
+  }
+  if (AUTH_READS_FROM_DB) {
+    const dbAccount = await fetchTeamAccountByIdFromDb(normalizedId, logger);
+    if (dbAccount) {
+      return dbAccount;
+    }
+  }
+  return findAccount(state.team, normalizedId);
+}
+
+async function resolveAccountForSession(userId, logger) {
+  const normalizedId = normalizeAccountId(userId);
+  if (!normalizedId) {
+    return null;
+  }
+  const stateAccount = findTeamAccountRecordById(normalizedId);
+  if (stateAccount) {
+    return stateAccount;
+  }
+  if (EFFECTIVE_AUTH_READS_FROM_DB) {
+    return fetchTeamAccountByIdFromDb(normalizedId, logger);
+  }
+  return null;
+}
+
+function hasTeamSessionExpired(session) {
+  const expiresAtMs = Date.parse(String(session?.expiresAt || ""));
+  if (Number.isFinite(expiresAtMs)) {
+    return Date.now() > expiresAtMs;
+  }
+  const createdAtMs = Date.parse(String(session?.createdAt || ""));
+  return !Number.isFinite(createdAtMs) || Date.now() - createdAtMs > TEAM_SESSION_TTL_SEC * 1000;
+}
+
+async function resolveTeamSessionContext(req, logger) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const sessionId = cookies.get("scoutx_session") || "";
+  if (!sessionId) {
+    return null;
+  }
+
+  let session = null;
+  let loadedFromDb = false;
+  if (EFFECTIVE_SESSION_READS_FROM_DB || RUNTIME_DB_ENABLED) {
+    const dbSession = await fetchRuntimeTeamSessionById(sessionId, logger);
+    if (dbSession && !dbSession.revokedAt) {
+      session = {
+        userId: dbSession.accountId,
+        teamId: dbSession.teamId,
+        csrfToken: dbSession.csrfToken,
+        createdAt: dbSession.createdAt,
+        expiresAt: dbSession.expiresAt,
+      };
+      loadedFromDb = true;
+    }
+  }
+  if (!session && !RUNTIME_DB_ENABLED) {
+    session = teamSessions.get(sessionId) || null;
+  }
+
+  if (!session) {
+    return null;
+  }
+  if (hasTeamSessionExpired(session)) {
+    teamSessions.delete(sessionId);
+    void revokeRuntimeTeamSession(sessionId, nowIso(), rootLogger);
+    return null;
+  }
+
+  const account = await resolveAccountForSession(session.userId, logger);
+  if (!account || account.teamId !== session.teamId || account.teamId !== state.team.team.id) {
+    teamSessions.delete(sessionId);
+    void revokeRuntimeTeamSession(sessionId, nowIso(), rootLogger);
+    return null;
+  }
+
+  if (loadedFromDb && !RUNTIME_DB_ENABLED) {
+    teamSessions.set(sessionId, session);
+  }
+
+  return {
+    sessionId,
+    session,
+    account,
+  };
+}
+
 function getTeamSessionContext(req) {
+  if (req && Object.prototype.hasOwnProperty.call(req, "__teamSessionContext")) {
+    return req.__teamSessionContext || null;
+  }
+  if (RUNTIME_DB_ENABLED) {
+    return null;
+  }
   const cookies = parseCookies(req.headers.cookie || "");
   const sessionId = cookies.get("scoutx_session") || "";
   const session = teamSessions.get(sessionId);
   if (!session) {
     return null;
   }
+  if (hasTeamSessionExpired(session)) {
+    teamSessions.delete(sessionId);
+    void revokeRuntimeTeamSession(sessionId, nowIso(), rootLogger);
+    return null;
+  }
 
   const account = findAccount(state.team, session.userId);
   if (!account || account.teamId !== session.teamId || account.teamId !== state.team.team.id) {
     teamSessions.delete(sessionId);
+    void revokeRuntimeTeamSession(sessionId, nowIso(), rootLogger);
     return null;
   }
 
@@ -717,9 +1446,13 @@ function requireTeamCsrf(req, context, res, origin, requestId) {
   return true;
 }
 
-function requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp) {
-  if (!checkScopedRateLimit(teamWriteRateStore, `${clientIp}:${context.account.teamId}:${context.account.id}`, TEAM_WRITE_RATE_LIMIT_MAX)) {
+async function requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp) {
+  if (!(await checkScopedRateLimit(teamWriteRateStore, `${clientIp}:${context.account.teamId}:${context.account.id}`, TEAM_WRITE_RATE_LIMIT_MAX))) {
     sendJson(res, 429, { ok: false, error: "Zu viele Team-Schreibzugriffe. Bitte später erneut versuchen." }, origin, requestId);
+    return false;
+  }
+  if (!canWriteTeamState(context.account)) {
+    sendJson(res, 403, { ok: false, error: "Keine Schreibrechte für diese Team-Aktion." }, origin, requestId);
     return false;
   }
   if (!requireTeamCsrf(req, context, res, origin, requestId)) {
@@ -728,8 +1461,61 @@ function requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)
   return true;
 }
 
+function getTeamLoginLockState(loginUserId, now = Date.now()) {
+  const key = String(loginUserId || "").trim().toLowerCase() || "unknown";
+  const current = teamLoginLockStore.get(key);
+  if (!current) {
+    return { locked: false, retryAfterSec: 0 };
+  }
+  if (!current?.lockedUntil) {
+    return { locked: false, retryAfterSec: 0 };
+  }
+  const lockedUntilMs = Date.parse(String(current?.lockedUntil || ""));
+  if (!Number.isFinite(lockedUntilMs) || lockedUntilMs <= now) {
+    teamLoginLockStore.delete(key);
+    return { locked: false, retryAfterSec: 0 };
+  }
+  return {
+    locked: true,
+    retryAfterSec: Math.max(1, Math.ceil((lockedUntilMs - now) / 1000)),
+  };
+}
+
+function registerTeamLoginFailure(loginUserId, now = Date.now()) {
+  const key = String(loginUserId || "").trim().toLowerCase() || "unknown";
+  const current = teamLoginLockStore.get(key);
+  const nextFailures = Number(current?.failures || 0) + 1;
+  if (nextFailures >= TEAM_LOGIN_LOCK_THRESHOLD) {
+    const lockedUntil = new Date(now + TEAM_LOGIN_LOCK_DURATION_SEC * 1000).toISOString();
+    teamLoginLockStore.set(key, { failures: nextFailures, lockedUntil });
+    return {
+      locked: true,
+      retryAfterSec: TEAM_LOGIN_LOCK_DURATION_SEC,
+      failures: nextFailures,
+      lockedUntil,
+    };
+  }
+  teamLoginLockStore.set(key, { failures: nextFailures, lockedUntil: "" });
+  return {
+    locked: false,
+    retryAfterSec: 0,
+    failures: nextFailures,
+    lockedUntil: "",
+  };
+}
+
+function clearTeamLoginFailure(loginUserId) {
+  const key = String(loginUserId || "").trim().toLowerCase() || "unknown";
+  teamLoginLockStore.delete(key);
+}
+
 function buildTeamStatePayload(context) {
   const normalized = normalizeTeamState(state.team);
+  const recipientId = String(context?.account?.id || "").trim().toLowerCase();
+  const visibleNotifications = (Array.isArray(normalized.notifications) ? normalized.notifications : []).filter((item) => {
+    const target = String(item?.recipientId || "").trim().toLowerCase();
+    return !target || target === recipientId;
+  });
   return {
     ok: true,
     user: toPublicAccount(context.account),
@@ -737,26 +1523,162 @@ function buildTeamStatePayload(context) {
     manualGames: normalized.manualGames,
     teamGoals: normalized.teamGoals,
     observations: normalized.observations,
+    notifications: visibleNotifications,
     feedItems: normalized.feedItems,
   };
 }
 
+function isCriticalNotificationType(type) {
+  return ["absage", "konflikt", "followup"].includes(String(type || "").trim().toLowerCase());
+}
+
+function registerTeamPushStream(teamId, stream) {
+  const key = String(teamId || "").trim();
+  if (!key || !stream || typeof stream.write !== "function") {
+    return () => {};
+  }
+  const bucket = teamPushStreams.get(key) || new Set();
+  bucket.add(stream);
+  teamPushStreams.set(key, bucket);
+  return () => {
+    const current = teamPushStreams.get(key);
+    if (!current) {
+      return;
+    }
+    current.delete(stream);
+    if (current.size === 0) {
+      teamPushStreams.delete(key);
+    }
+  };
+}
+
+function emitTeamPushEvents(teamId, events) {
+  const key = String(teamId || "").trim();
+  if (!key) {
+    return;
+  }
+  const bucket = teamPushStreams.get(key);
+  if (!bucket || bucket.size === 0) {
+    return;
+  }
+  const payloadEvents = (Array.isArray(events) ? events : []).filter(Boolean);
+  if (payloadEvents.length === 0) {
+    return;
+  }
+  const payload = JSON.stringify({
+    ok: true,
+    type: "team_push_events",
+    events: payloadEvents,
+  });
+  for (const stream of [...bucket]) {
+    try {
+      stream.write(`data: ${payload}\n\n`);
+      for (const event of payloadEvents) {
+        const eventId = String(event?.eventId || "").trim();
+        if (!eventId) {
+          continue;
+        }
+        const current = teamPushOutbox.get(eventId);
+        if (!current) {
+          continue;
+        }
+        const deliveredCount = Number(current?.deliveredCount || 0);
+        teamPushOutbox.set(eventId, {
+          ...current,
+          status: "delivered",
+          deliveredCount: deliveredCount + 1,
+          lastDeliveredAt: nowIso(),
+        });
+        void persistPushOutboxEvent(teamPushOutbox.get(eventId), rootLogger);
+      }
+    } catch {
+      bucket.delete(stream);
+    }
+  }
+  if (bucket.size === 0) {
+    teamPushStreams.delete(key);
+  }
+}
+
+function enqueueCriticalPushEvents(teamState) {
+  const teamId = String(teamState?.team?.id || state.team?.team?.id || "");
+  const notifications = Array.isArray(teamState?.notifications) ? teamState.notifications : [];
+  const queuedEvents = [];
+  for (const item of notifications) {
+    const eventId = normalizeAccountId(item?.eventId || item?.id);
+    const type = String(item?.type || "").trim().toLowerCase();
+    if (!eventId || !isCriticalNotificationType(type)) {
+      continue;
+    }
+    if (pushedCriticalEventIds.has(eventId) || teamPushOutbox.has(eventId)) {
+      continue;
+    }
+    const outboxEvent = {
+      eventId,
+      teamId,
+      type,
+      title: String(item?.title || ""),
+      body: String(item?.body || ""),
+      createdAt: String(item?.createdAt || nowIso()),
+      status: "new",
+      deliveredCount: 0,
+      lastDeliveredAt: "",
+    };
+    teamPushOutbox.set(eventId, outboxEvent);
+    queuedEvents.push(outboxEvent);
+    void persistPushOutboxEvent(outboxEvent, rootLogger);
+  }
+  if (queuedEvents.length > 0) {
+    emitTeamPushEvents(teamId, queuedEvents);
+  }
+}
+
+function prunePushOutbox(nowMs = Date.now(), maxAgeMs = PUSH_OUTBOX_MAX_AGE_MS) {
+  const cutoff = Number(nowMs) - Number(maxAgeMs);
+  for (const [eventId, event] of teamPushOutbox) {
+    const createdAtMs = Date.parse(String(event?.createdAt || ""));
+    if (!Number.isFinite(createdAtMs) || createdAtMs < cutoff) {
+      teamPushOutbox.delete(eventId);
+    }
+  }
+}
+
 async function persistTeamState(nextTeamState, logger, reason) {
   state.team = normalizeTeamState(nextTeamState);
+  const archiveTeamState = {
+    ...state.team,
+    team: {
+      ...(state.team?.team || {}),
+      accounts: (Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : []).map((account) => {
+        const nextAccount = { ...account };
+        delete nextAccount.passwordHash;
+        return nextAccount;
+      }),
+    },
+  };
   try {
     state.team = await writeTeamState(TEAM_STATE_FILE, state.team);
+    await ensureTeamDbMirrorsSynced(state.team, logger, {
+      persistTeamStateToDb,
+      syncTeamAccountsToDb,
+      syncTeamNotificationsToDb,
+      syncTeamObservationsToDb,
+      syncTeamReportsToDb,
+      syncTeamFeedItemsToDb,
+    }, { strict: DB_FIRST_MODE });
+    enqueueCriticalPushEvents(state.team);
     await appendTeamStateArchive(TEAM_ARCHIVE_FILE, {
       archivedAt: new Date().toISOString(),
       reason: String(reason || "team-update"),
       teamStateVersion: state.team.version || 1,
-      teamState: state.team,
+      teamState: archiveTeamState,
     });
     await persistTeamArchiveEventToDb(
       {
         archivedAt: new Date().toISOString(),
         reason: String(reason || "team-update"),
         teamStateVersion: state.team.version || 1,
-        teamState: state.team,
+        teamState: archiveTeamState,
       },
       logger,
     );
@@ -764,6 +1686,46 @@ async function persistTeamState(nextTeamState, logger, reason) {
   } catch (error) {
     logger.error("team state write failed", { reason, error });
     return false;
+  }
+}
+
+async function readRecentTeamArchiveFromFile(filePath, limit) {
+  if (!filePath) {
+    return [];
+  }
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+  try {
+    const content = await readFile(filePath, "utf8");
+    const lines = String(content || "")
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const selected = lines.slice(Math.max(0, lines.length - safeLimit)).reverse();
+    const events = [];
+    for (const line of selected) {
+      try {
+        const parsed = JSON.parse(line);
+        if (!parsed || typeof parsed !== "object") {
+          continue;
+        }
+        events.push({
+          archivedAt: String(parsed.archivedAt || ""),
+          teamId: String(parsed.teamState?.team?.id || ""),
+          reason: String(parsed.reason || ""),
+          teamStateVersion: Number(parsed.teamStateVersion || 1),
+          teamState: parsed.teamState && typeof parsed.teamState === "object" ? parsed.teamState : {},
+          source: "ndjson",
+        });
+      } catch {
+        // Skip malformed archive entries; keep diagnostics endpoint resilient.
+      }
+    }
+    return events;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -800,6 +1762,7 @@ async function refreshData(reason = "manual", logger = rootLogger) {
       state.aliasMap = result.aliasMap;
       state.lastRefreshReason = reason;
       state.lastError = null;
+      state.lastSuccessfulRefreshAt = nowIso();
       logger.info("adapter refresh completed", {
         reason,
         count: result.games.length,
@@ -824,6 +1787,22 @@ async function refreshData(reason = "manual", logger = rootLogger) {
   })();
 
   return refreshPromise;
+}
+
+async function runRefreshIngestionJob(reason = "manual", logger = rootLogger) {
+  const jobName = `refresh:${String(reason || "manual")}`;
+  const correlationId = `refresh:${String(reason || "manual")}:${Date.now()}`;
+  return ingestionJobs.runJob(
+    jobName,
+    () => refreshData(reason, logger),
+    {
+      retries: INGESTION_RETRY_MAX,
+      backoffMs: INGESTION_BACKOFF_MS,
+      category: "refresh",
+      correlationId,
+    },
+    logger,
+  );
 }
 
 function filterGamesToWeek(games, range) {
@@ -1019,6 +1998,7 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
     state.meta = nextMeta;
     state.lastRefreshReason = "auto-week";
     state.lastError = warnings.length ? warnings.join(" | ") : null;
+    state.lastSuccessfulRefreshAt = nowIso();
     state.weekRefreshCache[cacheKey] = now;
     logger.info("week refresh completed", {
       cacheKey,
@@ -1058,7 +2038,7 @@ function getHealthPayload() {
   const storeBackend = [".db", ".sqlite", ".sqlite3"].includes(storeExtension) ? "sqlite" : "json";
   return {
     ok: true,
-    service: "scoutplan-adapter",
+    service: "scoutx-adapter",
     timestamp: new Date().toISOString(),
     count: state.games.length,
     clubsCount: state.clubs.length,
@@ -1066,6 +2046,17 @@ function getHealthPayload() {
     lastError: state.lastError,
     remoteConfigured: Boolean(REMOTE_URL),
     authEnabled: Boolean(AUTH_TOKEN),
+    dbFirstMode: DB_FIRST_MODE,
+    dbUrlConfigured: DATABASE_URL_CONFIGURED,
+    dbReadModes: {
+      auth: EFFECTIVE_AUTH_READS_FROM_DB,
+      sessions: EFFECTIVE_SESSION_READS_FROM_DB,
+      teamState: EFFECTIVE_TEAM_STATE_READS_FROM_DB,
+      notifications: EFFECTIVE_NOTIFICATIONS_READS_FROM_DB,
+      observations: EFFECTIVE_OBSERVATIONS_READS_FROM_DB,
+      reports: EFFECTIVE_REPORTS_READS_FROM_DB,
+      feed: EFFECTIVE_FEED_READS_FROM_DB,
+    },
     refreshIntervalSec: REFRESH_INTERVAL_SEC,
     autoRefreshWeek: AUTO_REFRESH_WEEK,
     weekSourceConfigured: Boolean(WEEK_SOURCE_TEMPLATE || EXPORT_COMMAND),
@@ -1082,7 +2073,86 @@ function buildAdminMeta() {
     lastRefreshReason: state.lastRefreshReason,
     lastError: state.lastError,
     meta: state.meta,
+    jobs: ingestionJobs.listJobs(),
+    provenance: buildGameProvenanceSummary(),
+    alerts: buildMonitoringAlerts(),
+    runtimeMetrics: {
+      ...state.runtimeMetrics,
+      statusCounts: { ...(state.runtimeMetrics.statusCounts || {}) },
+    },
+    startedAt: state.startedAt,
+    lastSuccessfulRefreshAt: state.lastSuccessfulRefreshAt,
   };
+}
+
+async function buildDbReadinessReport(logger = rootLogger) {
+  const readModes = {
+    auth: EFFECTIVE_AUTH_READS_FROM_DB,
+    sessions: EFFECTIVE_SESSION_READS_FROM_DB,
+    teamState: EFFECTIVE_TEAM_STATE_READS_FROM_DB,
+    notifications: EFFECTIVE_NOTIFICATIONS_READS_FROM_DB,
+    observations: EFFECTIVE_OBSERVATIONS_READS_FROM_DB,
+    reports: EFFECTIVE_REPORTS_READS_FROM_DB,
+    feed: EFFECTIVE_FEED_READS_FROM_DB,
+  };
+
+  const report = {
+    ok: false,
+    dbFirstMode: DB_FIRST_MODE,
+    dbUrlConfigured: DATABASE_URL_CONFIGURED,
+    readModes,
+    probes: {},
+  };
+
+  if (!DATABASE_URL_CONFIGURED) {
+    return report;
+  }
+
+  const probeTeamId = String(state.team?.team?.id || "");
+  const toType = (value) => {
+    if (value === null || value === undefined) {
+      return "null";
+    }
+    if (Array.isArray(value)) {
+      return "array";
+    }
+    return typeof value;
+  };
+
+  const safeProbe = async (name, runner) => {
+    try {
+      const value = await runner();
+      report.probes[name] = { ok: true, valueType: toType(value) };
+      return value;
+    } catch (error) {
+      report.probes[name] = { ok: false, valueType: "error", error: String(error?.message || error) };
+      return null;
+    }
+  };
+
+  const probed = {
+    accounts: await safeProbe("accounts", () => fetchTeamAccountByIdFromDb("user-admin", logger)),
+    sessions: await safeProbe("sessions", () => fetchRuntimeTeamSessionById("probe-session", logger)),
+    teamState: await safeProbe("teamState", () => fetchTeamStateFromDb(probeTeamId, logger)),
+    notifications: await safeProbe("notifications", () => fetchTeamNotificationsFromDb(probeTeamId, logger)),
+    observations: await safeProbe("observations", () => fetchTeamObservationsFromDb(probeTeamId, logger)),
+    reports: await safeProbe("reports", () => fetchTeamReportMapFromDb(probeTeamId, logger)),
+    feed: await safeProbe("feed", () => fetchTeamFeedItemsFromDb(probeTeamId, logger)),
+    push: await safeProbe("push", () => fetchPushRuntimeSnapshot(probeTeamId, logger)),
+    archive: await safeProbe("archive", () => fetchRecentTeamArchiveEvents(1, logger)),
+  };
+
+  if (!DB_FIRST_MODE) {
+    report.ok = Object.values(report.probes).every((item) => item?.ok !== false);
+    return report;
+  }
+
+  // In DB-first mode, core domain probes must return non-null values to be considered ready.
+  const requiredKeys = ["teamState", "notifications", "observations", "reports", "feed"];
+  report.ok =
+    requiredKeys.every((key) => report.probes[key]?.ok === true) &&
+    requiredKeys.every((key) => probed[key] !== null && probed[key] !== undefined);
+  return report;
 }
 
 function normalizeUnderscoreKeyMap(raw) {
@@ -1321,13 +2391,18 @@ const server = createServer(async (req, res) => {
   requestLogger.info("incoming request");
 
   if (req.method === "OPTIONS") {
-    setCorsHeaders(res, origin);
+    const corsOk = setCorsHeaders(res, origin);
+    if (!corsOk) {
+      res.writeHead(403, { "X-Request-Id": requestId });
+      res.end();
+      return;
+    }
     res.writeHead(204, { "X-Request-Id": requestId });
     res.end();
     return;
   }
 
-  if (url.pathname !== "/health" && !checkRateLimit(clientIp)) {
+  if (url.pathname !== "/health" && !(await checkRateLimit(clientIp))) {
     requestLogger.warn("rate limit exceeded");
     sendJson(res, 429, { ok: false, error: "Zu viele Anfragen. Bitte später erneut versuchen." }, origin, requestId);
     return;
@@ -1337,6 +2412,23 @@ const server = createServer(async (req, res) => {
     sendJson(res, 200, getHealthPayload(), origin, requestId);
     return;
   }
+
+  req.__teamSessionContext = await resolveTeamSessionContext(req, requestLogger);
+  const teamRouteBaseContext = createTeamRouteBaseContext({
+    url,
+    origin,
+    requestId,
+    clientIp,
+    requestLogger,
+    state,
+    readBody,
+    sendJson,
+    persistTeamState,
+    findAccount,
+    createTeamSessionForAccount,
+    createSessionCookie,
+    buildTeamStatePayload,
+  });
 
   if (req.method === "GET" && url.pathname.startsWith("/api/clubs/logo/")) {
     const encodedName = url.pathname.slice("/api/clubs/logo/".length);
@@ -1372,148 +2464,110 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/team/auth/login") {
-    try {
-      const payload = await readBody(req);
-      const loginUserId = String(payload?.userId || "").trim().toLowerCase() || "unknown";
-      if (!checkScopedRateLimit(teamLoginRateStore, `${clientIp}:${loginUserId}`, TEAM_LOGIN_RATE_LIMIT_MAX)) {
-        sendJson(res, 429, { ok: false, error: "Zu viele Login-Versuche. Bitte später erneut versuchen." }, origin, requestId);
-        return;
-      }
-      const account = findAccount(state.team, payload?.userId);
-      if (!account || account.teamId !== state.team.team.id || !account.passwordHash || !verifyPassword(payload?.password, account.passwordHash)) {
-        sendJson(res, 401, { ok: false, error: "Unbekannter oder inaktiver Team-Account." }, origin, requestId);
-        return;
-      }
-
-      const sessionId = randomUUID();
-      const csrfToken = randomUUID();
-      teamSessions.set(sessionId, {
-        userId: account.id,
-        teamId: account.teamId,
-        csrfToken,
-        createdAt: new Date().toISOString(),
-      });
-
-      res.setHeader("Set-Cookie", createSessionCookie(sessionId));
-      sendJson(
-        res,
-        200,
-        {
-          ...buildTeamStatePayload({ account }),
-          csrfToken,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      requestLogger.warn("team login failed", { error });
-      sendJson(res, 400, { ok: false, error: "Team-Login fehlgeschlagen." }, origin, requestId);
-      return;
-    }
+  if (
+    await handleTeamAuthRoutes(req, res, {
+      ...teamRouteBaseContext,
+      normalizeAccountId,
+      checkScopedRateLimit,
+      teamLoginRateStore,
+      teamLoginRateLimitMax: TEAM_LOGIN_RATE_LIMIT_MAX,
+      getTeamLoginLockState,
+      registerTeamLoginFailure,
+      clearTeamLoginFailure,
+      resolveAccountForAuth,
+      verifyPassword,
+      createPasswordHash,
+      persistTeamState,
+      findAccount,
+      createTeamSessionForAccount,
+      createSessionCookie,
+      buildTeamStatePayload,
+      registrationTeamKey: REGISTRATION_TEAM.key,
+      requireTeamSession,
+      requireTeamWriteAllowed,
+      clearSessionCookie,
+      teamSessions,
+      revokeRuntimeTeamSession,
+      nowIso,
+    })
+  ) {
+    return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/team/auth/register") {
-    try {
-      const payload = await readBody(req);
-      const loginUserId = String(payload?.userId || "").trim().toLowerCase() || "unknown";
-      if (!checkScopedRateLimit(teamLoginRateStore, `${clientIp}:${loginUserId}`, TEAM_LOGIN_RATE_LIMIT_MAX)) {
-        sendJson(res, 429, { ok: false, error: "Zu viele Registrierungsversuche. Bitte später erneut versuchen." }, origin, requestId);
-        return;
-      }
-
-      const accountId = normalizeAccountId(payload?.userId);
-      const displayName = String(payload?.name || "").trim();
-      const password = String(payload?.password || "");
-      const requestedTeamKey = normalizeAccountId(payload?.teamKey);
-      if (!accountId || accountId.length < 3) {
-        sendJson(res, 400, { ok: false, error: "User-ID muss mindestens 3 Zeichen enthalten." }, origin, requestId);
-        return;
-      }
-      if (!displayName || displayName.length < 2) {
-        sendJson(res, 400, { ok: false, error: "Name muss mindestens 2 Zeichen enthalten." }, origin, requestId);
-        return;
-      }
-      if (!password || password.length < 8) {
-        sendJson(res, 400, { ok: false, error: "Passwort muss mindestens 8 Zeichen enthalten." }, origin, requestId);
-        return;
-      }
-      if (requestedTeamKey !== REGISTRATION_TEAM.key) {
-        sendJson(res, 400, { ok: false, error: "Aktuell ist nur Team Borussia Mönchengladbach verfügbar." }, origin, requestId);
-        return;
-      }
-      const exists = findAccount(state.team, accountId);
-      if (exists) {
-        sendJson(res, 409, { ok: false, error: "Diese User-ID ist bereits vergeben." }, origin, requestId);
-        return;
-      }
-
-      const accounts = Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : [];
-      const nextState = {
-        ...state.team,
-        team: {
-          ...(state.team?.team || {}),
-          accounts: [
-            ...accounts,
-            {
-              id: accountId,
-              name: displayName,
-              role: "scout",
-              teamId: state.team?.team?.id || "team-scoutx",
-              active: true,
-              passwordHash: createPasswordHash(password),
-            },
-          ],
-        },
-      };
-
-      const persisted = await persistTeamState(nextState, requestLogger, "team-register");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-Account konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-
-      const account = findAccount(state.team, accountId);
-      const sessionId = randomUUID();
-      const csrfToken = randomUUID();
-      teamSessions.set(sessionId, {
-        userId: account.id,
-        teamId: account.teamId,
-        csrfToken,
-        createdAt: new Date().toISOString(),
-      });
-      res.setHeader("Set-Cookie", createSessionCookie(sessionId));
-      sendJson(
-        res,
-        201,
-        {
-          ...buildTeamStatePayload({ account }),
-          csrfToken,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      requestLogger.warn("team registration failed", { error });
-      sendJson(res, 400, { ok: false, error: "Registrierung fehlgeschlagen." }, origin, requestId);
-      return;
-    }
+  if (
+    await handleTeamInvitationRoutes(req, res, {
+      ...teamRouteBaseContext,
+      randomUUID,
+      normalizeAccountId,
+      findTeamAccountRecordById,
+      hasTokenExpired,
+      createPasswordHash,
+      canManageTeamMembers,
+      requireTeamSession,
+      requireTeamWriteAllowed,
+      teamInvitations,
+      teamInvitationTtlSec: TEAM_INVITATION_TTL_SEC,
+      runtimeDbEnabled: RUNTIME_DB_ENABLED,
+      persistRuntimeInvitation,
+      fetchRuntimeInvitationByToken,
+      deleteRuntimeInvitation,
+    })
+  ) {
+    return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/team/auth/logout") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
+  if (
+    await handleTeamPasswordResetRoutes(req, res, {
+      ...teamRouteBaseContext,
+      randomUUID,
+      normalizeAccountId,
+      checkScopedRateLimit,
+      teamLoginRateStore,
+      teamPasswordResetTokens,
+      teamLoginRateLimitMax: TEAM_LOGIN_RATE_LIMIT_MAX,
+      teamPasswordResetTtlSec: TEAM_PASSWORD_RESET_TTL_SEC,
+      exposeResetTokenOnRequest: EXPOSE_RESET_TOKEN_ON_REQUEST,
+      resolveAccountForAuth,
+      hasTokenExpired,
+      createPasswordHash,
+      runtimeDbEnabled: RUNTIME_DB_ENABLED,
+      persistRuntimePasswordResetToken,
+      fetchRuntimePasswordResetToken,
+      deleteRuntimePasswordResetToken,
+    })
+  ) {
+    return;
+  }
 
-    teamSessions.delete(context.sessionId);
-    res.setHeader("Set-Cookie", clearSessionCookie());
-    sendJson(res, 200, { ok: true }, origin, requestId);
+  if (
+    await handleTeamImportTournamentRoutes(req, res, {
+      ...teamRouteBaseContext,
+      nowIso,
+      randomUUID,
+      readRawBody,
+      requireTeamSession,
+      requireTeamWriteAllowed,
+      normalizeAccountId,
+      formatWizardDateForMeinturnierplan,
+      toFilterKeywords,
+      extractMeinturnierplanJson,
+      parseGermanDateToIso,
+      meinturnierplanBaseUrl: MEINTURNIERPLAN_BASE_URL,
+      parseMultipartFormData,
+      extractTextFromPdfBuffer,
+      parseKreisPdfGamesFromText,
+      teamKreisPdfPreviews,
+      hasTokenExpired,
+      createGameProvenance,
+      dfbNationalSourceUrlTemplate: DFB_NATIONAL_SOURCE_URL_TEMPLATE,
+      dfbNationalSourceToken: DFB_NATIONAL_SOURCE_TOKEN,
+      dfbNationalSourceTimeoutMs: DFB_NATIONAL_SOURCE_TIMEOUT_MS,
+      runtimeDbEnabled: RUNTIME_DB_ENABLED,
+      persistRuntimeKreisPdfPreview,
+      fetchRuntimeKreisPdfPreviewByToken,
+      deleteRuntimeKreisPdfPreview,
+    })
+  ) {
     return;
   }
 
@@ -1522,564 +2576,162 @@ const server = createServer(async (req, res) => {
     if (!context) {
       return;
     }
-
+    if (EFFECTIVE_OBSERVATIONS_READS_FROM_DB) {
+      const observationsFromDb = await fetchTeamObservationsFromDb(context.account.teamId, requestLogger);
+      if (Array.isArray(observationsFromDb)) {
+        state.team = {
+          ...state.team,
+          observations: observationsFromDb,
+        };
+      }
+    }
+    if (EFFECTIVE_REPORTS_READS_FROM_DB) {
+      const reportMap = await fetchTeamReportMapFromDb(context.account.teamId, requestLogger);
+      if (reportMap && typeof reportMap === "object") {
+        state.team = {
+          ...state.team,
+          observations: (Array.isArray(state.team?.observations) ? state.team.observations : []).map((item) => {
+            const patch = reportMap[String(item?.id || "").trim()];
+            if (!patch) {
+              return item;
+            }
+            return {
+              ...item,
+              reportId: String(patch.reportId || item?.reportId || ""),
+              reportUrl: String(patch.reportUrl || item?.reportUrl || ""),
+            };
+          }),
+        };
+      }
+    }
+    if (EFFECTIVE_FEED_READS_FROM_DB) {
+      const feedItemsFromDb = await fetchTeamFeedItemsFromDb(context.account.teamId, requestLogger);
+      if (Array.isArray(feedItemsFromDb)) {
+        state.team = {
+          ...state.team,
+          feedItems: feedItemsFromDb,
+        };
+      }
+    }
     sendJson(res, 200, buildTeamStatePayload(context), origin, requestId);
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/team/plans") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = publishTeamPlan(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-plan");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          observations: result.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team plan publish failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Plan konnte nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/members") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = upsertTeamMember(state.team, context.account, payload);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-member");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          member: result.member,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team member update failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Mitglied konnte nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/manual-games") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = upsertManualGame(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-manual-game");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          manualGame: result.manualGame,
-          manualGames: state.team.manualGames,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team manual game failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Manuelles Spiel konnte nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/goals") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = updateTeamGoals(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-goals");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          manualGames: state.team.manualGames,
-          teamGoals: state.team.teamGoals,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team goals failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Team-Ziele konnten nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/observations/seen") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = markObservationSeen(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-seen");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          observation: result.observation,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team observation seen failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Sichtung konnte nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/observations/report") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = linkObservationReport(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-report");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          observation: result.observation,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team observation report link failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Bericht konnte nicht verknuepft werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/team/observations/note") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) {
-      return;
-    }
-    if (!requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp)) {
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const result = updateObservationNote(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-note");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return;
-      }
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          user: toPublicAccount(context.account),
-          team: toPublicTeam(state.team.team),
-          observation: result.observation,
-          observations: state.team.observations,
-          feedItems: state.team.feedItems,
-        },
-        origin,
-        requestId,
-      );
-      return;
-    } catch (error) {
-      const statusCode = Number(error?.statusCode || 400);
-      requestLogger.warn("team observation note failed", { error });
-      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Sichtungsnotiz konnte nicht gespeichert werden.") }, origin, requestId);
-      return;
-    }
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/games") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/games");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      const logCtx = {
-        stateCode: String(payload.stateCode || ""),
-        regionName: String(payload.regionName || payload.kreisId || ""),
-        regionShortCode: String(payload.regionShortCode || ""),
-        jugendId: String(payload.jugendId || ""),
-      };
-      const requireFreshWeek = payload?.ensureWeekData !== false;
-      let autoRefresh = { ran: false, reason: "skipped" };
-      if (requireFreshWeek) {
-        autoRefresh = await maybeAutoRefreshWeek(payload, requestLogger.child(logCtx), { strictLiveData: true });
-      } else {
-        // Keep /api/games responsive: refresh in background unless caller explicitly requires fresh week data.
-        void maybeAutoRefreshWeek(payload, requestLogger.child(logCtx)).catch((error) => {
-          requestLogger.warn("background week refresh failed", { ...logCtx, error });
-        });
-        autoRefresh = { ran: false, reason: "background" };
-      }
-      const requestedTeams = uniqueNormalizedTeams(payload.teams);
-      const requestedTeamCount = requestedTeams.length;
-      const gamesWithTeamFilter =
-        requestedTeamCount > 0 ? filterGames(state.games, payload, { aliasMap: state.aliasMap }) : [];
-      const games = filterGames(
-        state.games,
-        {
-          ...payload,
-          teams: [],
-        },
-        { aliasMap: state.aliasMap },
-      );
-      const teamFilterFallback = requestedTeamCount > 0 && games.length > gamesWithTeamFilter.length;
-      const { matchedTeams, missingTeams } = splitTeamValidation(requestedTeams, games);
-
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          source: "adapter-store",
-          count: games.length,
-          autoRefresh,
-          teamFilter: {
-            requested: requestedTeamCount > 0,
-            requestedCount: requestedTeamCount,
-            matchedCount: gamesWithTeamFilter.length,
-            matchedTeamCount: matchedTeams.length,
-            matchedTeams,
-            missingTeams,
-            binding: false,
-            fallbackToUnfiltered: teamFilterFallback,
-          },
-          games,
-        },
-        origin,
-        requestId,
-      );
-      requestLogger.info("games request served", {
-        ...logCtx,
-        count: games.length,
-        autoRefreshRan: Boolean(autoRefresh?.ran),
-      });
-    } catch (error) {
-      requestLogger.error("games request failed", { error });
-      const message = String(error?.message || "Ungültige Anfrage.");
-      const isClientError =
-        message.includes("muss") ||
-        message.includes("Ungültig") ||
-        message.includes("Ungültige") ||
-        message.includes("Invalid");
-      const statusCode = isClientError ? 400 : 502;
-      sendJson(res, statusCode, { ok: false, error: message }, origin, requestId);
-    }
-
+  if (
+    await handleTeamNotificationsRoutes(req, res, {
+      ...teamRouteBaseContext,
+      nowIso,
+      requireTeamSession,
+      requireTeamWriteAllowed,
+      normalizeEventId: normalizeAccountId,
+      teamPushSubscriptions,
+      teamPushOutbox,
+      pushedCriticalEventIds,
+      setCorsHeaders,
+      registerTeamPushStream,
+      persistPushSubscription,
+      removePushOutboxEventsAndMarkAcked,
+      notificationsReadsFromDb: EFFECTIVE_NOTIFICATIONS_READS_FROM_DB,
+      fetchTeamNotificationsFromDb,
+    })
+  ) {
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/api/clubs/search") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/clubs/search");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    const query = normalizeSearchQuery(url.searchParams.get("q"));
-    const limit = clampLimit(url.searchParams.get("limit"), 1, Math.max(1, CLUB_SEARCH_MAX_LIMIT), 8);
-
-    if (query.length < 2) {
-      sendJson(res, 200, { ok: true, query, clubs: [] }, origin, requestId);
-      return;
-    }
-
-    const localMatchesRaw = searchLocalClubCatalog(state.clubs, query, limit);
-    const localMatches = toPublicClubEntries(req, localMatchesRaw);
-
-    if (localMatches.length >= limit) {
-      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const remoteMatches = await fetchRemoteClubSuggestions(query, limit);
-      const clubs = toPublicClubEntries(req, mergeClubResults(remoteMatches, localMatchesRaw, limit));
-      sendJson(res, 200, { ok: true, query, clubs, source: "remote+local" }, origin, requestId);
-    } catch (error) {
-      requestLogger.warn("club search remote fallback", { query, error });
-      sendJson(res, 200, { ok: true, query, clubs: localMatches, source: "local-catalog-fallback" }, origin, requestId);
-    }
-
+  if (
+    await handleTeamAuditRoutes(req, res, {
+      ...teamRouteBaseContext,
+      requireTeamSession,
+      clampLimit,
+      feedReadsFromDb: EFFECTIVE_FEED_READS_FROM_DB,
+      fetchTeamFeedItemsFromDb,
+    })
+  ) {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/admin/refresh") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/refresh");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      await refreshData("admin-refresh", requestLogger);
-      sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin, requestId);
-    } catch (error) {
-      requestLogger.error("admin refresh failed", { error });
-      sendJson(res, 500, { ok: false, error: "Refresh fehlgeschlagen." }, origin, requestId);
-    }
+  if (
+    await handleTeamPlanningRoutes(req, res, {
+      ...teamRouteBaseContext,
+      randomUUID,
+      requireTeamSession,
+      requireTeamWriteAllowed,
+      toPublicAccount,
+      toPublicTeam,
+      buildTeamConflicts,
+      publishTeamPlan,
+      upsertTeamMember,
+      upsertManualGame,
+      updateTeamGoals,
+      markObservationSeen,
+      reassignObservation,
+      linkObservationReport,
+      updateObservationNote,
+      teamSessions,
+      revokeRuntimeTeamSessionsForAccount,
+      nowIso,
+    })
+  ) {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/admin/import") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/import");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      if (!Array.isArray(payload.games)) {
-        throw new Error("`games` muss ein Array sein.");
-      }
-
-      const replace = Boolean(payload.replace);
-      const importedGames = normalizeGames(payload.games, {
-        aliasMap: state.aliasMap,
-        source: "manual-import",
-      });
-
-      const merged = replace ? dedupeGames(importedGames) : dedupeGames([...state.games, ...importedGames]);
-
-      const meta = {
-        ...(state.meta || {}),
-        updatedAt: new Date().toISOString(),
-        counts: {
-          ...(state.meta?.counts || {}),
-          total: merged.length,
-          manualImport: importedGames.length,
-        },
-        warnings: state.meta?.warnings || [],
-      };
-
-      const persisted = await writeStoreSafely("admin-import", { games: merged, meta }, requestLogger);
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Store konnte nicht geschrieben werden." }, origin, requestId);
-        return;
-      }
-      state.games = merged;
-      state.meta = meta;
-      state.lastRefreshReason = replace ? "admin-import-replace" : "admin-import-merge";
-      state.lastError = null;
-
-      sendJson(res, 200, { ok: true, imported: importedGames.length, total: merged.length }, origin, requestId);
-    } catch (error) {
-      requestLogger.error("admin import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Import fehlgeschlagen." }, origin, requestId);
-    }
-
+  if (
+    await handlePublicDataRoutes(req, res, {
+      url,
+      origin,
+      requestId,
+      requestLogger,
+      reqRef: req,
+      state,
+      readBody,
+      sendJson,
+      isAuthorized,
+      maybeAutoRefreshWeek,
+      uniqueNormalizedTeams,
+      filterGames,
+      splitTeamValidation,
+      normalizeSearchQuery,
+      clampLimit,
+      clubSearchMaxLimit: CLUB_SEARCH_MAX_LIMIT,
+      searchLocalClubCatalog,
+      toPublicClubEntries,
+      fetchRemoteClubSuggestions,
+      mergeClubResults,
+    })
+  ) {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/admin/clubs/import") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/clubs/import");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const payload = await readBody(req);
-      if (!Array.isArray(payload.clubs)) {
-        throw new Error("`clubs` muss ein Array sein.");
-      }
-
-      const replace = Boolean(payload.replace);
-      const importedClubs = dedupeClubEntries(payload.clubs);
-      const merged = replace ? importedClubs : dedupeClubEntries([...state.clubs, ...importedClubs]);
-      const persisted = await writeClubCatalogFile(CLUB_CATALOG_FILE, merged);
-
-      state.clubs = persisted;
-
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          imported: importedClubs.length,
-          total: persisted.length,
-          replace,
-        },
-        origin,
-        requestId,
-      );
-    } catch (error) {
-      requestLogger.error("admin clubs import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Vereinskatalog-Import fehlgeschlagen." }, origin, requestId);
-    }
-
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/admin/status") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/status");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin, requestId);
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/admin/mandant-probe") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/mandant-probe");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const mandant = String(url.searchParams.get("mandant") || "").trim();
-      const season = String(url.searchParams.get("season") || "").trim();
-      const competitionType = String(url.searchParams.get("competitionType") || "").trim();
-      const probe = await fetchMandantProbe({ mandant, season, competitionType, logger: requestLogger });
-      sendJson(res, 200, probe, origin, requestId);
-    } catch (error) {
-      requestLogger.error("admin mandant-probe failed", { error });
-      sendJson(res, 400, { ok: false, error: String(error?.message || "Mandant-Probe fehlgeschlagen.") }, origin, requestId);
-    }
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/admin/verband-status") {
-    if (!isAuthorized(req)) {
-      requestLogger.warn("unauthorized /api/admin/verband-status");
-      sendJson(res, 401, { ok: false, error: "Unauthorized" }, origin, requestId);
-      return;
-    }
-
-    try {
-      const payload = await collectKnownMandantStatus(requestLogger);
-      sendJson(res, 200, payload, origin, requestId);
-    } catch (error) {
-      requestLogger.error("admin verband-status failed", { error });
-      sendJson(res, 500, { ok: false, error: "Verbands-Status fehlgeschlagen." }, origin, requestId);
-    }
+  if (
+    await handleAdminRoutes(req, res, {
+      url,
+      origin,
+      requestId,
+      requestLogger,
+      state,
+      readBody,
+      sendJson,
+      setCorsHeaders,
+      nowIso,
+      isAuthorized,
+      runRefreshIngestionJob,
+      buildAdminMeta,
+      normalizeGames,
+      dedupeGames,
+      writeStoreSafely,
+      dedupeClubEntries,
+      writeClubCatalogFile: (clubs) => writeClubCatalogFile(CLUB_CATALOG_FILE, clubs),
+      ingestionJobs,
+      buildPrometheusMetricsText,
+      fetchMandantProbe,
+      collectKnownMandantStatus,
+      clampLimit,
+      fetchRecentTeamArchiveEvents,
+      readRecentTeamArchiveFromFile,
+      teamArchiveFile: TEAM_ARCHIVE_FILE,
+      buildDbReadinessReport,
+    })
+  ) {
     return;
   }
 
@@ -2087,10 +2739,79 @@ const server = createServer(async (req, res) => {
 });
 
 try {
-  state.team = await readTeamState(TEAM_STATE_FILE);
+  if (EFFECTIVE_TEAM_STATE_READS_FROM_DB) {
+    const teamStateFromDb = await fetchTeamStateFromDb("", rootLogger);
+    if (teamStateFromDb) {
+      state.team = normalizeTeamState(teamStateFromDb);
+      await writeTeamState(TEAM_STATE_FILE, state.team);
+      await ensureTeamDbMirrorsSynced(state.team, rootLogger, {
+        persistTeamStateToDb: async () => true,
+        syncTeamAccountsToDb,
+        syncTeamNotificationsToDb,
+        syncTeamObservationsToDb,
+        syncTeamReportsToDb,
+        syncTeamFeedItemsToDb,
+      }, { strict: DB_FIRST_MODE });
+    } else {
+      state.team = await readTeamState(TEAM_STATE_FILE);
+      await ensureTeamDbMirrorsSynced(state.team, rootLogger, {
+        persistTeamStateToDb,
+        syncTeamAccountsToDb,
+        syncTeamNotificationsToDb,
+        syncTeamObservationsToDb,
+        syncTeamReportsToDb,
+        syncTeamFeedItemsToDb,
+      }, { strict: DB_FIRST_MODE });
+    }
+  } else {
+    state.team = await readTeamState(TEAM_STATE_FILE);
+    await ensureTeamDbMirrorsSynced(state.team, rootLogger, {
+      persistTeamStateToDb,
+      syncTeamAccountsToDb,
+      syncTeamNotificationsToDb,
+      syncTeamObservationsToDb,
+      syncTeamReportsToDb,
+      syncTeamFeedItemsToDb,
+    }, { strict: DB_FIRST_MODE });
+  }
 } catch (error) {
   rootLogger.error("team state load failed", { error });
   state.team = createInitialTeamState();
+  await ensureTeamDbMirrorsSynced(state.team, rootLogger, {
+    persistTeamStateToDb,
+    syncTeamAccountsToDb,
+    syncTeamNotificationsToDb,
+    syncTeamObservationsToDb,
+    syncTeamReportsToDb,
+    syncTeamFeedItemsToDb,
+  }, { strict: DB_FIRST_MODE });
+}
+
+try {
+  const teamId = String(state.team?.team?.id || "");
+  if (teamId) {
+    const pushSnapshot = await fetchPushRuntimeSnapshot(teamId, rootLogger);
+    if (pushSnapshot) {
+      teamPushSubscriptions.clear();
+      for (const subscription of pushSnapshot.subscriptions || []) {
+        if (subscription?.endpoint) {
+          teamPushSubscriptions.set(subscription.endpoint, subscription);
+        }
+      }
+      teamPushOutbox.clear();
+      for (const event of pushSnapshot.outboxEvents || []) {
+        if (event?.eventId) {
+          teamPushOutbox.set(event.eventId, event);
+        }
+      }
+      pushedCriticalEventIds.clear();
+      for (const eventId of pushSnapshot.ackedEventIds || []) {
+        pushedCriticalEventIds.add(eventId);
+      }
+    }
+  }
+} catch (error) {
+  rootLogger.warn("push runtime rehydrate failed", { error });
 }
 
 try {
@@ -2102,14 +2823,14 @@ try {
 await runStartupVerbandDiscovery(rootLogger);
 
 try {
-  await refreshData("startup", rootLogger);
+  await runRefreshIngestionJob("startup", rootLogger);
 } catch (error) {
   rootLogger.error("initial refresh failed", { error });
 }
 
 if (REFRESH_INTERVAL_SEC > 0) {
   setInterval(() => {
-    refreshData("interval", rootLogger).catch((error) => {
+    runRefreshIngestionJob("interval", rootLogger).catch((error) => {
       rootLogger.error("interval refresh failed", { error });
     });
   }, REFRESH_INTERVAL_SEC * 1000);

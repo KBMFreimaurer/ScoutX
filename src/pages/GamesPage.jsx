@@ -9,6 +9,55 @@ import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
 
+function toKickoffMs(game) {
+  const dateText = String(game?.date || "").trim();
+  const timeText = String(game?.time || "").trim();
+  const match = timeText.match(/^(\d{2}):(\d{2})$/);
+  if (!dateText || !match) {
+    return NaN;
+  }
+  const [, hh, mm] = match;
+  return Date.parse(`${dateText}T${hh}:${mm}:00`);
+}
+
+function buildSelectionConflicts(games) {
+  const entries = (Array.isArray(games) ? games : [])
+    .map((game) => ({
+      id: String(game?.id || ""),
+      home: String(game?.home || ""),
+      away: String(game?.away || ""),
+      venue: String(game?.venue || ""),
+      kickoffMs: toKickoffMs(game),
+      time: String(game?.time || ""),
+    }))
+    .filter((item) => item.id && !Number.isNaN(item.kickoffMs))
+    .sort((a, b) => a.kickoffMs - b.kickoffMs);
+
+  const conflicts = [];
+  for (let index = 0; index < entries.length - 1; index += 1) {
+    const left = entries[index];
+    const right = entries[index + 1];
+    const deltaMinutes = Math.round((right.kickoffMs - left.kickoffMs) / 60000);
+    const sameVenue = left.venue && right.venue && left.venue.toLowerCase() === right.venue.toLowerCase();
+    if (deltaMinutes < 120) {
+      conflicts.push({
+        type: "time_overlap",
+        severity: "hard-conflict",
+        gameIds: [left.id, right.id],
+        message: `${left.home} vs ${left.away} (${left.time}) kollidiert mit ${right.home} vs ${right.away} (${right.time}).`,
+      });
+    } else if (!sameVenue && deltaMinutes < 90) {
+      conflicts.push({
+        type: "travel_risk",
+        severity: deltaMinutes < 60 ? "hard-conflict" : "warn",
+        gameIds: [left.id, right.id],
+        message: `Knappes Reisefenster (${deltaMinutes} Min) zwischen ${left.home} vs ${left.away} und ${right.home} vs ${right.away}.`,
+      });
+    }
+  }
+  return conflicts;
+}
+
 export function GamesPage() {
   const {
     games,
@@ -94,6 +143,17 @@ export function GamesPage() {
     });
   }, [games, sortMode]);
   const observationMap = useMemo(() => getGameObservationMap(), [getGameObservationMap]);
+  const selectedGamesForPlan = useMemo(() => {
+    const selectedIds = Object.keys(selectedGameIds || {});
+    if (selectedIds.length === 0) {
+      return sortedGames;
+    }
+    return sortedGames.filter((game) => selectedGameIds?.[game.id]);
+  }, [selectedGameIds, sortedGames]);
+  const selectionConflicts = useMemo(
+    () => buildSelectionConflicts(selectedGamesForPlan),
+    [selectedGamesForPlan],
+  );
   const gamesWithTeamPlanning = useMemo(
     () =>
       sortedGames.map((game) => {
@@ -172,10 +232,24 @@ export function GamesPage() {
   }, [usePinnedActionDock, isMobile]);
 
   const onExportCalendar = () => {
-    const exportGames = selectedGameIds.length > 0 ? games.filter((game) => selectedGameIds.includes(game.id)) : games;
+    const selectedIds = Object.keys(selectedGameIds || {});
+    const exportGames = selectedIds.length > 0 ? games.filter((game) => selectedGameIds?.[game.id]) : games;
     downloadCalendarIcs(exportGames, {
       kreisLabel: String(kreisLabel || kreis?.label || "").trim(),
     });
+  };
+
+  const onConfirmAndGeneratePlan = () => {
+    if (selectionConflicts.length > 0) {
+      const first = selectionConflicts[0];
+      const severityLabel = first.severity === "hard-conflict" ? "Hard-Conflict" : first.severity === "warn" ? "Warnung" : "Info";
+      const warning = `Konfliktwarnung vor Planabschluss (${severityLabel}):\n${first.message}\n\nTrotzdem Plan öffnen?`;
+      const confirmed = window.confirm(warning);
+      if (!confirmed) {
+        return;
+      }
+    }
+    onGeneratePlanPdf();
   };
 
   const onToggleGameSelection = (gameId) => {
@@ -402,6 +476,27 @@ export function GamesPage() {
         </div>
       </div>
 
+      {selectionConflicts.length > 0 ? (
+        <div
+          role="alert"
+          style={{
+            border: `1px solid rgba(251,191,36,0.3)`,
+            background: "rgba(251,191,36,0.12)",
+            color: C.warn,
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            fontSize: 12,
+            lineHeight: 1.45,
+          }}
+        >
+          <strong>
+            Konfliktwarnung vor Planabschluss ({selectionConflicts[0].severity === "hard-conflict" ? "Hard-Conflict" : "Warnung"}):
+          </strong>{" "}
+          {selectionConflicts[0].message}
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.gray }}>
           Sortierung
@@ -488,7 +583,7 @@ export function GamesPage() {
             Kalender (.ics)
           </GhostButton>
         </div>
-        <PrimaryButton onClick={onGeneratePlanPdf} disabled={pdfExporting} style={{ width: "100%" }}>
+        <PrimaryButton onClick={onConfirmAndGeneratePlan} disabled={pdfExporting} style={{ width: "100%" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
             <svg
               width="16"

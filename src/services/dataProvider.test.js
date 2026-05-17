@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchGamesWithProviders, parseUploadedGames, parseUploadedGamesReport } from "./dataProvider";
+import { importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
+
+vi.mock("./teamBackendClient", () => ({
+  importTeamTournamentsFromMeinturnierplan: vi.fn(),
+}));
 
 describe("data provider", () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockReset();
   });
 
   it("parses csv uploads", () => {
@@ -141,6 +147,97 @@ describe("data provider", () => {
       regionShortCode: "DU",
       fussballDeMapping: { searchName: "Düsseldorf", verband: "FVN", kreis: "Düsseldorf" },
     });
+  });
+
+  it("uses meinturnierplan import for tournament wizard mode", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [
+        {
+          id: "mtp-1",
+          externalId: "1",
+          name: "Pfingstcup U12",
+          dateFrom: "2026-06-01",
+          dateTo: "2026-06-01",
+          url: "https://www.meinturnierplan.de/showit.php?id=1",
+          venue: "Sportpark Nord",
+        },
+      ],
+    });
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "f-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: ["MSV Duisburg U12"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: true,
+    });
+
+    expect(result.source).toBe("tournament");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0]).toMatchObject({
+      home: "Pfingstcup U12",
+      away: "Turnier",
+      turnier: true,
+      provider: "meinturnierplan.de",
+      matchUrl: "https://www.meinturnierplan.de/showit.php?id=1",
+    });
+    expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromDate: "2026-06-01",
+        toDate: "2026-06-07",
+        kreisId: "duisburg",
+        jugendId: "f-jugend",
+        teams: ["MSV Duisburg U12"],
+      }),
+    );
+  });
+
+  it("falls back to adapter when tournament import returns empty", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-06-02",
+              time: "11:00",
+              home: "Fallback Team A",
+              away: "Fallback Team B",
+              venue: "Platz 1",
+              jugendId: "f-jugend",
+              kreisId: "duisburg",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "f-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: true,
+    });
+
+    expect(result.source).toBe("adapter");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].home).toBe("Fallback Team A");
+    expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledTimes(1);
   });
 
   it("faellt auf benachbarte Woche zurück, wenn der gewählte Zeitraum leer ist", async () => {

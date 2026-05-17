@@ -20,15 +20,15 @@
 - Purpose: Render user interface and handle user interactions
 - Location: `src/components/`, `src/pages/`
 - Contains: React functional components, page layouts, UI reusable components
-- Depends on: React Router, Context (ScoutPlanContext), Theme (C, GCSS)
+- Depends on: React Router, Context (ScoutXContext), Theme (C, GCSS)
 - Used by: Main app rendering, user interaction flows
 
 **State Management:**
 - Purpose: Hold and provide application state to components
-- Location: `src/context/ScoutPlanContext.jsx`, `src/app.jsx` (for centralized state)
+- Location: `src/context/ScoutXContext.jsx`, `src/app.jsx` (for centralized state)
 - Contains: React Context provider, global state (setup params, games, plan, LLM config)
 - Depends on: React hooks (useState, useEffect)
-- Used by: All page and component layers via useScoutPlan hook
+- Used by: All page and component layers via useScoutX hook
 
 **Business Logic (Services):**
 - Purpose: Handle data transformations, API calls, and core functionality
@@ -103,8 +103,8 @@
 
 **State Management:**
 
-- Setup state persists to localStorage (`scoutplan.setup.v1`)
-- LLM config persists to localStorage (`scoutplan.llm.v1`)
+- Setup state persists to localStorage (`scoutx.setup.v1`)
+- LLM config persists to localStorage (`scoutx.llm.v1`)
 - LLM API key: either in localStorage (if "remember" checked) OR sessionStorage (if temporary)
 - Games state: in-memory only (cleared on setup reset)
 - Plan state: in-memory only (cleared on games reset)
@@ -149,7 +149,7 @@
 **React Root:**
 - Location: `src/main.jsx`
 - Triggers: DOM ready
-- Responsibilities: Render App wrapped in StrictMode, ErrorBoundary, BrowserRouter, ScoutPlanProvider
+- Responsibilities: Render App wrapped in StrictMode, ErrorBoundary, BrowserRouter, ScoutXProvider
 
 **App Component:**
 - Location: `src/app.jsx`

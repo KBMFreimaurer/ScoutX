@@ -6,8 +6,16 @@ import {
   readScheduleWatchState,
   writeScheduleWatchState,
 } from "../services/scheduleChanges";
+import {
+  ackTeamPushEvents,
+  fetchTeamPushPendingEvents,
+  resolveTeamApiBase,
+  subscribeTeamPushNotifications,
+} from "../services/teamBackendClient";
 
 const MAX_HISTORY = 20;
+const PUSH_POLL_INTERVAL_MS = 30000;
+const VAPID_PUBLIC_KEY = String(import.meta.env?.VITE_WEB_PUSH_VAPID_PUBLIC_KEY || "").trim();
 
 function getBrowserPermission() {
   if (typeof window === "undefined" || !("Notification" in window)) {
@@ -49,7 +57,9 @@ export function useScheduleChangeNotifications({
   const [latestNotice, setLatestNotice] = useState(null);
   const [history, setHistory] = useState([]);
   const [browserPermission, setBrowserPermission] = useState(() => getBrowserPermission());
+  const [sseConnected, setSseConnected] = useState(false);
   const watchStateRef = useRef(readScheduleWatchState());
+  const pushSubscriptionAttemptedRef = useRef(false);
 
   const browserSupported = browserPermission !== "unsupported";
   const scopeKey = useMemo(
@@ -79,6 +89,93 @@ export function useScheduleChangeNotifications({
       return "denied";
     }
   }, []);
+
+  const showBrowserNotice = useCallback(async ({ title, body, tag = "", eventId = "", url = "/hub" }) => {
+    const safeTitle = String(title || "ScoutX Update").trim() || "ScoutX Update";
+    const safeBody = String(body || "Neue Team-Aktivität verfügbar.").trim() || "Neue Team-Aktivität verfügbar.";
+    const safeTag = String(tag || eventId || "scoutx-update").trim() || "scoutx-update";
+    const targetUrl = String(url || "/hub").trim() || "/hub";
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration && typeof registration.showNotification === "function") {
+          await registration.showNotification(safeTitle, {
+            body: safeBody,
+            icon: "/scoutx-icon-192.png",
+            badge: "/scoutx-icon-192.png",
+            tag: safeTag,
+            renotify: true,
+            data: { url: targetUrl, eventId: String(eventId || "").trim() },
+          });
+          return;
+        }
+      } catch {
+        // Fallback to plain Notification below.
+      }
+    }
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      new Notification(safeTitle, {
+        body: safeBody,
+        icon: "/scoutx-icon-192.png",
+        badge: "/scoutx-icon-192.png",
+        tag: safeTag,
+        renotify: true,
+      });
+    }
+  }, []);
+
+  const base64UrlToUint8Array = useCallback((value) => {
+    const source = String(value || "").trim();
+    if (!source) {
+      return null;
+    }
+    const padding = "=".repeat((4 - (source.length % 4)) % 4);
+    const normalized = (source + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(normalized);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i += 1) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    return bytes;
+  }, []);
+
+  const ensurePushSubscription = useCallback(async () => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
+    }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      return;
+    }
+    if (!VAPID_PUBLIC_KEY || pushSubscriptionAttemptedRef.current) {
+      return;
+    }
+    pushSubscriptionAttemptedRef.current = true;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (!registration?.pushManager) {
+        return;
+      }
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        const applicationServerKey = base64UrlToUint8Array(VAPID_PUBLIC_KEY);
+        if (!applicationServerKey) {
+          return;
+        }
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+      }
+      if (subscription) {
+        await subscribeTeamPushNotifications(subscription.toJSON());
+      }
+    } catch {
+      // Keep app usable even when push subscription fails.
+    }
+  }, [base64UrlToUint8Array]);
 
   const dismissLatestNotice = useCallback(() => {
     setLatestNotice(null);
@@ -140,20 +237,172 @@ export function useScheduleChangeNotifications({
     setLatestNotice(notice);
     setHistory((prev) => [notice, ...prev].slice(0, MAX_HISTORY));
 
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      try {
-        new Notification("ScoutX: Spielplan geändert", {
-          body: `${notice.message} (${notice.detail})`,
-          icon: "/scoutx-icon-192.png",
-          badge: "/scoutx-icon-192.png",
-          tag: `schedule-change-${scopeKey}`,
-          renotify: true,
-        });
-      } catch {
-        // Ignore browser notification errors.
-      }
+    void showBrowserNotice({
+      title: "ScoutX: Spielplan geändert",
+      body: `${notice.message} (${notice.detail})`,
+      tag: `schedule-change-${scopeKey}`,
+      url: "/games",
+    });
+  }, [dataSourceUsed, fromDate, games, jugendLabel, kreisLabel, scopeKey, scheduleFingerprint, showBrowserNotice, toDate]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
     }
-  }, [dataSourceUsed, fromDate, games, jugendLabel, kreisLabel, scopeKey, scheduleFingerprint, toDate]);
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+    const onMessage = (event) => {
+      const data = event?.data || {};
+      if (data?.type !== "SCOUTX_NAVIGATE") {
+        return;
+      }
+      const target = String(data.url || "").trim();
+      if (!target) {
+        return;
+      }
+      try {
+        window.location.assign(target);
+      } catch {
+        // no-op
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    void ensurePushSubscription();
+  }, [browserPermission, ensurePushSubscription]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof EventSource === "undefined") {
+      setSseConnected(false);
+      return undefined;
+    }
+    if (browserPermission !== "granted") {
+      setSseConnected(false);
+      return undefined;
+    }
+    const streamUrl = `${resolveTeamApiBase()}/notifications/push/stream`;
+    let source = null;
+    let reconnectTimer = null;
+    let closed = false;
+
+    const open = () => {
+      if (closed) {
+        return;
+      }
+      try {
+        source = new EventSource(streamUrl, { withCredentials: true });
+      } catch {
+        setSseConnected(false);
+        reconnectTimer = window.setTimeout(open, 3000);
+        return;
+      }
+      source.onopen = () => {
+        setSseConnected(true);
+      };
+      source.onmessage = async (event) => {
+        try {
+          const payload = JSON.parse(String(event?.data || "{}"));
+          const events = Array.isArray(payload?.events) ? payload.events : [];
+          if (events.length === 0) {
+            return;
+          }
+          for (const item of events) {
+            await showBrowserNotice({
+              title: item?.title || "ScoutX Hinweis",
+              body: item?.body || "Neues Team-Event",
+              tag: item?.eventId || item?.id || "team-event",
+              eventId: item?.eventId || item?.id || "",
+              url: "/hub",
+            });
+          }
+          const eventIds = events.map((item) => String(item?.eventId || item?.id || "").trim()).filter(Boolean);
+          if (eventIds.length > 0) {
+            await ackTeamPushEvents(eventIds);
+          }
+        } catch {
+          // Keep stream running on malformed messages.
+        }
+      };
+      source.onerror = () => {
+        setSseConnected(false);
+        try {
+          source?.close();
+        } catch {
+          // no-op
+        }
+        source = null;
+        if (!closed) {
+          reconnectTimer = window.setTimeout(open, 3000);
+        }
+      };
+    };
+
+    open();
+    return () => {
+      closed = true;
+      setSseConnected(false);
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      try {
+        source?.close();
+      } catch {
+        // no-op
+      }
+    };
+  }, [browserPermission, showBrowserNotice]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window) || window.Notification.permission !== "granted") {
+      return undefined;
+    }
+    if (sseConnected) {
+      return undefined;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const payload = await fetchTeamPushPendingEvents();
+        if (cancelled) {
+          return;
+        }
+        const events = Array.isArray(payload?.events) ? payload.events : [];
+        if (events.length === 0) {
+          return;
+        }
+        for (const item of events) {
+          await showBrowserNotice({
+            title: item?.title || "ScoutX Hinweis",
+            body: item?.body || "Neues Team-Event",
+            tag: item?.eventId || item?.id || "team-event",
+            eventId: item?.eventId || item?.id || "",
+            url: "/hub",
+          });
+        }
+        const eventIds = events.map((item) => String(item?.eventId || item?.id || "").trim()).filter(Boolean);
+        if (eventIds.length > 0) {
+          await ackTeamPushEvents(eventIds);
+        }
+      } catch {
+        // Pending pull is best-effort.
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(() => {
+      void tick();
+    }, PUSH_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [showBrowserNotice, browserPermission, sseConnected]);
 
   return {
     latestNotice,

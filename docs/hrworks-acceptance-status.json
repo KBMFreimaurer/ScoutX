@@ -1,0 +1,168 @@
+{
+  "updated_at_utc": "2026-05-17T14:21:37.388Z",
+  "objective_source": "src/prompt.md",
+  "acceptance_criteria": [
+    {
+      "id": "ac1",
+      "criterion": "ScoutX hat einen sichtbaren Button 'In HRworks importieren'",
+      "status": "fulfilled",
+      "evidence": [
+        "src/pages/PlanPage.jsx",
+        "src/pages/PlanPage.test.jsx"
+      ]
+    },
+    {
+      "id": "ac2",
+      "criterion": "Der Button öffnet zuerst eine Review-Ansicht",
+      "status": "fulfilled",
+      "evidence": [
+        "src/components/HrworksImportReviewModal.jsx",
+        "src/pages/PlanPage.test.jsx"
+      ]
+    },
+    {
+      "id": "ac3",
+      "criterion": "Importdaten werden aus ScoutX-Plänen sauber abgeleitet",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/services/hrworksImport.test.js"
+      ]
+    },
+    {
+      "id": "ac4",
+      "criterion": "Excel-Arbeitszeitdaten können verarbeitet oder gemappt werden",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksExcelParser.js",
+        "src/services/hrworksExcelParser.test.js",
+        "src/pages/PlanPage.jsx"
+      ],
+      "note": "Referenzmodell wird verarbeitet (CSV/TXT, Zeit-/Datumsmapping, Gesamtstunden-Warnung); XLSX wird kontrolliert mit CSV-Hinweis behandelt."
+    },
+    {
+      "id": "ac5",
+      "criterion": "Pflichtfelder werden validiert",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/services/hrworksImport.test.js"
+      ]
+    },
+    {
+      "id": "ac6",
+      "criterion": "Fehlende Daten blockieren den Import",
+      "status": "fulfilled",
+      "evidence": [
+        "src/components/HrworksImportReviewModal.jsx",
+        "src/pages/PlanPage.test.jsx"
+      ]
+    },
+    {
+      "id": "ac7",
+      "criterion": "Browser-Automation speichert keine Zugangsdaten",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksAutomationRuntime.js",
+        "src/services/hrworksAutomationRuntime.test.js",
+        "docs/hrworks-live-session-runbook.md",
+        "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+      ],
+      "note": "Automatisch aus Live-Evidence aktualisiert"
+    },
+    {
+      "id": "ac8",
+      "criterion": "Nutzer loggt sich selbst in HRworks ein",
+      "status": "partial",
+      "evidence": [
+        "docs/hrworks-live-session-runbook.md",
+        "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+      ],
+      "note": "Live-Evidence enthält Platzhalter/Testwerte; realer Login-Nachweis ausstehend"
+    },
+    {
+      "id": "ac9",
+      "criterion": "HRworks-Felder werden robust über Selector-Mapping befüllt",
+      "status": "partial",
+      "evidence": [
+        "config/hrworks.selectors.json",
+        "src/services/hrworksSelectorMapping.js",
+        "e2e/helpers/hrworksAutomation.js",
+        "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+      ],
+      "note": "Live-Evidence enthält Platzhalter/Testwerte; reale DOM-Validierung ausstehend"
+    },
+    {
+      "id": "ac10",
+      "criterion": "Vor finalem Speichern gibt es eine Nutzerbestätigung",
+      "status": "fulfilled",
+      "evidence": [
+        "e2e/helpers/hrworksAutomation.js",
+        "src/services/hrworksAutomationRuntime.js"
+      ]
+    },
+    {
+      "id": "ac11",
+      "criterion": "Jeder Import wird protokolliert",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/pages/PlanPage.jsx"
+      ]
+    },
+    {
+      "id": "ac12",
+      "criterion": "Re-Importe werden erkannt und gewarnt",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/services/hrworksImport.test.js",
+        "src/pages/PlanPage.jsx"
+      ]
+    },
+    {
+      "id": "ac13",
+      "criterion": "Tests für Datenmodell, Parser, UI und Automation existieren",
+      "status": "fulfilled",
+      "evidence": [
+        "package.json:scripts.test:hrworks",
+        "src/services/*hrworks*.test.js",
+        "src/pages/PlanPage.test.jsx",
+        "e2e/helpers/hrworksAutomation.unit.test.js"
+      ]
+    },
+    {
+      "id": "ac14",
+      "criterion": "Dokumentation existiert",
+      "status": "fulfilled",
+      "evidence": [
+        "docs/hrworks-import-plan.md",
+        "docs/hrworks-import-completion-audit.md",
+        "docs/hrworks-live-session-runbook.md"
+      ]
+    },
+    {
+      "id": "ac15",
+      "criterion": "Keine sensiblen Daten werden geloggt",
+      "status": "fulfilled",
+      "evidence": [
+        "src/services/hrworksImport.js",
+        "src/services/hrworksImport.test.js",
+        "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+      ],
+      "note": "Automatisch aus Live-Evidence aktualisiert"
+    },
+    {
+      "id": "ac16",
+      "criterion": "Bestehende ScoutX-Funktionalität wird nicht beschädigt",
+      "status": "fulfilled",
+      "evidence": [
+        "npm run verify:hrworks",
+        "npm run test:sandbox",
+        "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+      ],
+      "note": "Automatisch aus Live-Evidence aktualisiert"
+    }
+  ],
+  "global_status": "not_complete"
+}

@@ -493,13 +493,13 @@ export function GamesProvider({ children }) {
     kreisIds,
     kreisId,
     jugendId,
+    jugendIds,
     fromDate,
     toDate,
     activeTeams,
     favorites,
     adapterEndpoint,
     adapterToken,
-    jugend,
     startLocation,
     setErr,
     setTeamValidation,
@@ -672,8 +672,9 @@ export function GamesProvider({ children }) {
       return;
     }
 
-    if (!jugendId) {
-      setErr("Bitte eine Jugendklasse wählen.");
+    const requestedJugendIds = Array.isArray(jugendIds) && jugendIds.length > 0 ? jugendIds : jugendId ? [jugendId] : [];
+    if (requestedJugendIds.length === 0) {
+      setErr("Bitte mindestens eine Jugendklasse wählen.");
       return;
     }
 
@@ -686,7 +687,13 @@ export function GamesProvider({ children }) {
     buildRunRef.current = runId;
 
     try {
-      const providerRuns = await mapWithConcurrency(requestedKreise, 2, async (selectedKreisId) => {
+      const kreisJugendPairs = requestedKreise.flatMap((selectedKreisId) =>
+        requestedJugendIds.map((selectedJugendId) => ({
+          selectedKreisId,
+          selectedJugendId,
+        })),
+      );
+      const providerRuns = await mapWithConcurrency(kreisJugendPairs, 2, async ({ selectedKreisId, selectedJugendId }) => {
           const selectedRegion = resolveRegionByLooseId(selectedKreisId);
           const inferredStateCode = inferStateCodeFromRegionIds([selectedKreisId, ...requestedKreise], selectedStateCode || "");
           const effectiveStateCode = String(selectedRegion?.stateCode || inferredStateCode || "").trim().toUpperCase();
@@ -704,18 +711,19 @@ export function GamesProvider({ children }) {
               regionName: effectiveRegionName,
               regionShortCode: effectiveRegionShortCode,
               fussballDeMapping: effectiveMapping,
-              jugendId,
+              jugendId: selectedJugendId,
               fromDate,
               toDate,
               teams: activeTeams,
               uploadedGames: [],
               adapterEndpoint,
               adapterToken,
-              turnier: Boolean(jugend?.turnier),
+              turnier: false,
             });
             return {
               ...result,
               selectedKreisId,
+              selectedJugendId,
               error: "",
             };
           } catch (error) {
@@ -723,6 +731,7 @@ export function GamesProvider({ children }) {
               source: "adapter",
               games: [],
               selectedKreisId,
+              selectedJugendId,
               error: error?.message || "Spieldaten konnten nicht geladen werden.",
             };
           }
@@ -739,7 +748,10 @@ export function GamesProvider({ children }) {
           throw new Error(failedRuns[0].error);
         }
         const details = failedRuns
-          .map((run) => `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId}: ${run.error}`)
+          .map(
+            (run) =>
+              `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId} · ${run.selectedJugendId || "-"}: ${run.error}`,
+          )
           .join(" | ");
         throw new Error(details || "Keine Spieldaten verfügbar.");
       }
@@ -775,7 +787,7 @@ export function GamesProvider({ children }) {
       setTeamValidation(teamFilterMeta);
       if (failedRuns.length > 0) {
         const failedLabels = failedRuns
-          .map((run) => getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId)
+          .map((run) => `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId} (${run.selectedJugendId || "-"})`)
           .join(", ");
         setErr(`Einige Kreise konnten nicht geladen werden: ${failedLabels}. Der Plan nutzt die erfolgreich geladenen Spiele.`);
       }
@@ -821,12 +833,12 @@ export function GamesProvider({ children }) {
     kreisIds,
     kreisId,
     jugendId,
+    jugendIds,
     fromDate,
     toDate,
     activeTeams,
     adapterEndpoint,
     adapterToken,
-    jugend,
     startLocation,
     setErr,
     setTeamValidation,

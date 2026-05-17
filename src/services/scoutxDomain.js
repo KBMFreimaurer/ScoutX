@@ -1556,10 +1556,76 @@ export function updateObservationNote(state, observationId, note, user, options 
     planHistoryId: observation.planHistoryId,
     createdAt: now,
   });
+  const mentionedIds = [...new Set((text.match(/@([a-zA-Z0-9._-]{2,})/g) || []).map((raw) => normalizeId(raw.slice(1))).filter(Boolean))];
+  const mentionNotifications = mentionedIds
+    .map((id) => (normalizedState.team?.accounts || []).find((account) => account.id === id && account.active !== false))
+    .filter(Boolean)
+    .filter((account) => account.id !== activeUser.id)
+    .map((account) =>
+      createNotification(
+        {
+          type: "mention",
+          title: "Du wurdest erwähnt",
+          body: `${activeUser.name} hat dich in einer Sichtungsnotiz erwähnt.`,
+          entityType: "observation",
+          entityId: observation.id,
+          recipientId: account.id,
+        },
+        options,
+      ),
+    );
 
   return {
     ...normalizedState,
     observations,
+    feedItems: [feedItem, ...(normalizedState.feedItems || [])].filter(Boolean).slice(0, 120),
+    notifications: [createTeamFeedNotification(feedItem, options), ...mentionNotifications, ...(normalizedState.notifications || [])].filter(Boolean),
+  };
+}
+
+export function reassignObservation(state, observationId, targetScoutId, user, options = {}) {
+  const activeUser = user || getActiveUser(state);
+  if (!(activeUser.role === "admin" || activeUser.role === "coordinator")) {
+    throw new Error("Nur Admin oder Koordination können Sichtungen umverteilen.");
+  }
+  const normalizedState = normalizeProductState(state, options);
+  const targetObservationId = normalizeId(observationId);
+  const targetScout = normalizeId(targetScoutId);
+  if (!targetObservationId || !targetScout) {
+    throw new Error("observationId und targetScoutId sind erforderlich.");
+  }
+  const targetAccount = (normalizedState.team?.accounts || []).find((account) => account.id === targetScout && account.active !== false);
+  if (!targetAccount) {
+    throw new Error("Ziel-Scout wurde nicht gefunden.");
+  }
+  if (targetAccount.role === "readonly") {
+    throw new Error("Gastkonten können keine Sichtungen übernehmen.");
+  }
+  const observation = (normalizedState.observations || []).find((item) => item.id === targetObservationId);
+  if (!observation) {
+    throw new Error("Sichtung wurde nicht gefunden.");
+  }
+  const now = nowIso(options.clock);
+  const reassigned = normalizeObservation({
+    ...observation,
+    id: makeId(`observation-${observation.gameId}-${targetScout}`, options.clock, options.random),
+    scoutId: targetScout,
+    updatedAt: now,
+  });
+  const feedItem = normalizeFeedItem({
+    id: makeId(`feed-reassign-${observation.gameId}-${targetScout}`, options.clock, options.random),
+    type: "observation_reassigned",
+    actorId: activeUser.id,
+    title: "Sichtung umverteilt",
+    body: `${targetAccount.name} übernimmt ${getObservationGameLabel(observation)}.`,
+    gameIds: [observation.gameId],
+    observationId: reassigned.id,
+    planHistoryId: reassigned.planHistoryId,
+    createdAt: now,
+  });
+  return {
+    ...normalizedState,
+    observations: (normalizedState.observations || []).map((item) => (item.id === targetObservationId ? reassigned : item)),
     feedItems: [feedItem, ...(normalizedState.feedItems || [])].filter(Boolean).slice(0, 120),
     notifications: [createTeamFeedNotification(feedItem, options), ...(normalizedState.notifications || [])].filter(Boolean),
   };
@@ -2223,6 +2289,23 @@ function buildScheduleConflicts(observations, options = {}) {
   }
 
   const conflicts = [];
+  const classifyConflictSeverity = ({ type, gapMinutes, requiredGap }) => {
+    if (type === "overlap") {
+      return "hard-conflict";
+    }
+    const gap = Number(gapMinutes);
+    const required = Number(requiredGap);
+    if (!Number.isFinite(gap) || !Number.isFinite(required)) {
+      return "warn";
+    }
+    if (gap < required - 20) {
+      return "hard-conflict";
+    }
+    if (gap < required) {
+      return "warn";
+    }
+    return "info";
+  };
   for (const [scoutId, entries] of byScout) {
     const sorted = [...entries].sort((left, right) => left.startMinutes - right.startMinutes);
     const firstByDate = new Map();
@@ -2237,10 +2320,12 @@ function buildScheduleConflicts(observations, options = {}) {
         const travelMinutes = estimateStartTravelMinutes(first.game);
         const requiredGap = travelMinutes + minBufferMinutes;
         if (gapMinutes < requiredGap) {
+          const severity = classifyConflictSeverity({ type: "start_travel", gapMinutes, requiredGap });
           conflicts.push({
             scoutId,
             scoutName: first.scoutName,
             type: "start_travel",
+            severity,
             firstGameId: "",
             firstGameLabel: "Startort",
             secondGameId: first.gameId,
@@ -2265,10 +2350,13 @@ function buildScheduleConflicts(observations, options = {}) {
       const travelMinutes = estimateTravelMinutes(first.game, second.game);
       const requiredGap = travelMinutes + minBufferMinutes;
       if (second.startMinutes < firstEnd || gapMinutes < requiredGap) {
+        const type = second.startMinutes < firstEnd ? "overlap" : "travel";
+        const severity = classifyConflictSeverity({ type, gapMinutes, requiredGap });
         conflicts.push({
           scoutId,
           scoutName: first.scoutName,
-          type: second.startMinutes < firstEnd ? "overlap" : "travel",
+          type,
+          severity,
           firstGameId: first.gameId,
           firstGameLabel: first.gameLabel,
           secondGameId: second.gameId,

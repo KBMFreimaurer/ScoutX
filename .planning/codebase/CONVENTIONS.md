@@ -13,7 +13,7 @@
 **Functions:**
 - React components: PascalCase - `export function StepNav()`, `export function ErrorBoundary()`
 - Regular functions: camelCase - `readStorage()`, `formatDate()`, `callLLM()`
-- Hooks: camelCase with `use` prefix - `useWindowWidth()`, `useScoutPlan()`
+- Hooks: camelCase with `use` prefix - `useWindowWidth()`, `useScoutX()`
 - Private functions: camelCase with no special prefix - `toLookupKey()`, `toTeamSearchKey()`, `tokenizeTeam()`
 - Callback handlers in components: camelCase with descriptive name - `onStepChange`, `onError`, `onResize`
 
@@ -68,7 +68,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
-import { ScoutPlanProvider } from "./context/ScoutPlanContext";
+import { ScoutXProvider } from "./context/ScoutXContext";
 import { C, GCSS } from "./styles/theme";
 import { useWindowWidth } from "./hooks/useWindowWidth";
 import { KREISE, VEREINE_JE_KREIS } from "./data/kreise";
@@ -105,7 +105,7 @@ import { PlanPage } from "./pages/PlanPage";
 - Custom hook guard throws descriptive error:
   ```javascript
   if (!context) {
-    throw new Error("useScoutPlan muss innerhalb von ScoutPlanProvider verwendet werden.");
+    throw new Error("useScoutX muss innerhalb von ScoutXProvider verwendet werden.");
   }
   ```
 - React Error Boundary (`ErrorBoundary.jsx`, lines 4-69) captures component tree errors and displays fallback UI with error message
@@ -188,8 +188,8 @@ import { PlanPage } from "./pages/PlanPage";
   ```
 - Context providers exported as named exports:
   ```javascript
-  export function ScoutPlanProvider({ value, children }) { ... }
-  export function useScoutPlan() { ... }
+  export function ScoutXProvider({ value, children }) { ... }
+  export function useScoutX() { ... }
   ```
 - Default export for main App component (`app.jsx` line 59):
   ```javascript

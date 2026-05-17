@@ -1,0 +1,6 @@
+=== ScoutX DB-First Release E2E ===
+Date: 2026-05-14T20:08:52Z
+Command: npm run test:e2e:release:db-first
+
+Prüfe PostgreSQL-Verbindung (pg SELECT 1)...
+PostgreSQL-Preflight fehlgeschlagen: pg_isready meldet keine erreichbare DB unter der angegebenen URL.

@@ -55,7 +55,7 @@ ScoutX already has the structural skeleton for all three integration points. The
 - Does NOT call Ollama — LLM calls are frontend-to-Ollama directly
 
 **Subprocess interface (fussball.de scraper):**
-- Input: env vars (`SCOUTPLAN_FROM_DATE`, `SCOUTPLAN_TO_DATE`, `SCOUTPLAN_KREIS_ID`, `SCOUTPLAN_JUGEND_ID`)
+- Input: env vars (`SCOUTX_FROM_DATE`, `SCOUTX_TO_DATE`, `SCOUTX_KREIS_ID`, `SCOUTX_JUGEND_ID`)
 - Output: JSON on stdout — `{ games: [...], meta: { provider, season, fetchedAt, ... } }`
 - Exit code 1 on failure; adapter logs warning and uses cached data
 
@@ -163,7 +163,7 @@ User (browser)
 Adapter Service (port 8787)
   → [4] Checks week cache (weekRefreshCache[cacheKey])
   → [5] If cache stale: spawns fetch-week.fussballde.mjs as child process
-          Env: SCOUTPLAN_FROM_DATE, SCOUTPLAN_TO_DATE, SCOUTPLAN_KREIS_ID, SCOUTPLAN_JUGEND_ID
+          Env: SCOUTX_FROM_DATE, SCOUTX_TO_DATE, SCOUTX_KREIS_ID, SCOUTX_JUGEND_ID
 
 fussball.de Scraper (subprocess)
   → [6] Fetches wam_base.json, wam_kinds_*.json from fussball.de
@@ -265,7 +265,7 @@ The components have the following dependency chain for building/testing/deployin
 **Why first:** The scraper (`fetch-week.fussballde.mjs`) is self-contained and currently untested. It calls fussball.de's public APIs and must work before the adapter service can provide real data. All downstream components depend on real game data.
 
 **Tasks:**
-1. Test `fetch-week.fussballde.mjs` manually with real `SCOUTPLAN_KREIS_ID` and `SCOUTPLAN_JUGEND_ID` values
+1. Test `fetch-week.fussballde.mjs` manually with real `SCOUTX_KREIS_ID` and `SCOUTX_JUGEND_ID` values
 2. Verify HTML parsing against current fussball.de page structure (may have changed since code was written)
 3. Fix any parsing failures — team names, venue extraction, date/time parsing
 4. Confirm output JSON matches the game object schema expected by `adapter-service/lib/games.js`
@@ -337,7 +337,7 @@ The components have the following dependency chain for building/testing/deployin
 ### fussball.de Scraping
 
 - fussball.de has no official public API. The scraper targets JSON endpoints (`wam_base.json`, `wam_kinds_*.json`) and HTML pages. These can change without notice.
-- The user-agent is set to `ScoutPlanAdapter/1.0` — this may be blocked by fussball.de's CDN if they implement bot protection.
+- The user-agent is set to `ScoutXAdapter/1.0` — this may be blocked by fussball.de's CDN if they implement bot protection.
 - The scraper fetches individual match pages to get kickoff time and venue. With 600 match cap and 6 concurrent requests, this can take 2–3 minutes for a large week. The adapter's 30s subprocess timeout (`ADAPTER_WEEK_COMMAND_TIMEOUT_MS`) may be too low for full scraping runs.
 - Venue data is extracted from a `<a class="location">` element — this is fragile and may return empty strings.
 

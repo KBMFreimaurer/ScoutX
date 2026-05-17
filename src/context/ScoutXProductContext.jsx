@@ -3,21 +3,12 @@ import { STORAGE_KEYS } from "../config/storage";
 import {
   fetchTeamBackendState,
   getTeamBackendStatus,
-  linkTeamBackendObservationReport,
   loginTeamBackend,
   logoutTeamBackend,
-  markTeamBackendObservationSeen,
   publishTeamBackendPlan,
   registerTeamBackend,
-  updateTeamBackendObservationNote,
-  updateTeamBackendGoals,
-  upsertTeamBackendMember,
-  upsertTeamBackendManualGame,
 } from "../services/teamBackendClient";
 import {
-  addReportComment,
-  addWatchlistEntry,
-  attachReportAnalysis,
   buildCalendarModel,
   buildGameObservationMap,
   buildGlobalSearchResults,
@@ -26,29 +17,19 @@ import {
   buildTeamFeed,
   buildTeamOverview,
   comparePlayers,
-  createAssignment,
   createInitialProductState,
-  createObservationMatchReport,
-  createWatchlist,
   deleteSearchFilter,
   exportProductSnapshot,
   getActiveUser,
-  markGameObservationSeen,
-  markNotificationRead,
   normalizeProductState,
   publishTeamPlan,
-  removeWatchlistEntry,
   saveSearchFilter,
   switchActiveUser,
-  updateTeamGoals,
-  updateAssignmentStatus,
-  updateObservationNote,
-  updateReportStatus,
-  updateWatchlistEntry,
-  upsertManualGame,
-  upsertTeamAccount,
-  upsertReport,
 } from "../services/scoutxDomain";
+import { createPersistableProductState, mergeTeamBackendPayload } from "./teamBackendStateSync";
+import { useTeamObservationActions } from "./useTeamObservationActions";
+import { useTeamPlanningActions } from "./useTeamPlanningActions";
+import { useTeamReportActions } from "./useTeamReportActions";
 
 const ScoutXProductContext = createContext(null);
 const TEAM_PLAN_PUBLISHED_EVENT = "scoutx:team-plan-published";
@@ -67,68 +48,6 @@ function readProductState() {
   } catch {
     return createInitialProductState();
   }
-}
-
-function mergeTeamBackendPayload(prevState, payload, options = {}) {
-  if (!payload || payload.ok === false) {
-    return prevState;
-  }
-
-  const team = payload.team && typeof payload.team === "object" ? payload.team : prevState.team;
-  const accounts = Array.isArray(team?.accounts) ? team.accounts : [];
-  const users = accounts.length
-    ? accounts.map((account) => ({
-        id: account.id,
-        name: account.name,
-        role: account.role,
-        teamId: account.teamId,
-        active: account.active !== false,
-      }))
-    : prevState.users;
-  const feedItems = Array.isArray(payload.feedItems) ? payload.feedItems : prevState.feedItems;
-  const existingNotificationIds = new Set((prevState.notifications || []).map((notification) => notification.id));
-  const feedNotifications = (Array.isArray(payload.feedItems) ? payload.feedItems : [])
-    .map((item) => ({
-      id: `notif-${item.id}`,
-      type: "team_feed",
-      title: item.type === "plan_published" ? "Team-Plan veröffentlicht" : item.title || "Team-Aktivität",
-      body: item.body || item.title || "",
-      entityType: "team_feed",
-      entityId: item.id,
-      recipientId: "",
-      createdAt: item.createdAt || new Date(0).toISOString(),
-      readAt: "",
-    }))
-    .filter((notification) => notification.id && !existingNotificationIds.has(notification.id));
-
-  return normalizeProductState({
-    ...prevState,
-    users,
-    activeUserId: options.switchUser === false ? prevState.activeUserId : payload.user?.id || prevState.activeUserId,
-    team,
-    manualGames: Array.isArray(payload.manualGames) ? payload.manualGames : prevState.manualGames,
-    teamGoals: payload.teamGoals && typeof payload.teamGoals === "object" ? payload.teamGoals : prevState.teamGoals,
-    observations: Array.isArray(payload.observations) ? payload.observations : prevState.observations,
-    feedItems,
-    notifications: [...feedNotifications, ...(prevState.notifications || [])],
-  });
-}
-
-function createPersistableProductState(state, backendStatus) {
-  const normalized = normalizeProductState(state);
-  if (backendStatus !== "connected") {
-    return normalized;
-  }
-
-  const fallback = createInitialProductState();
-  return normalizeProductState({
-    ...normalized,
-    team: fallback.team,
-    manualGames: [],
-    teamGoals: fallback.teamGoals,
-    observations: [],
-    feedItems: [],
-  });
 }
 
 export function ScoutXProductProvider({ children }) {
@@ -281,348 +200,40 @@ export function ScoutXProductProvider({ children }) {
     [],
   );
 
-  const onUpsertReport = useCallback(
-    (input) => {
-      setProductError("");
-      setState((prev) => {
-        try {
-          return upsertReport(prev, input, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Bericht konnte nicht gespeichert werden.");
-          return prev;
-        }
-      });
-    },
-    [],
-  );
+  const {
+    onUpsertReport,
+    onAnalyzeReport,
+    onUpdateReportStatus,
+    onAddReportComment,
+    onCreateWatchlist,
+    onAddWatchlistEntry,
+    onUpdateWatchlistEntry,
+    onRemoveWatchlistEntry,
+    onCreateAssignment,
+    onUpdateAssignmentStatus,
+  } = useTeamReportActions({
+    setState,
+    setProductError,
+    setAnalysisStateByReportId,
+  });
 
-  const onAnalyzeReport = useCallback((reportId) => {
-    const id = String(reportId || "").trim();
-    if (!id) {
-      return;
-    }
-
-    setAnalysisStateByReportId((prev) => ({
-      ...prev,
-      [id]: { status: "loading", error: "" },
-    }));
-
-    window.setTimeout(() => {
-      setState((prev) => {
-        try {
-          const next = attachReportAnalysis(prev, id, getActiveUser(prev));
-          setAnalysisStateByReportId((statusPrev) => ({
-            ...statusPrev,
-            [id]: { status: "complete", error: "" },
-          }));
-          return next;
-        } catch (error) {
-          setAnalysisStateByReportId((statusPrev) => ({
-            ...statusPrev,
-            [id]: { status: "error", error: error?.message || "Analyse fehlgeschlagen." },
-          }));
-          return prev;
-        }
-      });
-    }, 280);
-  }, []);
-
-  const onUpdateReportStatus = useCallback((reportId, status) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return updateReportStatus(prev, reportId, status, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Berichtsstatus konnte nicht aktualisiert werden.");
-        return prev;
-      }
+  const { onMarkNotificationRead, onMarkGameSeen, onCreateObservationMatchReport, onUpdateObservationNote, onReassignObservation } =
+    useTeamObservationActions({
+      state,
+      teamBackendState,
+      applyTeamBackendPayload,
+      setState,
+      setProductError,
+      setTeamBackendState,
     });
-  }, []);
 
-  const onAddReportComment = useCallback((reportId, body) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return addReportComment(prev, reportId, body, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Kommentar konnte nicht gespeichert werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onCreateWatchlist = useCallback((input) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return createWatchlist(prev, input, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Watchlist konnte nicht angelegt werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onAddWatchlistEntry = useCallback((watchlistId, input) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return addWatchlistEntry(prev, watchlistId, input, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Watchlist-Eintrag konnte nicht gespeichert werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onUpdateWatchlistEntry = useCallback((watchlistId, entryId, input) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return updateWatchlistEntry(prev, watchlistId, entryId, input, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Watchlist-Eintrag konnte nicht aktualisiert werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onRemoveWatchlistEntry = useCallback((watchlistId, entryId) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return removeWatchlistEntry(prev, watchlistId, entryId, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Watchlist-Eintrag konnte nicht entfernt werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onCreateAssignment = useCallback((input) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return createAssignment(prev, input, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Aufgabe konnte nicht angelegt werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onUpdateAssignmentStatus = useCallback((assignmentId, status) => {
-    setProductError("");
-    setState((prev) => {
-      try {
-        return updateAssignmentStatus(prev, assignmentId, status, getActiveUser(prev));
-      } catch (error) {
-        setProductError(error?.message || "Aufgabenstatus konnte nicht aktualisiert werden.");
-        return prev;
-      }
-    });
-  }, []);
-
-  const onMarkNotificationRead = useCallback((notificationId) => {
-    setState((prev) => markNotificationRead(prev, notificationId, getActiveUser(prev)));
-  }, []);
-
-  const onPublishTeamPlan = useCallback(
-    (input) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        publishTeamBackendPlan(input)
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Team-Plan konnte nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return publishTeamPlan(prev, input, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Team-Plan konnte nicht veröffentlicht werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
-
-  const onMarkGameSeen = useCallback(
-    (gameId, scoutId) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        markTeamBackendObservationSeen({ gameId, scoutId })
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Sichtung konnte nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return markGameObservationSeen(prev, gameId, scoutId, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Sichtung konnte nicht aktualisiert werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
-
-  const onCreateObservationMatchReport = useCallback(
-    (observationId) => {
-      setProductError("");
-      const observation = (state.observations || []).find((item) => item.id === observationId);
-      if (!observation) {
-        setProductError("Sichtung wurde nicht gefunden.");
-        return;
-      }
-
-      if (teamBackendState.status === "connected") {
-        const reportId = observation.reportId || `report-${observation.id}`;
-        linkTeamBackendObservationReport({
-          observationId,
-          reportId,
-          reportUrl: `#reports/${reportId}`,
-        })
-          .then((payload) => {
-            setState((prev) => {
-              try {
-                return createObservationMatchReport(prev, observationId, getActiveUser(prev));
-              } catch {
-                return prev;
-              }
-            });
-            applyTeamBackendPayload(payload, { switchUser: false });
-          })
-          .catch((error) => {
-            const message = error?.message || "Bericht konnte nicht im Backend verknüpft werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-
-      let nextState = state;
-      try {
-        nextState = createObservationMatchReport(state, observationId, activeUser);
-      } catch (error) {
-        setProductError(error?.message || "Spielbericht konnte nicht angelegt werden.");
-        return;
-      }
-
-      setState(nextState);
-    },
-    [activeUser, applyTeamBackendPayload, state, teamBackendState.status],
-  );
-
-  const onUpdateObservationNote = useCallback(
-    (observationId, note) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        updateTeamBackendObservationNote({ observationId, note })
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Sichtungsnotiz konnte nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return updateObservationNote(prev, observationId, note, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Sichtungsnotiz konnte nicht gespeichert werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
-
-  const onUpsertManualGame = useCallback(
-    (input) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        upsertTeamBackendManualGame(input)
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Manuelles Spiel konnte nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return upsertManualGame(prev, input, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Manuelles Spiel konnte nicht gespeichert werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
-
-  const onUpdateTeamGoals = useCallback(
-    (input) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        updateTeamBackendGoals(input)
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Team-Ziele konnten nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return updateTeamGoals(prev, input, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Team-Ziele konnten nicht gespeichert werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
-
-  const onUpsertTeamAccount = useCallback(
-    (input) => {
-      setProductError("");
-      if (teamBackendState.status === "connected") {
-        upsertTeamBackendMember(input)
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
-          .catch((error) => {
-            const message = error?.message || "Team-Account konnte nicht im Backend gespeichert werden.";
-            setProductError(message);
-            setTeamBackendState({ status: "local", error: message });
-          });
-        return;
-      }
-      setState((prev) => {
-        try {
-          return upsertTeamAccount(prev, input, getActiveUser(prev));
-        } catch (error) {
-          setProductError(error?.message || "Team-Account konnte nicht gespeichert werden.");
-          return prev;
-        }
-      });
-    },
-    [applyTeamBackendPayload, teamBackendState.status],
-  );
+  const { onPublishTeamPlan, onUpsertManualGame, onUpdateTeamGoals, onUpsertTeamAccount } = useTeamPlanningActions({
+    teamBackendState,
+    applyTeamBackendPayload,
+    setState,
+    setProductError,
+    setTeamBackendState,
+  });
 
   const onSaveSearchFilter = useCallback((input) => {
     setProductError("");
@@ -738,6 +349,7 @@ export function ScoutXProductProvider({ children }) {
       onMarkGameSeen,
       onCreateObservationMatchReport,
       onUpdateObservationNote,
+      onReassignObservation,
       onUpsertManualGame,
       onUpdateTeamGoals,
       onUpsertTeamAccount,
@@ -779,6 +391,7 @@ export function ScoutXProductProvider({ children }) {
       onMarkGameSeen,
       onCreateObservationMatchReport,
       onUpdateObservationNote,
+      onReassignObservation,
       onUpsertManualGame,
       onUpdateTeamGoals,
       onUpsertTeamAccount,

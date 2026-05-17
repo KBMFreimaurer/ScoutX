@@ -1,17 +1,12 @@
 import UIKit
 import Capacitor
 
-private enum ScoutXSecrets {
-    static let googleMapsApiKey = "AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc"
-}
-
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        UserDefaults.standard.set(ScoutXSecrets.googleMapsApiKey, forKey: "SCOUTX_GOOGLE_MAPS_API_KEY")
         DispatchQueue.main.async { [weak self] in
             self?.disableScrollIndicators()
         }

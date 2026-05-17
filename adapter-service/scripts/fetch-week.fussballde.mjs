@@ -31,7 +31,7 @@ const MATCH_CONCURRENCY = Math.max(1, Number(process.env.FUSSBALLDE_MATCH_CONCUR
 const MAX_COMPETITIONS = Math.max(1, Number(process.env.FUSSBALLDE_MAX_COMPETITIONS || 80));
 const MAX_MATCHES = Math.max(1, Number(process.env.FUSSBALLDE_MAX_MATCHES || 600));
 const FETCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
-const DEBUG = process.env.SCOUTPLAN_DEBUG_EXPORTER === "true";
+const DEBUG = process.env.SCOUTX_DEBUG_EXPORTER === "true";
 const USER_AGENT_POOL = Object.freeze([
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
@@ -45,8 +45,8 @@ const ROBOTS_CHECK_ENABLED = process.env.FUSSBALLDE_ROBOTS_CHECK !== "false";
 const ROBOTS_CACHE_TTL_MS = Math.max(60 * 60 * 1000, Number(process.env.FUSSBALLDE_ROBOTS_TTL_MS || 24 * 60 * 60 * 1000));
 const DEFAULT_STATE_FILE = fileURLToPath(new URL("../data/fussballde.fetch-state.json", import.meta.url));
 const STATE_FILE = process.env.FUSSBALLDE_STATE_FILE || DEFAULT_STATE_FILE;
-const STRICT_REGION_MAPPING = process.env.SCOUTPLAN_STRICT_REGION_MAPPING !== "false";
-const STRICT_RESULT_FILTER = process.env.SCOUTPLAN_STRICT_RESULT_FILTER !== "false";
+const STRICT_REGION_MAPPING = process.env.SCOUTX_STRICT_REGION_MAPPING !== "false";
+const STRICT_RESULT_FILTER = process.env.SCOUTX_STRICT_RESULT_FILTER !== "false";
 const LEGACY_REGION_FALLBACKS = {
   duesseldorf: { stateCode: "NW", regionName: "Düsseldorf", regionShortCode: "DU" },
   duisburg: { stateCode: "NW", regionName: "Duisburg", regionShortCode: "DUI" },
@@ -60,15 +60,15 @@ const LEGACY_REGION_FALLBACKS = {
   kleve: { stateCode: "NW", regionName: "Kleve/Geldern", regionShortCode: "KLE" },
 };
 
-const fromDate = process.env.SCOUTPLAN_FROM_DATE || formatIsoDate(new Date());
-const toDate = process.env.SCOUTPLAN_TO_DATE || fromDate;
-const kreisId = process.env.SCOUTPLAN_KREIS_ID || "";
-const stateCode = process.env.SCOUTPLAN_STATE_CODE || "";
-const regionName = process.env.SCOUTPLAN_REGION_NAME || "";
-const regionShortCode = process.env.SCOUTPLAN_REGION_SHORT_CODE || "";
+const fromDate = process.env.SCOUTX_FROM_DATE || formatIsoDate(new Date());
+const toDate = process.env.SCOUTX_TO_DATE || fromDate;
+const kreisId = process.env.SCOUTX_KREIS_ID || "";
+const stateCode = process.env.SCOUTX_STATE_CODE || "";
+const regionName = process.env.SCOUTX_REGION_NAME || "";
+const regionShortCode = process.env.SCOUTX_REGION_SHORT_CODE || "";
 const fussballDeMapping = (() => {
   try {
-    const parsed = JSON.parse(process.env.SCOUTPLAN_FUSSBALLDE_MAPPING_JSON || "null");
+    const parsed = JSON.parse(process.env.SCOUTX_FUSSBALLDE_MAPPING_JSON || "null");
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
@@ -92,12 +92,12 @@ const MANDANT = (() => {
   }
   return normalizedMandant;
 })();
-const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "";
+const jugendId = process.env.SCOUTX_JUGEND_ID || "";
 const fallbackJugendTeamType = JUGEND_TO_TEAM_TYPE[jugendId];
 const jugendTeamLabel = JUGEND_TO_TEAM_LABEL[jugendId] || "";
 const selectedTeams = (() => {
   try {
-    const parsed = JSON.parse(process.env.SCOUTPLAN_TEAMS_JSON || "[]");
+    const parsed = JSON.parse(process.env.SCOUTX_TEAMS_JSON || "[]");
     if (!Array.isArray(parsed)) {
       return [];
     }

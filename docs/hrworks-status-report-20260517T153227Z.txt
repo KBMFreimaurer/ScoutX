@@ -1,0 +1,95 @@
+timestamp_utc=2026-05-17T15:32:27Z
+command=npm run check:hrworks:go-no-go
+---
+==> verify:hrworks
+
+ RUN  v4.1.4 /Users/playboiiboggos/.openclaw/workspace/ScoutX
+
+
+ Test Files  9 passed (9)
+      Tests  46 passed (46)
+   Start at  17:32:29
+   Duration  1.64s (transform 635ms, setup 542ms, import 947ms, tests 498ms, environment 4.31s)
+
+PASS: verify:hrworks
+==> test:sandbox
+
+ RUN  v4.1.4 /Users/playboiiboggos/.openclaw/workspace/ScoutX
+
+
+ Test Files  54 passed | 2 skipped (56)
+      Tests  325 passed | 5 skipped (330)
+   Start at  17:32:31
+   Duration  8.65s (transform 2.12s, setup 3.09s, import 4.10s, tests 14.45s, environment 24.77s)
+
+PASS: test:sandbox
+==> check:hrworks:live-readiness
+FAIL: HRworks Mandant/Umgebung wirkt wie Platzhalter/Testwert in docs/hrworks-live-session-evidence-20260517T131103Z.md
+  - - HRworks Mandant/Umgebung: HR Tenant
+Nächster Schritt (mit echten Werten):
+  npm run create:hrworks:live-closeout:cmd-file -- --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"
+  npm run run:hrworks:live-closeout:cmd-file -- docs/hrworks-live-closeout-command-<timestamp>.sh --execute
+FAIL: check:hrworks:live-readiness
+==> check:hrworks:evidence-open-items
+Evidence: docs/hrworks-live-session-evidence-20260517T131103Z.md
+Open yes/no placeholders:
+  - none
+Open empty required key lines:
+  - none
+Open empty optional key lines:
+  - 12:- Policy gesetzt:
+  - 30:- Fehlertyp:
+  - 31:- Fehlermeldung:
+  - 32:- Schritt:
+  - 39:- Referenznummer (optional):
+Required yes lines still not 'ja':
+  - none
+Placeholder/Test values in metadata:
+  - HRworks Mandant/Umgebung: HR Tenant
+FAIL: check:hrworks:evidence-open-items
+==> update:hrworks:prompt-checklist
+OK: updated docs/hrworks-prompt-checklist.json from docs/hrworks-acceptance-status.json
+PASS: update:hrworks:prompt-checklist
+==> check:hrworks:prompt-checklist
+checklist_file=docs/hrworks-prompt-checklist.json
+overall_status=not_complete
+items_total=13
+open_items=5
+Open checklist items:
+  - 4-api-first-check: partial
+  - 5-browser-automation-login: partial
+  - 7-excel-reference-model: partial
+  - 9-error-handling: partial
+  - 13-acceptance-complete: not_complete
+PASS: check:hrworks:prompt-checklist
+==> check:hrworks:acceptance-status
+status_file=docs/hrworks-acceptance-status.json
+global_status=not_complete
+counts: fulfilled=14 partial=2 open=0
+FAIL: Akzeptanzstatus ist nicht complete
+Offene Kriterien:
+- ac8: Nutzer loggt sich selbst in HRworks ein [partial]
+- ac9: HRworks-Felder werden robust über Selector-Mapping befüllt [partial]
+FAIL: check:hrworks:acceptance-status
+NO-GO: Mindestens ein HRworks-Gate ist offen
+
+==> next actions
+HRworks Next Actions
+====================
+1) Live-Evidence vervollständigen: docs/hrworks-live-session-evidence-20260517T131103Z.md
+   - Keine ja/nein-Platzhalter offen (siehe Pflicht-Status unten)
+   - Platzhalter/Testwert bei Mandant: HRworks Mandant/Umgebung: HR Tenant
+2) Partielle Akzeptanzkriterien schließen
+   - ac8: Nutzer loggt sich selbst in HRworks ein [partial]
+   - ac9: HRworks-Felder werden robust über Selector-Mapping befüllt [partial]
+3) Exakten Env-Finalbefehl ausgeben: npm run check:hrworks:final-closeout:env-cmd
+4) Nach Abschluss erneut laufen lassen: npm run check:hrworks:go-no-go
+   - Alternativ als finalen Nachweislauf inkl. frischem Statusreport: npm run run:hrworks:final-audit
+5) Live-Closeout-Befehl erzeugen: npm run check:hrworks:live-closeout:cmd
+6) Live-Closeout-Skriptdatei erzeugen: npm run create:hrworks:live-closeout:cmd-file -- --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"
+7) Live-Closeout-Skriptdatei ausführen (mit Placeholder-Checks): npm run run:hrworks:live-closeout:cmd-file -- "docs/hrworks-live-closeout-command-20260517T145451Z.sh" --execute
+8) Nur Metadaten korrigieren (falls Platzhalter): npm run update:hrworks:evidence-metadata -- "docs/hrworks-live-session-evidence-20260517T131103Z.md" --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"
+9) One-Command-Flow (prepare + closeout file): npm run prepare:hrworks:final-closeout -- "docs/hrworks-live-session-evidence-20260517T131103Z.md" --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"
+10) One-Command-Flow inkl. Ausführung + Statusreport: npm run run:hrworks:final-closeout -- "docs/hrworks-live-session-evidence-20260517T131103Z.md" --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"
+11) Env-Var-Flow ohne Klartext in Command-History: HRW_USER='ECHTER NAME' HRW_TENANT='ECHTER HRWORKS-MANDANT' npm run run:hrworks:final-closeout:env -- "docs/hrworks-live-session-evidence-20260517T131103Z.md"
+12) Externe Blocker/Abschlussplan: docs/hrworks-final-blockers.md

@@ -38,6 +38,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/test/setup.js",
     css: true,
+    env: {
+      VITE_GOOGLE_MAPS_API_KEY: "test-google-maps-key",
+    },
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
   },
 });

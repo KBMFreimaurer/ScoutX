@@ -53,6 +53,8 @@ describe("PlanPage", () => {
   beforeEach(() => {
     mockedUseScoutX.mockReset();
     vi.restoreAllMocks();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it("zeigt den Plan-Text", () => {
@@ -151,6 +153,103 @@ describe("PlanPage", () => {
     expect(screen.getByText(/Arbeitszeiterfassung \(manuell\)/i)).toBeInTheDocument();
   });
 
+  it("zeigt HRworks-Button und deaktiviert ihn ohne Spiele", () => {
+    mockedUseScoutX.mockReturnValue(createBaseContext({ games: [], plannedGames: [] }));
+
+    render(<PlanPage />);
+
+    const button = screen.getByRole("button", { name: /In HRworks importieren/i });
+    expect(button).toBeInTheDocument();
+    expect(button).toBeDisabled();
+  });
+
+  it("öffnet HRworks-Review und blockiert Import bei fehlenden Pflichtdaten", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: null,
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+
+    expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
+    expect(screen.getByText(/Abfahrtsort fehlt/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Import starten/i })).toBeDisabled();
+  });
+
+  it("blockiert Importstart wenn Betriebsentscheidungen fehlen", () => {
+    const setErr = vi.fn();
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        setErr,
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Import starten/i }));
+
+    expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));
+  });
+
+  it("zeigt sichtbare HRworks-Setup-Warnkarte bei fehlenden Entscheidungen", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+      }),
+    );
+
+    render(<PlanPage />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/HRworks-Setup unvollständig/i);
+    expect(screen.getByText(/Aggregation nicht festgelegt/i)).toBeInTheDocument();
+    expect(screen.getByText(/Finaler Speichermodus nicht festgelegt/i)).toBeInTheDocument();
+  });
+
+  it("übernimmt empfohlenes HRworks-Setup und entfernt die Warnkarte", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+      }),
+    );
+
+    render(<PlanPage />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Empfohlenes HRworks Setup anwenden/i }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("zeigt Plan-Historie und lädt einen historischen Plan", () => {
     const onOpenPlanHistory = vi.fn();
     mockedUseScoutX.mockReturnValue(
@@ -226,5 +325,33 @@ describe("PlanPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Historischen Plan .* entfernen/i }));
 
     expect(onDeletePlanHistory).not.toHaveBeenCalled();
+  });
+
+  it("zeigt Audit-Export in der HRworks-Importhistorie", () => {
+    window.localStorage.setItem("scoutx.hrworksImports.v1", JSON.stringify([
+      {
+        id: "hrw-1",
+        planId: "D-Jugend-Duisburg",
+        date: "2026-04-20",
+        startTime: "08:00",
+        endTime: "10:00",
+        purpose: "Sichtung",
+        hrworksStatus: "ready",
+        importedAt: "2026-04-20T10:00:00.000Z",
+        executedBy: "M*** M***",
+        technicalResult: "Review bestätigt",
+      },
+    ]));
+
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+      }),
+    );
+
+    render(<PlanPage />);
+
+    expect(screen.getByText(/HRworks-Importhistorie/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Audit-Log exportieren/i })).toBeInTheDocument();
   });
 });

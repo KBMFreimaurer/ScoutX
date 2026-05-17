@@ -1,0 +1,61 @@
+timestamp_utc=2026-05-17T13:59:51Z
+command=npm run check:hrworks:go-no-go
+---
+==> verify:hrworks
+
+ RUN  v4.1.4 /Users/playboiiboggos/.openclaw/workspace/ScoutX
+
+
+ Test Files  9 passed (9)
+      Tests  46 passed (46)
+   Start at  15:59:53
+   Duration  2.54s (transform 1.22s, setup 964ms, import 1.70s, tests 502ms, environment 7.44s)
+
+PASS: verify:hrworks
+==> test:sandbox
+
+ RUN  v4.1.4 /Users/playboiiboggos/.openclaw/workspace/ScoutX
+
+
+ Test Files  54 passed | 2 skipped (56)
+      Tests  325 passed | 5 skipped (330)
+   Start at  15:59:56
+   Duration  16.30s (transform 2.91s, setup 6.34s, import 6.80s, tests 27.82s, environment 50.13s)
+
+PASS: test:sandbox
+==> check:hrworks:live-readiness
+FAIL: Pflichtnachweis nicht auf 'ja' gesetzt: 1\. Review geöffnet:
+  - 20:1. Review geöffnet: nein
+FAIL: check:hrworks:live-readiness
+==> check:hrworks:evidence-open-items
+Evidence: docs/hrworks-live-session-evidence-20260517T131103Z.md
+Open yes/no placeholders:
+  - none
+Open empty required key lines:
+  - none
+Open empty optional key lines:
+  - 12:- Policy gesetzt:
+  - 30:- Fehlertyp:
+  - 31:- Fehlermeldung:
+  - 32:- Schritt:
+  - 39:- Referenznummer (optional):
+Required yes lines still not 'ja':
+  - 1. Review geöffnet
+  - 2. Pflichtfelder validiert
+  - 3. Nutzer manuell in HRworks eingeloggt
+  - 4. Felder in HRworks korrekt vorbefüllt
+  - 5. Finale Nutzerbestätigung vor Speichern
+  - 6. Speichern erfolgreich
+  - 7. ScoutX Runtime als `imported` markiert
+  - - Akzeptanzkriterien im Realbetrieb erfüllt
+FAIL: check:hrworks:evidence-open-items
+==> check:hrworks:acceptance-status
+status_file=docs/hrworks-acceptance-status.json
+global_status=not_complete
+counts: fulfilled=14 partial=2 open=0
+FAIL: Akzeptanzstatus ist nicht complete
+Offene Kriterien:
+- ac8: Nutzer loggt sich selbst in HRworks ein [partial]
+- ac9: HRworks-Felder werden robust über Selector-Mapping befüllt [partial]
+FAIL: check:hrworks:acceptance-status
+NO-GO: Mindestens ein HRworks-Gate ist offen

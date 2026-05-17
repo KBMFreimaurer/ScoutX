@@ -62,7 +62,13 @@ VITE_GOOGLE_MAPS_STRICT=false
 ```bash
 docker compose --profile dev up --build
 docker compose --profile prod up --build
+docker compose --profile monitoring up -d prometheus alertmanager
 ```
+
+Monitoring-Runbook: [docs/scoutx_monitoring_runbook.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/docs/scoutx_monitoring_runbook.md)
+Deployment-Runbook: [docs/scoutx_v1_deployment_runbook.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/docs/scoutx_v1_deployment_runbook.md)
+Backup/Restore-Runbook: [docs/scoutx_v1_backup_restore_runbook.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/docs/scoutx_v1_backup_restore_runbook.md)
+Release-Gate-Checklist: [docs/scoutx_v1_release_gate_checklist.md](/Users/playboiiboggos/.openclaw/workspace/ScoutX/docs/scoutx_v1_release_gate_checklist.md)
 
 ## iOS (Capacitor)
 

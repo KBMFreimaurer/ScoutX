@@ -10,7 +10,7 @@ ScoutX/
 │   ├── main.jsx                      # React root entry point
 │   ├── app.jsx                       # Root App component (state orchestration)
 │   ├── context/
-│   │   └── ScoutPlanContext.jsx      # Global state provider
+│   │   └── ScoutXContext.jsx      # Global state provider
 │   ├── pages/                        # Page-level components (router destinations)
 │   │   ├── SetupPage.jsx
 │   │   ├── GamesPage.jsx
@@ -122,8 +122,8 @@ ScoutX/
 
 **src/context/**
 - Purpose: React Context for global state
-- Contains: ScoutPlanContext provider and hook
-- Key files: `ScoutPlanContext.jsx` (state injection to all pages/components)
+- Contains: ScoutXContext provider and hook
+- Key files: `ScoutXContext.jsx` (state injection to all pages/components)
 
 **src/test/**
 - Purpose: Test setup and fixtures
@@ -162,7 +162,7 @@ ScoutX/
 - `src/app.jsx`: State management, navigation, data orchestration
 - `src/services/dataProvider.js`: Game data fetching (pluggable providers)
 - `src/services/llm.js`: LLM backends (Ollama, OpenAI)
-- `src/context/ScoutPlanContext.jsx`: Global state provider
+- `src/context/ScoutXContext.jsx`: Global state provider
 
 **Testing:**
 - `src/test/setup.js`: Vitest jsdom setup
@@ -185,7 +185,7 @@ ScoutX/
 - Services: camelCase (e.g., `dataProvider.js`, `llm.js`)
 - Tests: `*.test.jsx` or `*.test.js` suffix
 - Constants: camelCase files, UPPER_CASE exports (e.g., `constants.js` exports `STORAGE_KEYS`)
-- Hooks: `use*` prefix (e.g., `useWindowWidth.js`, `useScoutPlan()`)
+- Hooks: `use*` prefix (e.g., `useWindowWidth.js`, `useScoutX()`)
 
 **Directories:**
 - Feature/domain-based: `pages/`, `components/`, `services/`, `data/`, `hooks/`
@@ -196,7 +196,7 @@ ScoutX/
 - Functional components, PascalCase names
 - Exported directly (named exports)
 - Props destructured in function signature
-- Custom hooks called via `useScoutPlan()` from context
+- Custom hooks called via `useScoutX()` from context
 
 **Functions:**
 - camelCase naming (e.g., `fetchGamesWithProviders()`, `callLLM()`)
@@ -218,12 +218,12 @@ ScoutX/
 - Primary code: `src/pages/` (if page-level) or `src/components/` (if component-level)
 - Logic: `src/services/` (if calling external APIs or transforming data)
 - Tests: Co-located `*.test.jsx` or `*.test.js` in same directory
-- State: Add properties to context value in `src/app.jsx`, pass via `useScoutPlan()`
+- State: Add properties to context value in `src/app.jsx`, pass via `useScoutX()`
 
 **New Component/Module:**
 - Implementation: `src/components/FileName.jsx`
 - Import theme tokens: `import { C } from "../styles/theme"`
-- Import context if needed: `import { useScoutPlan } from "../context/ScoutPlanContext"`
+- Import context if needed: `import { useScoutX } from "../context/ScoutXContext"`
 - Export named: `export function ComponentName() { ... }`
 
 **Utilities/Helpers:**

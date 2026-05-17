@@ -88,10 +88,10 @@ The scraper reads all config from environment variables. The server invokes it v
 // Source: adapter-service/lib/dynamicSources.js
 const env = {
   ...process.env,
-  SCOUTPLAN_FROM_DATE: String(params.fromDate || ""),
-  SCOUTPLAN_TO_DATE:   String(params.toDate   || ""),
-  SCOUTPLAN_KREIS_ID:  String(params.kreisId  || ""),
-  SCOUTPLAN_JUGEND_ID: String(params.jugendId || ""),
+  SCOUTX_FROM_DATE: String(params.fromDate || ""),
+  SCOUTX_TO_DATE:   String(params.toDate   || ""),
+  SCOUTX_KREIS_ID:  String(params.kreisId  || ""),
+  SCOUTX_JUGEND_ID: String(params.jugendId || ""),
   // ...
 };
 const { stdout } = await exec(command, { env, timeout: Number(timeoutMs || 30000) });
@@ -100,13 +100,13 @@ const { stdout } = await exec(command, { env, timeout: Number(timeoutMs || 30000
 For the smoke test in plan 01-01, invoke the script directly via shell with explicit env vars:
 
 ```bash
-SCOUTPLAN_FROM_DATE=2026-04-05 \
-SCOUTPLAN_TO_DATE=2026-04-05 \
-SCOUTPLAN_KREIS_ID=moenchen \
-SCOUTPLAN_JUGEND_ID=d-jugend \
+SCOUTX_FROM_DATE=2026-04-05 \
+SCOUTX_TO_DATE=2026-04-05 \
+SCOUTX_KREIS_ID=moenchen \
+SCOUTX_JUGEND_ID=d-jugend \
 FUSSBALLDE_PAGE_CONCURRENCY=2 \
 FUSSBALLDE_MATCH_CONCURRENCY=2 \
-SCOUTPLAN_DEBUG_EXPORTER=true \
+SCOUTX_DEBUG_EXPORTER=true \
 node adapter-service/scripts/fetch-week.fussballde.mjs | jq .
 ```
 
@@ -216,7 +216,7 @@ await new Promise((resolve) => setTimeout(resolve, base + jitter));
 **Warning signs:** `HTTP 429` errors in `stderr` (`[fussballde-export][warn]` prefix) during a full week fetch.
 
 ### Pitfall 4: kreisId/jugendId Not Propagated to Enriched Games
-**What goes wrong:** In `enrichMatches()`, the returned game object hardcodes `kreisId` and `jugendId` from the top-level env vars (`const kreisId = process.env.SCOUTPLAN_KREIS_ID`). When the adapter calls the scraper with a specific `SCOUTPLAN_KREIS_ID`, the games get the correct values. But if the env var is empty, all returned games have `kreisId: ""`, making the `filterGames()` kreisId filter a no-op (it only filters when `game.kreisId !== payload.kreisId` — when `game.kreisId` is empty, the condition is false and all games pass through).
+**What goes wrong:** In `enrichMatches()`, the returned game object hardcodes `kreisId` and `jugendId` from the top-level env vars (`const kreisId = process.env.SCOUTX_KREIS_ID`). When the adapter calls the scraper with a specific `SCOUTX_KREIS_ID`, the games get the correct values. But if the env var is empty, all returned games have `kreisId: ""`, making the `filterGames()` kreisId filter a no-op (it only filters when `game.kreisId !== payload.kreisId` — when `game.kreisId` is empty, the condition is false and all games pass through).
 **Why it happens:** The `filterGames()` logic in `games.js` skips filtering when `game.kreisId` is empty string: `if (payload.kreisId && game.kreisId && game.kreisId !== payload.kreisId)`. This is intentional for the adapter store (games from multiple districts), but means the smoke test must verify that scraped games actually carry the expected `kreisId`.
 **How to avoid:** The smoke test must assert `game.kreisId === "moenchen"` (or whichever Kreis was requested) on the returned games.
 **Warning signs:** Filter tests pass but live data returns games from wrong Kreise.
@@ -236,14 +236,14 @@ Verified patterns from the existing codebase:
 ### Running the scraper manually (smoke test invocation)
 ```bash
 # Source: adapter-service/README.md + scripts/fetch-week.fussballde.mjs env vars
-SCOUTPLAN_FROM_DATE=2026-04-05 \
-SCOUTPLAN_TO_DATE=2026-04-05 \
-SCOUTPLAN_KREIS_ID=moenchen \
-SCOUTPLAN_JUGEND_ID=d-jugend \
+SCOUTX_FROM_DATE=2026-04-05 \
+SCOUTX_TO_DATE=2026-04-05 \
+SCOUTX_KREIS_ID=moenchen \
+SCOUTX_JUGEND_ID=d-jugend \
 FUSSBALLDE_PAGE_CONCURRENCY=2 \
 FUSSBALLDE_MATCH_CONCURRENCY=2 \
 FUSSBALLDE_SAISON=2526 \
-SCOUTPLAN_DEBUG_EXPORTER=true \
+SCOUTX_DEBUG_EXPORTER=true \
 node adapter-service/scripts/fetch-week.fussballde.mjs
 ```
 

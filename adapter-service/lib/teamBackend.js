@@ -22,6 +22,7 @@ const DEFAULT_ACCOUNTS = Object.freeze([
 ]);
 
 const WRITER_ROLES = new Set(["admin", "coordinator", "scout"]);
+const OBSERVATION_STATUSES = new Set(["planned", "seen", "reported", "followup"]);
 
 function compactText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
@@ -71,7 +72,8 @@ function normalizeObservation(raw) {
     return null;
   }
 
-  const status = raw?.status === "seen" ? "seen" : "planned";
+  const rawStatus = normalizeId(raw?.status);
+  const status = OBSERVATION_STATUSES.has(rawStatus) ? rawStatus : "planned";
   return {
     id: normalizeId(raw?.id) || `obs-${normalizeId(gameId)}-${scoutId}`,
     gameId,
@@ -80,7 +82,7 @@ function normalizeObservation(raw) {
     note: String(raw?.note || ""),
     planHistoryId: compactText(raw?.planHistoryId),
     plannedAt: compactText(raw?.plannedAt || raw?.createdAt) || new Date(0).toISOString(),
-    seenAt: status === "seen" ? compactText(raw?.seenAt || raw?.updatedAt) : "",
+    seenAt: ["seen", "reported", "followup"].includes(status) ? compactText(raw?.seenAt || raw?.updatedAt) : "",
     reportId: normalizeId(raw?.reportId),
     reportUrl: compactText(raw?.reportUrl),
     game: raw?.game && typeof raw.game === "object" ? { ...raw.game, id: gameId } : null,
@@ -115,9 +117,30 @@ export function createInitialTeamState() {
     version: 1,
     team: normalizeTeam(DEFAULT_TEAM, accounts),
     manualGames: [],
+    tournaments: [],
     teamGoals: { favoriteTeams: [], favoriteClubs: [], leaguePriorities: [], ageGroups: [] },
     observations: [],
+    notifications: [],
     feedItems: [],
+  };
+}
+
+function normalizeNotification(raw) {
+  const id = normalizeId(raw?.id || raw?.eventId);
+  const type = compactText(raw?.type);
+  const createdAt = compactText(raw?.createdAt) || new Date(0).toISOString();
+  if (!id || !type) {
+    return null;
+  }
+  return {
+    id,
+    eventId: normalizeId(raw?.eventId) || id,
+    type,
+    title: compactText(raw?.title),
+    body: compactText(raw?.body),
+    recipientId: normalizeId(raw?.recipientId),
+    unread: raw?.unread === false ? false : true,
+    createdAt,
   };
 }
 
@@ -130,8 +153,15 @@ export function normalizeTeamState(raw) {
   const observations = (Array.isArray(source.observations) ? source.observations : [])
     .map(normalizeObservation)
     .filter(Boolean);
+  const notifications = (Array.isArray(source.notifications) ? source.notifications : [])
+    .map(normalizeNotification)
+    .filter(Boolean)
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
   const manualGames = (Array.isArray(source.manualGames) ? source.manualGames : [])
     .map(normalizeManualGame)
+    .filter(Boolean);
+  const tournaments = (Array.isArray(source.tournaments) ? source.tournaments : [])
+    .map(normalizeTournament)
     .filter(Boolean);
   const feedItems = (Array.isArray(source.feedItems) ? source.feedItems : [])
     .map(normalizeFeedItem)
@@ -142,8 +172,10 @@ export function normalizeTeamState(raw) {
     version: 1,
     team: normalizeTeam(source.team, normalizedAccounts),
     manualGames,
+    tournaments,
     teamGoals: normalizeTeamGoals(source.teamGoals),
     observations,
+    notifications,
     feedItems,
   };
 }
@@ -220,20 +252,67 @@ function normalizeGame(raw) {
   };
 }
 
+function normalizeGameProvenance(raw, defaultSource) {
+  const source = compactText(raw?.source || defaultSource || "manual");
+  const provenanceRaw = raw?.provenance && typeof raw.provenance === "object" ? raw.provenance : {};
+  const ingestedAt = compactText(provenanceRaw.ingestedAt || raw?.updatedAt || raw?.createdAt) || new Date(0).toISOString();
+  return {
+    source,
+    method: compactText(provenanceRaw.method || (source === "manual" ? "manual-entry" : "import")),
+    provider: compactText(provenanceRaw.provider || source),
+    importedBy: normalizeId(provenanceRaw.importedBy || raw?.createdBy),
+    ingestedAt,
+    requestId: compactText(provenanceRaw.requestId),
+    jobId: compactText(provenanceRaw.jobId),
+  };
+}
+
 function normalizeManualGame(raw) {
   const game = normalizeGame(raw);
   if (!game?.home || !game?.away) {
     return null;
   }
+  const source = ["manual", "tournament", "national"].includes(String(raw?.source || "").trim())
+    ? String(raw?.source || "").trim()
+    : "manual";
   return {
     ...game,
     id: normalizeId(game.id) || `manual-${normalizeId(`${game.date}-${game.time}-${game.home}-${game.away}`)}`,
-    source: "manual",
+    source,
+    tournamentId: source === "tournament" ? normalizeId(raw?.tournamentId) : "",
     note: String(raw?.note || ""),
     status: game.status,
     createdBy: normalizeId(raw?.createdBy),
     createdAt: compactText(raw?.createdAt) || new Date(0).toISOString(),
     updatedAt: compactText(raw?.updatedAt || raw?.createdAt) || new Date(0).toISOString(),
+    provenance: normalizeGameProvenance(raw, source),
+  };
+}
+
+function normalizeTournament(raw) {
+  const id = normalizeId(raw?.id);
+  if (!id) {
+    return null;
+  }
+  const name = compactText(raw?.name || raw?.title);
+  if (!name) {
+    return null;
+  }
+  const matches = (Array.isArray(raw?.matches) ? raw.matches : [])
+    .map((match) => normalizeManualGame({ ...match, source: "tournament", tournamentId: id }))
+    .filter(Boolean);
+  return {
+    id,
+    name,
+    source: "tournament",
+    dateFrom: compactText(raw?.dateFrom),
+    dateTo: compactText(raw?.dateTo),
+    venue: compactText(raw?.venue),
+    note: String(raw?.note || ""),
+    createdBy: normalizeId(raw?.createdBy),
+    createdAt: compactText(raw?.createdAt) || new Date(0).toISOString(),
+    updatedAt: compactText(raw?.updatedAt || raw?.createdAt) || new Date(0).toISOString(),
+    matches,
   };
 }
 
@@ -271,7 +350,68 @@ function addFeedItem(teamState, input, randomId) {
   if (!item) {
     return teamState.feedItems;
   }
+  const nextNotifications = [
+    normalizeNotification({
+      id: item.id,
+      eventId: item.id,
+      type: mapFeedTypeToNotificationType(item.type),
+      title: item.title,
+      body: item.body,
+      unread: true,
+      createdAt: item.createdAt,
+    }),
+    ...(Array.isArray(teamState.notifications) ? teamState.notifications : []),
+  ]
+    .filter(Boolean)
+    .slice(0, 400);
+  teamState.notifications = nextNotifications;
   return [item, ...(teamState.feedItems || [])].slice(0, 200);
+}
+
+function mapFeedTypeToNotificationType(feedType) {
+  const value = normalizeId(feedType);
+  if (value.includes("plan")) {
+    return "plan";
+  }
+  if (value.includes("seen")) {
+    return "seen";
+  }
+  if (value.includes("cancel")) {
+    return "absage";
+  }
+  if (value.includes("followup") || value.includes("note")) {
+    return "followup";
+  }
+  if (value.includes("conflict")) {
+    return "konflikt";
+  }
+  return "plan";
+}
+
+function extractMentionedAccountIds(text, teamAccounts = []) {
+  const content = String(text || "");
+  if (!content) {
+    return [];
+  }
+  const idMap = new Map((Array.isArray(teamAccounts) ? teamAccounts : []).map((account) => [normalizeId(account?.id), account]));
+  const slugMap = new Map(
+    (Array.isArray(teamAccounts) ? teamAccounts : [])
+      .map((account) => [normalizeId(String(account?.name || "").replace(/\s+/g, "-")), account])
+      .filter(([slug]) => slug),
+  );
+  const hits = new Set();
+  for (const raw of content.match(/@([a-zA-Z0-9._-]{2,})/g) || []) {
+    const key = normalizeId(raw.slice(1));
+    if (!key) continue;
+    if (idMap.has(key)) {
+      hits.add(key);
+      continue;
+    }
+    if (slugMap.has(key)) {
+      hits.add(normalizeId(slugMap.get(key)?.id));
+    }
+  }
+  return [...hits].filter(Boolean);
 }
 
 export function publishTeamPlan(teamState, account, payload, randomId) {
@@ -352,6 +492,14 @@ export function upsertManualGame(teamState, account, payload, randomId) {
     createdBy: payload?.createdBy || account.id,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
+    provenance: {
+      ...(existing?.provenance && typeof existing.provenance === "object" ? existing.provenance : {}),
+      source: "manual",
+      method: "manual-entry",
+      provider: "manual",
+      importedBy: account.id,
+      ingestedAt: now,
+    },
   });
   if (!manualGame) {
     const error = new Error("Manuelles Spiel braucht Heimteam und Auswaertsteam.");
@@ -531,6 +679,7 @@ export function linkObservationReport(teamState, account, payload, randomId) {
 
   const linked = normalizeObservation({
     ...observation,
+    status: "reported",
     reportId: reportId || observation.reportId,
     reportUrl: reportUrl || observation.reportUrl,
   });
@@ -586,7 +735,7 @@ export function updateObservationNote(teamState, account, payload, randomId) {
     error.statusCode = 403;
     throw error;
   }
-  if (observation.status !== "seen") {
+  if (!["seen", "reported", "followup"].includes(observation.status)) {
     const error = new Error("Notizen koennen erst nach einer gesehenen Sichtung ergänzt werden.");
     error.statusCode = 400;
     throw error;
@@ -594,6 +743,7 @@ export function updateObservationNote(teamState, account, payload, randomId) {
 
   const noted = normalizeObservation({
     ...observation,
+    status: "followup",
     note: String(payload?.note || "").trim(),
   });
   next.observations[index] = noted;
@@ -611,10 +761,90 @@ export function updateObservationNote(teamState, account, payload, randomId) {
     },
     randomId,
   );
+  const mentionedAccountIds = extractMentionedAccountIds(noted.note, next.team?.accounts || []).filter((id) => id !== account.id);
+  if (mentionedAccountIds.length > 0) {
+    const now = new Date().toISOString();
+    const mentionNotifications = mentionedAccountIds
+      .map((recipientId, index) =>
+        normalizeNotification({
+          id: `mention-${noted.id}-${recipientId}-${index + 1}`,
+          eventId: `mention-${noted.id}-${recipientId}-${index + 1}`,
+          type: "mention",
+          title: "Du wurdest erwähnt",
+          body: `${account.name} hat dich in einer Sichtungsnotiz erwähnt.`,
+          recipientId,
+          unread: true,
+          createdAt: now,
+        }),
+      )
+      .filter(Boolean);
+    next.notifications = [...mentionNotifications, ...(Array.isArray(next.notifications) ? next.notifications : [])].slice(0, 400);
+  }
 
   return {
     state: next,
     observation: noted,
+    feedItems: next.feedItems,
+  };
+}
+
+export function reassignObservation(teamState, account, payload, randomId) {
+  if (!["admin", "coordinator"].includes(String(account?.role || ""))) {
+    const error = new Error("Nur Admin oder Koordination koennen Sichtungen umverteilen.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const next = normalizeTeamState(teamState);
+  const observationId = normalizeId(payload?.observationId);
+  const targetScoutId = normalizeId(payload?.targetScoutId);
+  if (!observationId || !targetScoutId) {
+    const error = new Error("observationId und targetScoutId sind erforderlich.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const targetScout = (next.team?.accounts || []).find((item) => item.id === targetScoutId && item.active !== false);
+  if (!targetScout) {
+    const error = new Error("Ziel-Scout wurde nicht gefunden.");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (targetScout.role === "readonly") {
+    const error = new Error("Gastkonten koennen keine Sichtungen uebernehmen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const index = next.observations.findIndex((item) => item.id === observationId);
+  if (index < 0) {
+    const error = new Error("Sichtung wurde nicht gefunden.");
+    error.statusCode = 404;
+    throw error;
+  }
+  const current = next.observations[index];
+  const reassigned = normalizeObservation({
+    ...current,
+    scoutId: targetScoutId,
+    id: `obs-${normalizeId(current.gameId)}-${targetScoutId}`,
+  });
+  next.observations[index] = reassigned;
+  next.feedItems = addFeedItem(
+    next,
+    {
+      type: "observation_reassigned",
+      actorId: account.id,
+      gameId: reassigned.gameId,
+      gameIds: [reassigned.gameId],
+      observationId: reassigned.id,
+      planHistoryId: reassigned.planHistoryId,
+      title: "Sichtung umverteilt",
+      body: `${account.name} hat die Sichtung an ${targetScout.name} übergeben.`,
+    },
+    randomId,
+  );
+  return {
+    state: next,
+    observation: reassigned,
     feedItems: next.feedItems,
   };
 }

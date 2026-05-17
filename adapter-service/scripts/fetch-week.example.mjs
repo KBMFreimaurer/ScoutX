@@ -2,20 +2,20 @@
  * Example hook for ADAPTER_EXPORT_COMMAND.
  *
  * ENV available:
- * - SCOUTPLAN_FROM_DATE
- * - SCOUTPLAN_TO_DATE
- * - SCOUTPLAN_KREIS_ID
- * - SCOUTPLAN_JUGEND_ID
- * - SCOUTPLAN_IMPORT_DIR
+ * - SCOUTX_FROM_DATE
+ * - SCOUTX_TO_DATE
+ * - SCOUTX_KREIS_ID
+ * - SCOUTX_JUGEND_ID
+ * - SCOUTX_IMPORT_DIR
  *
  * This sample only emits JSON to stdout.
  * Replace with real source integration (scraper/api/dfbnet export bridge).
  */
 
-const fromDate = process.env.SCOUTPLAN_FROM_DATE;
-const toDate = process.env.SCOUTPLAN_TO_DATE;
-const kreisId = process.env.SCOUTPLAN_KREIS_ID || "duesseldorf";
-const jugendId = process.env.SCOUTPLAN_JUGEND_ID || "d-jugend";
+const fromDate = process.env.SCOUTX_FROM_DATE;
+const toDate = process.env.SCOUTX_TO_DATE;
+const kreisId = process.env.SCOUTX_KREIS_ID || "duesseldorf";
+const jugendId = process.env.SCOUTX_JUGEND_ID || "d-jugend";
 
 const games = [
   {

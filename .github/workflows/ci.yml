@@ -4,6 +4,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -59,3 +60,116 @@ jobs:
 
       - name: E2E Smoke
         run: npm run test:e2e
+
+  e2e-release-db-first:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node installieren
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Dependencies installieren
+        run: npm ci
+
+      - name: Playwright Browser installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: DB-First Release E2E
+        id: db_first_release_e2e
+        env:
+          ADAPTER_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          RESULTS_FILE: docs/release-db-first-e2e-last-run.txt
+        run: ./ops/run-db-first-release-e2e-and-update-checklist.sh
+
+      - name: Checklist auf passed setzen
+        if: success()
+        run: CI_STATUS=passed ./ops/update-release-checklist-from-ci-db-first.sh
+
+      - name: Checklist auf failed setzen
+        if: failure()
+        run: CI_STATUS=failed ./ops/update-release-checklist-from-ci-db-first.sh
+
+      - name: Release E2E Ergebnisdatei hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-db-first-e2e-last-run
+          path: docs/release-db-first-e2e-last-run.txt
+
+      - name: Release Checklist hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-db-first-checklist
+          path: docs/scoutx_v1_release_gate_checklist.md
+
+      - name: Playwright Artefakte hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-db-first-e2e-playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+
+  release-gates-strict:
+    runs-on: ubuntu-latest
+    needs: [quality, e2e-release-db-first]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node installieren
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Dependencies installieren
+        run: npm ci
+
+      - name: Playwright Browser installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: P8 strict gate (no skips)
+        env:
+          ADAPTER_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          SCOUTX_DB_RESET_BEFORE_E2E: "false"
+        run: npm run release:p8:gate

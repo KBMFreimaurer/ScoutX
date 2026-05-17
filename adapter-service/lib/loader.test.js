@@ -7,7 +7,7 @@ import { readStore, refreshStore } from "./loader";
 const tempDirs = [];
 
 async function makeTempDir() {
-  const dir = await mkdtemp(join(tmpdir(), "scoutplan-adapter-"));
+  const dir = await mkdtemp(join(tmpdir(), "scoutx-adapter-"));
   tempDirs.push(dir);
   return dir;
 }

@@ -76,16 +76,16 @@ async function runExportCommand({ command, timeoutMs, params, importDir }) {
 
   const env = {
     ...process.env,
-    SCOUTPLAN_FROM_DATE: String(params.fromDate || ""),
-    SCOUTPLAN_TO_DATE: String(params.toDate || ""),
-    SCOUTPLAN_KREIS_ID: String(params.kreisId || ""),
-    SCOUTPLAN_STATE_CODE: String(params.stateCode || ""),
-    SCOUTPLAN_REGION_NAME: String(params.regionName || ""),
-    SCOUTPLAN_REGION_SHORT_CODE: String(params.regionShortCode || ""),
-    SCOUTPLAN_FUSSBALLDE_MAPPING_JSON: JSON.stringify(params.fussballDeMapping || null),
-    SCOUTPLAN_JUGEND_ID: String(params.jugendId || ""),
-    SCOUTPLAN_TEAMS_JSON: JSON.stringify(Array.isArray(params.teams) ? params.teams : []),
-    SCOUTPLAN_IMPORT_DIR: String(importDir || ""),
+    SCOUTX_FROM_DATE: String(params.fromDate || ""),
+    SCOUTX_TO_DATE: String(params.toDate || ""),
+    SCOUTX_KREIS_ID: String(params.kreisId || ""),
+    SCOUTX_STATE_CODE: String(params.stateCode || ""),
+    SCOUTX_REGION_NAME: String(params.regionName || ""),
+    SCOUTX_REGION_SHORT_CODE: String(params.regionShortCode || ""),
+    SCOUTX_FUSSBALLDE_MAPPING_JSON: JSON.stringify(params.fussballDeMapping || null),
+    SCOUTX_JUGEND_ID: String(params.jugendId || ""),
+    SCOUTX_TEAMS_JSON: JSON.stringify(Array.isArray(params.teams) ? params.teams : []),
+    SCOUTX_IMPORT_DIR: String(importDir || ""),
   };
 
   const { stdout } = await exec(command, {

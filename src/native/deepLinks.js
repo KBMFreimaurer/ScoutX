@@ -20,7 +20,7 @@ function resolveDestinationFromUrl(parsed) {
   const pathPart = sanitizePathSegment(parsed.pathname);
   const hostPart = sanitizePathSegment(parsed.host);
   const queryPart = sanitizePathSegment(parsed.searchParams.get("to") || parsed.searchParams.get("path"));
-  const destinationKey = pathPart || hostPart || queryPart;
+  const destinationKey = queryPart || pathPart || hostPart;
   return DESTINATION_MAP[destinationKey] || null;
 }
 

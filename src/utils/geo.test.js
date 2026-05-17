@@ -299,13 +299,13 @@ describe("geo utils", () => {
       strictActive: expect.any(Boolean),
     });
 
-    expect(config.keySource).toBe("code");
-    expect(config.googleConfigured).toBe(true);
+    expect(config.keySource).toMatch(/^(env|none)$/);
+    expect(config.googleConfigured).toBe(Boolean(String(GOOGLE_MAPS_API_KEY || "").trim()));
   });
 
-  it("stellt den Google API-Key zentral als Code-Konstante bereit", () => {
-    expect(String(GOOGLE_MAPS_API_KEY || "")).toBe("AIzaSyD3EbQVUoYVyfh3hu1glQmj-4NPEw1bAWc");
+  it("bezieht den Google API-Key nur aus der Umgebung", () => {
+    expect(String(GOOGLE_MAPS_API_KEY || "")).toBe(String(import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY || "").trim());
     const config = getGoogleRoutingConfig();
-    expect(config.keySource).toBe("code");
+    expect(config.keySource).toBe(String(GOOGLE_MAPS_API_KEY || "").trim() ? "env" : "none");
   });
 });

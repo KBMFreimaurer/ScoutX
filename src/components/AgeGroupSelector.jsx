@@ -5,6 +5,7 @@ import { useScrollTapGuard } from "../hooks/useScrollTapGuard";
 export function AgeGroupSelector({
   jugendKlassen,
   jugendId,
+  jugendIds = [],
   onSelect,
   jugend,
   availableSubLevels = [],
@@ -12,6 +13,7 @@ export function AgeGroupSelector({
   onToggleSubLevel,
   onClearSubLevels,
 }) {
+  const selectedIds = Array.isArray(jugendIds) && jugendIds.length > 0 ? jugendIds : jugendId ? [jugendId] : [];
   const showSubLevelControls = Boolean(jugendId) && String(jugend?.id || "").toLowerCase() !== "bambini";
   const { touchProps, wrapOnClick } = useScrollTapGuard();
 
@@ -21,7 +23,7 @@ export function AgeGroupSelector({
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {jugendKlassen.map((item) => {
-          const selected = jugendId === item.id;
+          const selected = selectedIds.includes(item.id);
           return (
             <button
               type="button"

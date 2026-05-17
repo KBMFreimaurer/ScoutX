@@ -1,0 +1,66 @@
+timestamp_utc=2026-05-17T13:21:02Z
+command=npm run check:hrworks:go-no-go
+---
+==> verify:hrworks
+
+ RUN  v4.1.4 /Users/playboiiboggos/.openclaw/workspace/ScoutX
+
+
+ Test Files  9 passed (9)
+      Tests  42 passed (42)
+   Start at  15:21:04
+   Duration  1.39s (transform 608ms, setup 386ms, import 852ms, tests 444ms, environment 3.23s)
+
+PASS: verify:hrworks
+==> check:hrworks:live-readiness
+FAIL: Evidence-Datei enthält noch Platzhalter (ja/nein): docs/hrworks-live-session-evidence-20260517T131103Z.md
+Offene Zeilen:
+  - 20:1. Review geöffnet: ja/nein
+  - 21:2. Pflichtfelder validiert: ja/nein
+  - 22:3. Nutzer manuell in HRworks eingeloggt: ja/nein
+  - 23:4. Felder in HRworks korrekt vorbefüllt: ja/nein
+  - 24:5. Finale Nutzerbestätigung vor Speichern: ja/nein
+  - 25:6. Speichern erfolgreich: ja/nein
+  - 26:7. ScoutX Runtime als `imported` markiert: ja/nein
+  - 27:8. HRworks-Referenz erfasst: ja/nein (Wert optional)
+  - 33:- Abbruch korrekt erfolgt (keine Folgeklicks): ja/nein
+  - 42:- Akzeptanzkriterien im Realbetrieb erfüllt: ja/nein
+FAIL: check:hrworks:live-readiness
+==> check:hrworks:evidence-open-items
+Evidence: docs/hrworks-live-session-evidence-20260517T131103Z.md
+Open yes/no placeholders:
+  - 20:1. Review geöffnet: ja/nein
+  - 21:2. Pflichtfelder validiert: ja/nein
+  - 22:3. Nutzer manuell in HRworks eingeloggt: ja/nein
+  - 23:4. Felder in HRworks korrekt vorbefüllt: ja/nein
+  - 24:5. Finale Nutzerbestätigung vor Speichern: ja/nein
+  - 25:6. Speichern erfolgreich: ja/nein
+  - 26:7. ScoutX Runtime als `imported` markiert: ja/nein
+  - 27:8. HRworks-Referenz erfasst: ja/nein (Wert optional)
+  - 33:- Abbruch korrekt erfolgt (keine Folgeklicks): ja/nein
+  - 42:- Akzeptanzkriterien im Realbetrieb erfüllt: ja/nein
+Open empty key lines:
+  - 5:- Durchführender Nutzer:
+  - 7:- HRworks Mandant/Umgebung:
+  - 12:- Policy gesetzt:
+  - 30:- Fehlertyp:
+  - 31:- Fehlermeldung:
+  - 32:- Schritt:
+  - 37:- Status (`imported/failed/...`):
+  - 39:- Referenznummer (optional):
+  - 43:- Offene Punkte:
+PASS: check:hrworks:evidence-open-items
+==> check:hrworks:acceptance-status
+status_file=docs/hrworks-acceptance-status.json
+global_status=not_complete
+counts: fulfilled=10 partial=6 open=0
+FAIL: Akzeptanzstatus ist nicht complete
+Offene Kriterien:
+- ac4: Excel-Arbeitszeitdaten können verarbeitet oder gemappt werden [partial]
+- ac7: Browser-Automation speichert keine Zugangsdaten [partial]
+- ac8: Nutzer loggt sich selbst in HRworks ein [partial]
+- ac9: HRworks-Felder werden robust über Selector-Mapping befüllt [partial]
+- ac15: Keine sensiblen Daten werden geloggt [partial]
+- ac16: Bestehende ScoutX-Funktionalität wird nicht beschädigt [partial]
+FAIL: check:hrworks:acceptance-status
+NO-GO: Mindestens ein HRworks-Gate ist offen

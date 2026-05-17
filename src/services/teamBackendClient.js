@@ -98,6 +98,75 @@ export async function registerTeamBackend(userId, name, password, teamKey) {
   return payload;
 }
 
+export async function createTeamInvitation(input) {
+  return requestTeamBackend("/invitations/create", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function acceptTeamInvitation(token, password) {
+  return requestTeamBackend("/invitations/accept", {
+    method: "POST",
+    body: { token, password },
+  });
+}
+
+export async function requestTeamPasswordReset(userId) {
+  return requestTeamBackend("/auth/password-reset/request", {
+    method: "POST",
+    body: { userId },
+  });
+}
+
+export async function confirmTeamPasswordReset(token, password) {
+  return requestTeamBackend("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token, password },
+  });
+}
+
+export async function subscribeTeamPushNotifications(subscription) {
+  return requestTeamBackend("/notifications/push/subscribe", {
+    method: "POST",
+    body: { subscription },
+  });
+}
+
+export async function fetchTeamPushPendingEvents() {
+  return requestTeamBackend("/notifications/push/pending");
+}
+
+export async function ackTeamPushEvents(eventIds) {
+  return requestTeamBackend("/notifications/push/ack", {
+    method: "POST",
+    body: { eventIds },
+  });
+}
+
+export async function fetchTeamNotifications({ status = "", type = "" } = {}) {
+  const params = new URLSearchParams();
+  if (status) {
+    params.set("status", status);
+  }
+  if (type) {
+    params.set("type", type);
+  }
+  const query = params.toString();
+  return requestTeamBackend(`/notifications${query ? `?${query}` : ""}`);
+}
+
+export async function markTeamNotificationsRead(eventIds) {
+  return requestTeamBackend("/notifications/read", {
+    method: "POST",
+    body: { eventIds },
+  });
+}
+
+export async function fetchTeamConflicts() {
+  return requestTeamBackend("/conflicts");
+}
+
 export async function logoutTeamBackend() {
   const payload = await requestTeamBackend("/auth/logout", {
     method: "POST",
@@ -139,6 +208,13 @@ export async function updateTeamBackendObservationNote(input) {
   });
 }
 
+export async function reassignTeamBackendObservation(input) {
+  return requestTeamBackend("/observations/reassign", {
+    method: "POST",
+    body: input,
+  });
+}
+
 export async function upsertTeamBackendMember(input) {
   return requestTeamBackend("/members", {
     method: "POST",
@@ -157,5 +233,53 @@ export async function updateTeamBackendGoals(input) {
   return requestTeamBackend("/goals", {
     method: "POST",
     body: input,
+  });
+}
+
+export async function createTeamTournament(input) {
+  return requestTeamBackend("/tournaments", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function addTeamTournamentMatches(tournamentId, matches) {
+  return requestTeamBackend(`/tournaments/${encodeURIComponent(String(tournamentId || ""))}/matches`, {
+    method: "POST",
+    body: { matches },
+  });
+}
+
+export async function importTeamTournamentsFromMeinturnierplan(input) {
+  return requestTeamBackend("/tournaments/import/meinturnierplan", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function importTeamNationalGames(input) {
+  return requestTeamBackend("/import/dfb-national-games", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function previewTeamKreisPdfImport(input) {
+  return requestTeamBackend("/import/kreis-pdf", {
+    method: "POST",
+    body: {
+      mode: "preview",
+      ...input,
+    },
+  });
+}
+
+export async function confirmTeamKreisPdfImport(previewToken) {
+  return requestTeamBackend("/import/kreis-pdf", {
+    method: "POST",
+    body: {
+      mode: "confirm",
+      previewToken,
+    },
   });
 }

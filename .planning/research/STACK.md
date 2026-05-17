@@ -48,7 +48,7 @@ Recommendation: Add jitter to retries and reduce default `MATCH_CONCURRENCY` to 
 
 **User-Agent rotation (LOW priority for now)**
 
-The current `User-Agent` is `ScoutPlanAdapter/1.0 (+https://www.fussball.de)`. This is honest and acceptable. Do not rotate; rotation is a bad-faith signal that complicates debugging. If fussball.de starts blocking, use `Mozilla/5.0` generic browser UA instead.
+The current `User-Agent` is `ScoutXAdapter/1.0 (+https://www.fussball.de)`. This is honest and acceptable. Do not rotate; rotation is a bad-faith signal that complicates debugging. If fussball.de starts blocking, use `Mozilla/5.0` generic browser UA instead.
 
 **HTML structure fragility (KNOWN risk)**
 
@@ -114,15 +114,15 @@ import { Document, Page, Text, View, StyleSheet, pdf } from '@react-pdf/renderer
 ```javascript
 // PDFExport.jsx — new approach
 import { pdf } from '@react-pdf/renderer';
-import { ScoutPlanDocument } from './ScoutPlanDocument';
+import { ScoutXDocument } from './ScoutXDocument';
 
 async function downloadPDF(games, cfg) {
-  const doc = <ScoutPlanDocument games={games} cfg={cfg} />;
+  const doc = <ScoutXDocument games={games} cfg={cfg} />;
   const blob = await pdf(doc).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `scoutplan-${cfg.kreisLabel}-${cfg.fromDate}.pdf`;
+  a.download = `scoutx-${cfg.kreisLabel}-${cfg.fromDate}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }

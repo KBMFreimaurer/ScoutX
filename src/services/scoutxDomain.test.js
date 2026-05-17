@@ -24,6 +24,7 @@ import {
   markGameObservationSeen,
   normalizeProductState,
   publishTeamPlan,
+  reassignObservation,
   removeWatchlistEntry,
   saveSearchFilter,
   switchActiveUser,
@@ -578,6 +579,7 @@ describe("scoutxDomain", () => {
     expect(overview.conflicts[0]).toMatchObject({
       scoutId: scout.id,
       type: "travel",
+      severity: "hard-conflict",
       firstGameId: "game-1",
       secondGameId: "game-2",
     });
@@ -611,6 +613,7 @@ describe("scoutxDomain", () => {
       expect.objectContaining({
         scoutId: scout.id,
         type: "start_travel",
+        severity: "warn",
         firstGameId: "",
         secondGameId: "game-1",
         gapMinutes: 30,
@@ -716,14 +719,14 @@ describe("scoutxDomain", () => {
     const next = updateObservationNote(
       state,
       state.observations[0].id,
-      "Nr. 10 im zweiten Drittel nochmal prüfen.",
+      "Nr. 10 im zweiten Drittel nochmal prüfen. @user-coordinator",
       scout,
       fixedOptions,
     );
 
     expect(next.observations[0]).toMatchObject({
       id: state.observations[0].id,
-      note: "Nr. 10 im zweiten Drittel nochmal prüfen.",
+      note: "Nr. 10 im zweiten Drittel nochmal prüfen. @user-coordinator",
       updatedAt: "2026-04-23T10:00:00.000Z",
     });
     expect(next.feedItems[0]).toMatchObject({
@@ -731,6 +734,11 @@ describe("scoutxDomain", () => {
       observationId: state.observations[0].id,
       gameIds: ["game-1"],
     });
+    expect(
+      next.notifications.some(
+        (notification) => String(notification.type || "").trim().toLowerCase() === "mention" && notification.recipientId === "user-coordinator",
+      ),
+    ).toBe(true);
   });
 
   it("requires a seen observation before creating an observation match report", () => {
@@ -743,6 +751,26 @@ describe("scoutxDomain", () => {
     expect(() => createObservationMatchReport(state, state.observations[0].id, scout, fixedOptions)).toThrow(
       /gesehen/,
     );
+  });
+
+  it("allows coordinators to reassign observations to active scouts", () => {
+    let state = createInitialProductState(fixedOptions);
+    const scout = getActiveUser(state);
+    const coordinator = state.users.find((user) => user.role === "coordinator");
+    const game = { id: "game-1", home: "Team A", away: "Team B", date: "2026-05-01", time: "14:00" };
+
+    state = publishTeamPlan(state, { games: [game], planHistoryId: "plan-a" }, scout, fixedOptions);
+    const observationId = state.observations[0].id;
+    const next = reassignObservation(state, observationId, "user-coordinator", coordinator, fixedOptions);
+
+    expect(next.observations[0]).toMatchObject({
+      gameId: "game-1",
+      scoutId: "user-coordinator",
+    });
+    expect(next.feedItems[0]).toMatchObject({
+      type: "observation_reassigned",
+      gameIds: ["game-1"],
+    });
   });
 
   it("lets coordinators manage team accounts while guests stay read-only", () => {

@@ -94,4 +94,48 @@ describe("GamesPage", () => {
 
     expect(onTogglePlannedGame).toHaveBeenCalledWith("game-1");
   });
+
+  it("warnt vor Planabschluss bei Konflikten und bricht ohne Bestätigung ab", () => {
+    const onGeneratePlanPdf = vi.fn();
+    mockedUseScoutX.mockReturnValue(
+      createScoutXContext({
+        games: [
+          createGame({ id: "game-1", date: "2026-09-01", time: "10:00" }),
+          createGame({ id: "game-2", home: "Team C", away: "Team D", date: "2026-09-01", time: "10:30" }),
+        ],
+        selectedGameIds: { "game-1": true, "game-2": true },
+        selectedGameCount: 2,
+        onGeneratePlanPdf,
+      }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<GamesPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Plan öffnen/i }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/Konfliktwarnung vor Planabschluss/i);
+    expect(window.confirm).toHaveBeenCalled();
+    expect(onGeneratePlanPdf).not.toHaveBeenCalled();
+  });
+
+  it("lässt Planabschluss nach Konfliktwarnung und Bestätigung zu", () => {
+    const onGeneratePlanPdf = vi.fn();
+    mockedUseScoutX.mockReturnValue(
+      createScoutXContext({
+        games: [
+          createGame({ id: "game-1", date: "2026-09-01", time: "10:00" }),
+          createGame({ id: "game-2", home: "Team C", away: "Team D", date: "2026-09-01", time: "10:30" }),
+        ],
+        selectedGameIds: { "game-1": true, "game-2": true },
+        selectedGameCount: 2,
+        onGeneratePlanPdf,
+      }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<GamesPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Plan öffnen/i }));
+
+    expect(onGeneratePlanPdf).toHaveBeenCalledTimes(1);
+  });
 });
