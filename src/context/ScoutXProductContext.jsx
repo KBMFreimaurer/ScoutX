@@ -33,6 +33,7 @@ import { useTeamReportActions } from "./useTeamReportActions";
 
 const ScoutXProductContext = createContext(null);
 const TEAM_PLAN_PUBLISHED_EVENT = "scoutx:team-plan-published";
+const TEAM_SYNC_BROADCAST_KEY = "scoutx.team.sync.v1";
 
 function readProductState() {
   if (typeof window === "undefined") {
@@ -81,6 +82,12 @@ export function ScoutXProductProvider({ children }) {
     setTeamBackendState({ status: "connected", error: "" });
     setState((prev) => mergeTeamBackendPayload(prev, payload, options));
   }, []);
+
+  const refreshTeamBackendState = useCallback(async () => {
+    const payload = await fetchTeamBackendState();
+    applyTeamBackendPayload(payload, { switchUser: false });
+    return payload;
+  }, [applyTeamBackendPayload]);
 
   const onLoginTeamBackend = useCallback(
     async (userId, password, options = {}) => {
@@ -132,7 +139,7 @@ export function ScoutXProductProvider({ children }) {
       };
     }
 
-    fetchTeamBackendState()
+    refreshTeamBackendState()
       .then((payload) => {
         if (!cancelled) {
           applyTeamBackendPayload(payload, { switchUser: false });
@@ -153,7 +160,45 @@ export function ScoutXProductProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [applyTeamBackendPayload]);
+  }, [applyTeamBackendPayload, refreshTeamBackendState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    if (teamBackendState.status !== "connected") {
+      return undefined;
+    }
+
+    let active = true;
+    const syncFromBackend = () =>
+      refreshTeamBackendState().catch(() => {
+        if (!active) {
+          return;
+        }
+      });
+
+    const interval = window.setInterval(syncFromBackend, 15000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void syncFromBackend();
+      }
+    };
+    const onStorage = (event) => {
+      if (event?.key === TEAM_SYNC_BROADCAST_KEY) {
+        void syncFromBackend();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [refreshTeamBackendState, teamBackendState.status]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -165,7 +210,17 @@ export function ScoutXProductProvider({ children }) {
       setProductError("");
       if (teamBackendState.status === "connected") {
         publishTeamBackendPlan(detail)
-          .then((payload) => applyTeamBackendPayload(payload, { switchUser: false }))
+          .then((payload) => {
+            applyTeamBackendPayload(payload, { switchUser: false });
+            try {
+              window.localStorage.setItem(
+                TEAM_SYNC_BROADCAST_KEY,
+                JSON.stringify({ at: new Date().toISOString(), source: "plan_published" }),
+              );
+            } catch {
+              // Ignore broadcast failures; local state already updated.
+            }
+          })
           .catch((error) => {
             const message = error?.message || "Team-Feed konnte nicht im Backend aktualisiert werden.";
             setProductError(message);
@@ -181,6 +236,7 @@ export function ScoutXProductProvider({ children }) {
           return prev;
         }
       });
+      setProductError("Team-Plan nur lokal gespeichert. Bitte im Team-Backend anmelden für teamweite Synchronisation.");
     };
 
     window.addEventListener(TEAM_PLAN_PUBLISHED_EVENT, onTeamPlanPublished);

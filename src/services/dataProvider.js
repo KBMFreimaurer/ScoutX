@@ -1,6 +1,6 @@
 import { JUGEND_KLASSEN, KICKOFF_ZEITEN } from "../data/altersklassen";
 import { VENUES_JE_KREIS } from "../data/kreise";
-import { importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
+import { importTeamNationalGames, importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
 
 export const DATA_SOURCE_LABELS = {
   csv: "CSV/JSON Import",
@@ -1114,6 +1114,55 @@ async function fetchGamesTournament(params) {
   };
 }
 
+function nationalGameToGame(item, index, params) {
+  const dateText = String(item?.date || item?.kickoffDate || params?.fromDate || "").trim();
+  const dateObj = normalizeDate(dateText, params?.fromDate || "1970-01-01").value;
+  const home = String(item?.home || item?.homeTeam || item?.teamA || "Nationalteam").trim();
+  const away = String(item?.away || item?.awayTeam || item?.teamB || "Gegner").trim();
+  const venue = String(item?.venue || item?.stadium || "Spielort").trim();
+  const time = String(item?.time || item?.kickoffTime || "--:--").trim();
+  return {
+    id: String(item?.id || `dfb-${index}`),
+    home,
+    away,
+    dateObj,
+    dateLabel: formatDate(dateObj),
+    date: toIsoDate(dateObj),
+    time: TIME_RE.test(time) ? time : "--:--",
+    venue,
+    matchUrl: String(item?.url || item?.matchUrl || "").trim(),
+    km: null,
+    priority: 5,
+    turnier: false,
+    source: "national",
+    provider: "dfb.de",
+    jugendId: String(params?.jugendId || ""),
+    kreisId: String(params?.kreisId || ""),
+  };
+}
+
+async function fetchGamesNational(params) {
+  const payload = await importTeamNationalGames({
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+    teams: Array.isArray(params.teams) ? params.teams : [],
+    jugendId: params.jugendId,
+    kreisId: params.kreisId,
+  });
+  const nationalGames = Array.isArray(payload?.games) ? payload.games : [];
+  if (!nationalGames.length) {
+    throw new Error("Keine passenden Länderspiele gefunden.");
+  }
+  const games = nationalGames.map((item, index) => nationalGameToGame(item, index, params)).sort(compareGamesByDateTime);
+  return {
+    games: markSelectedTeamGames(games, params.teams),
+    meta: {
+      teamFilter: createTeamFilterMeta(games, params.teams),
+      provider: "dfb.de",
+    },
+  };
+}
+
 /**
  * DataProvider Interface: fetchGames(kreis, jugend, dateRange) -> Game[]
  */
@@ -1132,6 +1181,8 @@ export async function fetchGamesWithProviders({
   adapterEndpoint,
   adapterToken,
   turnier,
+  includeNationalGames,
+  includeTournaments,
   retryDelaysMs,
 }) {
   const normalizedRange = normalizeRequestedDateRange(fromDate, toDate);
@@ -1148,7 +1199,8 @@ export async function fetchGamesWithProviders({
     uploadedGames,
     adapterEndpoint,
     adapterToken,
-    turnier,
+    turnier: Boolean(turnier || includeTournaments),
+    includeNationalGames: Boolean(includeNationalGames),
   };
 
   const providerOrder =
@@ -1157,16 +1209,22 @@ export async function fetchGamesWithProviders({
       : mode === "csv"
         ? ["csv"]
         : mode === "adapter"
-          ? turnier
-            ? ["tournament", "adapter"]
-            : ["adapter"]
-          : turnier
-            ? ["csv", "tournament", "adapter"]
-            : ["csv", "adapter"];
+          ? [
+              ...(context.includeNationalGames ? ["national"] : []),
+              ...(context.turnier ? ["tournament"] : []),
+              "adapter",
+            ]
+          : [
+              "csv",
+              ...(context.includeNationalGames ? ["national"] : []),
+              ...(context.turnier ? ["tournament"] : []),
+              "adapter",
+            ];
 
   const providerMap = {
     csv: fetchGamesCsv,
     tournament: fetchGamesTournament,
+    national: fetchGamesNational,
     adapter: fetchGamesAdapter,
     mock: fetchGamesMock,
   };

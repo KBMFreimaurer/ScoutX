@@ -5,6 +5,7 @@ import { GameTable } from "../components/GameTable";
 import { useScoutX } from "../context/ScoutXContext";
 import { useScoutXProduct } from "../context/ScoutXProductContext";
 import { isNativeCapacitorRuntime } from "../native/deepLinks";
+import { confirmTeamKreisPdfImport, previewTeamKreisPdfImport } from "../services/teamBackendClient";
 import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
@@ -58,6 +59,17 @@ function buildSelectionConflicts(games) {
   return conflicts;
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return typeof window !== "undefined" && typeof window.btoa === "function" ? window.btoa(binary) : "";
+}
+
 export function GamesPage() {
   const {
     games,
@@ -79,6 +91,8 @@ export function GamesPage() {
     onClearPlannedGames,
     onBackSetup,
     onGeneratePlanPdf,
+    onAppendManualGame,
+    onMergeExternalGames,
   } = useScoutX();
   const { getGameObservationMap } = useScoutXProduct();
   const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
@@ -93,6 +107,9 @@ export function GamesPage() {
   const shouldPaginate = games.length > 100;
   const [sortMode, setSortMode] = useState("date");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const [manualGameForm, setManualGameForm] = useState({ home: "", away: "", date: "", time: "", venue: "" });
+  const [kreisPdfBusy, setKreisPdfBusy] = useState(false);
+  const [gamesInfoMessage, setGamesInfoMessage] = useState("");
   const actionDockRef = useRef(null);
   const [dockReservePx, setDockReservePx] = useState(null);
   const firstGameRoute = useMemo(() => {
@@ -272,6 +289,64 @@ export function GamesPage() {
       }
     }
     onTogglePlannedGame(id);
+  };
+  const cardLikeBox = {
+    background: "rgba(255,255,255,0.03)",
+    border: `1px solid ${C.border}`,
+    borderRadius: 14,
+    padding: 14,
+  };
+  const btnLike = {
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    background: "rgba(255,255,255,0.03)",
+    color: C.gray,
+    padding: "6px 10px",
+    fontSize: 12,
+  };
+
+  const onSubmitManualGame = () => {
+    const ok = onAppendManualGame?.(manualGameForm);
+    if (!ok) {
+      setGamesInfoMessage("Bitte Heim- und Auswärtsteam für spontane Spiele ausfüllen.");
+      return;
+    }
+    setManualGameForm({ home: "", away: "", date: "", time: "", venue: "" });
+    setGamesInfoMessage("Spontanes Spiel wurde hinzugefügt.");
+  };
+
+  const onImportKreisPdfFile = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) {
+      return;
+    }
+    setKreisPdfBusy(true);
+    setGamesInfoMessage("");
+    try {
+      const buffer = await file.arrayBuffer();
+      const base64 = arrayBufferToBase64(buffer);
+      const preview = await previewTeamKreisPdfImport({
+        fileName: file.name,
+        mimeType: file.type || "application/pdf",
+        fileBase64: base64,
+      });
+      const previewToken = String(preview?.previewToken || "").trim();
+      const confirmed = previewToken ? await confirmTeamKreisPdfImport(previewToken) : preview;
+      const importedGames = Array.isArray(confirmed?.games) ? confirmed.games : [];
+      if (importedGames.length === 0) {
+        setGamesInfoMessage("PDF importiert, aber keine Spiele erkannt.");
+      } else {
+        onMergeExternalGames?.(importedGames);
+        setGamesInfoMessage(`${importedGames.length} Spiele aus Kreisauswahl-PDF übernommen.`);
+      }
+    } catch (error) {
+      setGamesInfoMessage(error?.message || "Kreisauswahl-PDF konnte nicht importiert werden.");
+    } finally {
+      setKreisPdfBusy(false);
+      if (event?.target) {
+        event.target.value = "";
+      }
+    }
   };
 
   return (
@@ -474,6 +549,27 @@ export function GamesPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div style={{ ...cardLikeBox, marginBottom: 14 }}>
+        <div style={{ color: C.offWhite, fontWeight: 700, marginBottom: 8 }}>Spontane Spiele & Kreisauswahl-PDF</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8 }}>
+          <input className="scout-input" placeholder="Heimteam manuell" value={manualGameForm.home} onChange={(event) => setManualGameForm((prev) => ({ ...prev, home: event.target.value }))} />
+          <input className="scout-input" placeholder="Auswärtsteam" value={manualGameForm.away} onChange={(event) => setManualGameForm((prev) => ({ ...prev, away: event.target.value }))} />
+          <input className="scout-input" type="date" value={manualGameForm.date} onChange={(event) => setManualGameForm((prev) => ({ ...prev, date: event.target.value }))} />
+          <input className="scout-input" type="time" value={manualGameForm.time} onChange={(event) => setManualGameForm((prev) => ({ ...prev, time: event.target.value }))} />
+          <input className="scout-input" placeholder="Spielort (optional)" value={manualGameForm.venue} onChange={(event) => setManualGameForm((prev) => ({ ...prev, venue: event.target.value }))} />
+        </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={onSubmitManualGame} style={{ ...btnLike, minHeight: 34 }}>
+            Spontanes Spiel hinzufügen
+          </button>
+          <label style={{ ...btnLike, minHeight: 34, display: "inline-flex", alignItems: "center", cursor: kreisPdfBusy ? "not-allowed" : "pointer" }}>
+            Kreisauswahl PDF hochladen
+            <input type="file" accept="application/pdf" onChange={onImportKreisPdfFile} disabled={kreisPdfBusy} style={{ display: "none" }} />
+          </label>
+        </div>
+        {gamesInfoMessage ? <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>{gamesInfoMessage}</div> : null}
       </div>
 
       {selectionConflicts.length > 0 ? (

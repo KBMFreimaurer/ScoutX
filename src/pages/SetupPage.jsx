@@ -6,6 +6,7 @@ import { DateFocusPanel } from "../components/DateFocusPanel";
 import { KreisSelector } from "../components/KreisSelector";
 import { StateSelector } from "../components/StateSelector";
 import { SectionHeader } from "../components/SectionHeader";
+import { getLeaguePresetsByState } from "../data/leaguePresets";
 import { useScoutX } from "../context/ScoutXContext";
 import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { C, card, inp, lbl, secH } from "../styles/theme";
@@ -96,6 +97,8 @@ export function SetupPage() {
     jugend,
     jugendSubLevels,
     availableJugendSubLevels,
+    selectedTeams,
+    teamDraft,
     fromDate,
     toDate,
     canBuild,
@@ -113,6 +116,12 @@ export function SetupPage() {
     onSelectJugend,
     onToggleJugendSubLevel,
     onClearJugendSubLevels,
+    onAddTeamField,
+    onUpdateTeamField,
+    onNormalizeTeamField,
+    onRemoveTeamField,
+    onSetTeamDraft,
+    onClearAllTeams,
     onSetFromDate,
     onSetToDate,
     onBuildAndGo,
@@ -122,6 +131,16 @@ export function SetupPage() {
     onClearLocation,
     onSetScoutName,
     onSetKmPauschale,
+    favorites,
+    favoriteDraft,
+    includeNationalGames,
+    includeTournaments,
+    onSetFavoriteDraft,
+    onAddFavoriteTeam,
+    onRemoveFavoriteTeam,
+    onClearFavoriteTeams,
+    onSetIncludeNationalGames,
+    onSetIncludeTournaments,
   } = useScoutX();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -145,6 +164,7 @@ export function SetupPage() {
     scoutName,
     kmPauschale,
   });
+  const leaguePresets = useMemo(() => getLeaguePresetsByState(selectedStateCode), [selectedStateCode]);
   const currentStepMeta = SETUP_STEPS[currentStep - 1];
   const nextStepMeta = SETUP_STEPS[currentStep] || null;
   const summaryParts = [
@@ -351,6 +371,173 @@ export function SetupPage() {
     </div>
   );
 
+  const renderLigaParameterCard = () => (
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ ...secH, marginBottom: 10 }}>
+        <span className="section-number">03b</span>
+        Liga-Parameter (optional)
+      </div>
+      <p style={{ fontSize: 12, color: C.gray, marginTop: 0 }}>
+        Definiere Ligen oder Suchbegriffe, die bei der Spielauswahl als Team-Parameter berücksichtigt werden.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          aria-label="Liga-Parameter hinzufügen"
+          className="scout-input"
+          value={teamDraft}
+          onChange={(event) => onSetTeamDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAddTeamField();
+              onNormalizeTeamField();
+            }
+          }}
+          placeholder="z. B. Niederrheinliga, Leistungsklasse, Bezirksliga"
+          style={{ ...inp, flex: 1, minWidth: 260 }}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            onAddTeamField();
+            onNormalizeTeamField();
+          }}
+          style={{ ...inp, width: "auto", minWidth: 132 }}
+        >
+          Liga hinzufügen
+        </button>
+      </div>
+      {leaguePresets.length > 0 ? (
+        <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {leaguePresets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => onAddTeamField(preset)}
+              style={{
+                border: `1px solid ${C.border}`,
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.03)",
+                color: C.grayLight,
+                cursor: "pointer",
+                padding: "5px 10px",
+                fontSize: 12,
+              }}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {Array.isArray(selectedTeams) && selectedTeams.length > 0 ? (
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          {selectedTeams.map((value, index) => (
+            <div key={`${value}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                aria-label={`Liga-Parameter ${index + 1}`}
+                className="scout-input"
+                value={value}
+                onChange={(event) => onUpdateTeamField(index, event.target.value)}
+                onBlur={() => onNormalizeTeamField()}
+                style={{ ...inp, flex: 1 }}
+              />
+              <button
+                type="button"
+                aria-label={`Liga-Parameter ${index + 1} entfernen`}
+                onClick={() => onRemoveTeamField(index)}
+                style={{ ...inp, width: "auto" }}
+              >
+                Entfernen
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            aria-label="Alle Liga-Parameter entfernen"
+            onClick={onClearAllTeams}
+            style={{
+              marginTop: 2,
+              border: "none",
+              background: "transparent",
+              color: C.gray,
+              cursor: "pointer",
+              padding: 0,
+              textDecoration: "underline",
+              textAlign: "left",
+              fontSize: 12,
+            }}
+          >
+            Alle Liga-Parameter entfernen
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginTop: 8, fontSize: 12, color: C.gray }}>
+          Noch keine Liga-Parameter gesetzt.
+        </div>
+      )}
+    </div>
+  );
+
+  const renderFavoritesCard = () => (
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ ...secH, marginBottom: 10 }}>
+        <span className="section-number">03c</span>
+        Lieblingsvereine (optional)
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          aria-label="Lieblingsverein hinzufügen"
+          className="scout-input"
+          value={favoriteDraft}
+          onChange={(event) => onSetFavoriteDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAddFavoriteTeam();
+            }
+          }}
+          placeholder="z. B. Borussia Mönchengladbach U17"
+          style={{ ...inp, flex: 1, minWidth: 260 }}
+        />
+        <button type="button" onClick={() => onAddFavoriteTeam()} style={{ ...inp, width: "auto", minWidth: 132 }}>
+          Favorit +
+        </button>
+      </div>
+      {Array.isArray(favorites) && favorites.length > 0 ? (
+        <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {favorites.map((team, index) => (
+            <button key={`${team}-${index}`} type="button" onClick={() => onRemoveFavoriteTeam(index)} style={{ ...inp, width: "auto" }}>
+              {team} ×
+            </button>
+          ))}
+          <button type="button" onClick={onClearFavoriteTeams} style={{ ...inp, width: "auto" }}>
+            Alle entfernen
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderCompetitionSourceCard = () => (
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ ...secH, marginBottom: 10 }}>
+        <span className="section-number">03d</span>
+        Zusätzliche Wettbewerbe
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", color: C.grayLight, fontSize: 13 }}>
+          <input type="checkbox" checked={includeNationalGames} onChange={(event) => onSetIncludeNationalGames(event.target.checked)} />
+          Länderspiele (DFB.de) zusätzlich laden
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", color: C.grayLight, fontSize: 13 }}>
+          <input type="checkbox" checked={includeTournaments} onChange={(event) => onSetIncludeTournaments(event.target.checked)} />
+          Turniere zusätzlich laden
+        </label>
+      </div>
+    </div>
+  );
+
   const renderSummaryCard = () => (
     <div style={card}>
       <SectionHeader>Zusammenfassung</SectionHeader>
@@ -366,6 +553,12 @@ export function SetupPage() {
         <div className="setup-summary-item">
           <span className="setup-summary-label">Altersklasse</span>
           <span className="setup-summary-value">{jugend?.label || "Nicht gesetzt"}</span>
+        </div>
+        <div className="setup-summary-item">
+          <span className="setup-summary-label">Liga-Parameter</span>
+          <span className="setup-summary-value">
+            {Array.isArray(selectedTeams) && selectedTeams.length > 0 ? selectedTeams.join(", ") : "Keine gesetzt"}
+          </span>
         </div>
         <div className="setup-summary-item">
           <span className="setup-summary-label">Zeitraum</span>
@@ -402,17 +595,22 @@ export function SetupPage() {
         );
       case 3:
         return (
-          <AgeGroupSelector
-            jugendKlassen={JUGEND_KLASSEN}
-            jugendId={jugendId}
-            jugendIds={jugendIds}
-            onSelect={onSelectJugend}
-            jugend={jugend}
-            availableSubLevels={availableJugendSubLevels}
-            selectedSubLevels={jugendSubLevels}
-            onToggleSubLevel={onToggleJugendSubLevel}
-            onClearSubLevels={onClearJugendSubLevels}
-          />
+          <>
+            <AgeGroupSelector
+              jugendKlassen={JUGEND_KLASSEN}
+              jugendId={jugendId}
+              jugendIds={jugendIds}
+              onSelect={onSelectJugend}
+              jugend={jugend}
+              availableSubLevels={availableJugendSubLevels}
+              selectedSubLevels={jugendSubLevels}
+              onToggleSubLevel={onToggleJugendSubLevel}
+              onClearSubLevels={onClearJugendSubLevels}
+            />
+            {renderLigaParameterCard()}
+            {renderFavoritesCard()}
+            {renderCompetitionSourceCard()}
+          </>
         );
       case 4:
         return <DateFocusPanel fromDate={fromDate} toDate={toDate} onFromDate={onSetFromDate} onToDate={onSetToDate} />;

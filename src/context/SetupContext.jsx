@@ -216,6 +216,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [resolvingLocation, setResolvingLocation] = useState(false);
   const [favoriteTeams, setFavoriteTeams] = useState(() => normalizeTeamParameters(setupDefaults.favorites));
   const [favoriteDraft, setFavoriteDraft] = useState("");
+  const [includeNationalGames, setIncludeNationalGames] = useState(false);
+  const [includeTournaments, setIncludeTournaments] = useState(false);
   const [err, setErr] = useState("");
   const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => ({ scoutName: "", kmPauschale: 0.3 }));
 
@@ -534,6 +536,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setResolvingLocation(false);
     setFavoriteTeams([]);
     setFavoriteDraft("");
+    setIncludeNationalGames(false);
+    setIncludeTournaments(false);
     setAbrechnungMetaRaw({ scoutName: "", kmPauschale: 0.3 });
     try {
       window.localStorage.removeItem(STORAGE_KEYS.abrechnungMeta);
@@ -579,6 +583,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       kmPauschale: abrechnungMeta.kmPauschale,
       favorites,
       favoriteDraft,
+      includeNationalGames,
+      includeTournaments,
       canBuild,
       err,
       setErr,
@@ -612,6 +618,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onAddFavoriteTeam,
       onRemoveFavoriteTeam,
       onClearFavoriteTeams,
+      onSetIncludeNationalGames: (value) => setIncludeNationalGames(Boolean(value)),
+      onSetIncludeTournaments: (value) => setIncludeTournaments(Boolean(value)),
       resetSetupState,
     }),
     [
@@ -646,6 +654,8 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       abrechnungMeta,
       favorites,
       favoriteDraft,
+      includeNationalGames,
+      includeTournaments,
       canBuild,
       err,
       clearErr,

@@ -101,6 +101,21 @@ describe("SetupPage", () => {
     expect(screen.queryByRole("button", { name: /Vereinsfeld hinzuf/i })).not.toBeInTheDocument();
   });
 
+  it("zeigt Liga-Parameter im Setup-Wizard und erlaubt Hinzufügen", () => {
+    renderSetupPage();
+    selectNrwState();
+    fireEvent.click(screen.getAllByRole("button", { name: /Region\/Kreis .* auswählen/i })[0]);
+    clickNextStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /D-Jugend auswählen/i }));
+    const ligaInput = screen.getByLabelText(/Liga-Parameter hinzufügen/i);
+    fireEvent.change(ligaInput, { target: { value: "Niederrheinliga" } });
+    fireEvent.click(screen.getByRole("button", { name: /Liga hinzufügen/i }));
+
+    const parameterInputs = screen.getAllByLabelText(/Liga-Parameter 1/i).filter((node) => node.tagName === "INPUT");
+    expect(parameterInputs[0]).toHaveValue("Niederrheinliga");
+  });
+
   it("zeigt die Bundesland-Auswahl mit 16 Bundesländern", () => {
     renderSetupPage();
 

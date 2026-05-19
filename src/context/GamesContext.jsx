@@ -236,6 +236,29 @@ function ensureGameIds(games) {
   });
 }
 
+function normalizeManualGameInput(input, fallbackKreisId, fallbackJugendId) {
+  const home = String(input?.home || "").trim();
+  const away = String(input?.away || "").trim();
+  if (!home || !away) {
+    return null;
+  }
+  const date = toIsoDate(input?.date) || toIsoDate(new Date()) || "1970-01-01";
+  const timeText = String(input?.time || "--:--").trim();
+  return {
+    id: String(input?.id || `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    home,
+    away,
+    date,
+    time: KNOWN_TIME_RE.test(timeText) ? timeText : "--:--",
+    venue: String(input?.venue || "K/A").trim() || "K/A",
+    kreisId: String(input?.kreisId || fallbackKreisId || "").trim(),
+    jugendId: String(input?.jugendId || fallbackJugendId || "").trim(),
+    source: "manual",
+    priority: Number(input?.priority || 3),
+    note: String(input?.note || "").trim(),
+  };
+}
+
 function readSelectedGameIds() {
   if (typeof window === "undefined") {
     return {};
@@ -555,6 +578,8 @@ export function GamesProvider({ children }) {
     toDate,
     activeTeams,
     favorites,
+    includeNationalGames,
+    includeTournaments,
     adapterEndpoint,
     adapterToken,
     startLocation,
@@ -724,6 +749,26 @@ export function GamesProvider({ children }) {
     );
   }, []);
 
+  const onAppendManualGame = useCallback(
+    (input) => {
+      const normalized = normalizeManualGameInput(input, kreisId, jugendId);
+      if (!normalized) {
+        return false;
+      }
+      setGames((prev) => ensureGameIds(withNotes([...prev, normalized], gameNotesRef.current)));
+      return true;
+    },
+    [kreisId, jugendId],
+  );
+
+  const onMergeExternalGames = useCallback((externalGames) => {
+    const safeGames = Array.isArray(externalGames) ? externalGames : [];
+    if (safeGames.length === 0) {
+      return;
+    }
+    setGames((prev) => ensureGameIds(withNotes(mergeGamesAcrossKreise([prev, safeGames]), gameNotesRef.current)));
+  }, []);
+
   const onBuildAndGo = useCallback(async () => {
     const requestedKreise = normalizeRequestedKreise(kreisIds, kreisId);
     if (requestedKreise.length === 0) {
@@ -778,6 +823,8 @@ export function GamesProvider({ children }) {
               adapterEndpoint,
               adapterToken,
               turnier: false,
+              includeNationalGames,
+              includeTournaments,
             });
             return {
               ...result,
@@ -906,6 +953,8 @@ export function GamesProvider({ children }) {
     setErr,
     setTeamValidation,
     selectedStateCode,
+    includeNationalGames,
+    includeTournaments,
     navigate,
   ]);
 
@@ -930,6 +979,8 @@ export function GamesProvider({ children }) {
       onSelectAllPlannedGames,
       onClearPlannedGames,
       onRestorePlannedGames,
+      onAppendManualGame,
+      onMergeExternalGames,
     }),
     [
       games,
@@ -949,6 +1000,8 @@ export function GamesProvider({ children }) {
       onSelectAllPlannedGames,
       onClearPlannedGames,
       onRestorePlannedGames,
+      onAppendManualGame,
+      onMergeExternalGames,
     ],
   );
 

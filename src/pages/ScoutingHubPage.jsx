@@ -309,6 +309,7 @@ export function ScoutingHubPage() {
   const [teamRegisterKey, setTeamRegisterKey] = useState(REGISTRATION_TEAMS[0].key);
   const [teamAuthMode, setTeamAuthMode] = useState("login");
   const [teamLoginBusy, setTeamLoginBusy] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [observationNoteDrafts, setObservationNoteDrafts] = useState({});
   const [notificationStatusFilter, setNotificationStatusFilter] = useState("unread");
   const [notificationTypeFilter, setNotificationTypeFilter] = useState("");
@@ -837,19 +838,51 @@ export function ScoutingHubPage() {
               ))}
             </select>
           </label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <GhostButton type="button" onClick={() => setTeamAuthMode("login")} style={{ minHeight: 34, opacity: teamAuthMode === "login" ? 1 : 0.7 }}>
-              Login
-            </GhostButton>
-            <GhostButton type="button" onClick={() => setTeamAuthMode("register")} style={{ minHeight: 34, opacity: teamAuthMode === "register" ? 1 : 0.7 }}>
-              Registrieren
-            </GhostButton>
-            {teamBackendState.status === "connected" ? (
-              <GhostButton type="button" onClick={onLogoutTeamBackend} style={{ minHeight: 34, marginLeft: "auto" }}>
-                Logout
+          {teamBackendState.status === "connected" ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", position: "relative" }}>
+              <GhostButton type="button" onClick={() => setProfileMenuOpen((current) => !current)} style={{ minHeight: 34 }}>
+                Profil
               </GhostButton>
-            ) : null}
-          </div>
+              {profileMenuOpen ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: 38,
+                    minWidth: 180,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    background: "rgba(14,18,30,0.98)",
+                    padding: 6,
+                    zIndex: 6,
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      onLogoutTeamBackend();
+                    }}
+                    style={{ ...FIELD_STYLE, textAlign: "left", cursor: "pointer" }}
+                  >
+                    Ausloggen
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              <GhostButton type="button" onClick={() => setTeamAuthMode("login")} style={{ minHeight: 34, opacity: teamAuthMode === "login" ? 1 : 0.7 }}>
+                Login
+              </GhostButton>
+              <GhostButton type="button" onClick={() => setTeamAuthMode("register")} style={{ minHeight: 34, opacity: teamAuthMode === "register" ? 1 : 0.7 }}>
+                Registrieren
+              </GhostButton>
+            </div>
+          )}
+          {teamBackendState.status === "connected" ? null : (
           <form onSubmit={submitTeamBackendLogin} style={{ display: "grid", gap: 6, gridTemplateColumns: "minmax(0,1fr) auto" }}>
             <input
               type="text"
@@ -904,6 +937,7 @@ export function ScoutingHubPage() {
               {teamLoginBusy ? "..." : teamAuthMode === "register" ? "Account erstellen" : "Anmelden"}
             </GhostButton>
           </form>
+          )}
           <Chip tone={teamBackendState.status === "connected" ? "green" : "warn"}>
             {teamBackendState.status === "connected" ? "Backend verbunden" : "Backend lokal"}
           </Chip>
