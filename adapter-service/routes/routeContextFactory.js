@@ -9,6 +9,8 @@ export function createTeamRouteBaseContext(input) {
     readBody: input.readBody,
     sendJson: input.sendJson,
     persistTeamState: input.persistTeamState,
+    applyTeamStateMutation: input.applyTeamStateMutation,
+    runTeamWriteIdempotent: input.runTeamWriteIdempotent,
     findAccount: input.findAccount,
     createTeamSessionForAccount: input.createTeamSessionForAccount,
     createSessionCookie: input.createSessionCookie,

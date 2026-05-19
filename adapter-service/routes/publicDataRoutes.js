@@ -94,6 +94,11 @@ export async function handlePublicDataRoutes(req, res, routeContext) {
     } catch (error) {
       requestLogger.error("games request failed", { error });
       const message = String(error?.message || "Ungültige Anfrage.");
+      const explicitStatus = Number(error?.statusCode || error?.status || 0);
+      if (explicitStatus >= 400) {
+        sendJson(res, explicitStatus, { ok: false, error: message }, origin, requestId);
+        return true;
+      }
       const isClientError =
         message.includes("muss") ||
         message.includes("Ungültig") ||

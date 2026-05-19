@@ -31,6 +31,12 @@ export function buildHrworksImportCsv(payload) {
     departureLocation: String(normalized.departureLocation || ""),
     destinationLocation: String(normalized.destinationLocation || ""),
     intermediateStops: Array.isArray(normalized.intermediateStops) ? normalized.intermediateStops.join(" | ") : "",
+    routeLegs: Array.isArray(normalized.routeLegs)
+      ? normalized.routeLegs
+          .map((leg) => `${String(leg?.from || "").trim()} -> ${String(leg?.to || "").trim()}`.trim())
+          .filter(Boolean)
+          .join(" | ")
+      : "",
     costCenter: String(normalized.costCenter || ""),
     sourceGames: Array.isArray(normalized.sourceGames)
       ? normalized.sourceGames.map((game) => `${game.home} vs ${game.away} (${game.venue || "-"})`).join(" | ")

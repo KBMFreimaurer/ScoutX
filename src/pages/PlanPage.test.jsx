@@ -192,6 +192,45 @@ describe("PlanPage", () => {
     expect(screen.getByRole("button", { name: /Import starten/i })).toBeDisabled();
   });
 
+  it("setzt Zweck und Bemerkung auf Route-Text und erlaubt leeren Zielort", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        routeOverview: {
+          legs: [
+            { from: "Sternbuschweg 326", to: "Sportplatz A", distanceKm: 10.2 },
+            { from: "Sportplatz A", to: "Sternbuschweg 326", distanceKm: 10.1 },
+          ],
+          totalKm: 20.3,
+          estimatedMinutes: 31,
+        },
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+
+    expect(screen.getAllByText("Sichtung / Route des Arbeitstages").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Sternbuschweg 326 -> Sportplatz A \| Sportplatz A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/Zielort fehlt/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Import starten/i })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
+    expect(screen.getByRole("button", { name: /Import starten/i })).not.toBeDisabled();
+  });
+
   it("blockiert Importstart wenn Betriebsentscheidungen fehlen", () => {
     const setErr = vi.fn();
     mockedUseScoutX.mockReturnValue(
@@ -216,6 +255,7 @@ describe("PlanPage", () => {
 
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
     fireEvent.click(screen.getByRole("button", { name: /Import starten/i }));
 
     expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));

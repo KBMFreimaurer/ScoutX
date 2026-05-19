@@ -17,6 +17,18 @@ describe("hrworksAutomationRuntime", () => {
     expect(loginIndex).toBeGreaterThan(openIndex);
   });
 
+  it("contains route-day flow steps after form fill", () => {
+    const fillIndex = HRWORKS_AUTOMATION_STEPS.indexOf("fill_form");
+    const saveWithoutDestinationIndex = HRWORKS_AUTOMATION_STEPS.indexOf("save_without_destination");
+    const saveKmIndex = HRWORKS_AUTOMATION_STEPS.indexOf("save_kilometers");
+    const processRouteIndex = HRWORKS_AUTOMATION_STEPS.indexOf("process_route");
+    const completeReportsIndex = HRWORKS_AUTOMATION_STEPS.indexOf("complete_reports");
+    expect(saveWithoutDestinationIndex).toBeGreaterThan(fillIndex);
+    expect(saveKmIndex).toBeGreaterThan(saveWithoutDestinationIndex);
+    expect(processRouteIndex).toBeGreaterThan(saveKmIndex);
+    expect(completeReportsIndex).toBeGreaterThan(processRouteIndex);
+  });
+
   it("blocks run when prerequisites are missing", () => {
     const result = canProceedAutomation({
       isReachable: false,

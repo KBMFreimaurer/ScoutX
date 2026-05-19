@@ -37,13 +37,25 @@ export function markNotificationsRead(notifications, ids, normalizeEventId) {
   return { notifications: nextNotifications, updatedCount };
 }
 
-export function applyPushAck(teamPushOutbox, pushedCriticalEventIds, ids) {
+export function applyPushAck(teamPushOutbox, pushedCriticalEventIds, ids, teamId = "") {
+  const normalizedTeamId = String(teamId || "").trim();
   let removedCount = 0;
   for (const id of Array.isArray(ids) ? ids : []) {
-    if (teamPushOutbox.delete(id)) {
+    const eventId = String(id || "").trim();
+    if (!eventId) {
+      continue;
+    }
+    const outboxEvent = teamPushOutbox.get(eventId);
+    if (!outboxEvent) {
+      continue;
+    }
+    if (normalizedTeamId && String(outboxEvent?.teamId || "").trim() !== normalizedTeamId) {
+      continue;
+    }
+    if (teamPushOutbox.delete(eventId)) {
       removedCount += 1;
     }
-    pushedCriticalEventIds.add(id);
+    pushedCriticalEventIds.add(eventId);
   }
   return { removedCount };
 }

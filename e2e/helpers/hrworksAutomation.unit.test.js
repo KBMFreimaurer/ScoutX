@@ -45,6 +45,12 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     departureLocationSelect: { value: "", forcedValue: forcedValues.departureLocationSelect },
     destinationLocationSelect: { value: "", forcedValue: forcedValues.destinationLocationSelect },
     costCenterSelect: { value: "", forcedValue: forcedValues.costCenterSelect },
+    kilometersInput: { value: "" },
+    saveKilometersButton: { clicked: false },
+    processRouteButton: { clicked: false },
+    reportsButton: { clicked: false },
+    completeReportsButton: { clicked: false },
+    routeTextarea: { value: "" },
     saveButton: { clicked: false },
     travelExpenseButton: { clicked: false },
     newTravelExpenseButton: { clicked: false },
@@ -63,7 +69,13 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     "input[name='departureLocation']": "departureLocationSelect",
     "input[name='destinationLocation']": "destinationLocationSelect",
     "input[name='costCenter']": "costCenterSelect",
+    "input[name='kilometers']": "kilometersInput",
     "button:has-text('Speichern')": "saveButton",
+    "button:has-text('Kilometer speichern')": "saveKilometersButton",
+    "button:has-text('Route abarbeiten')": "processRouteButton",
+    "button:has-text('Berichte')": "reportsButton",
+    "button:has-text('Abschließen')": "completeReportsButton",
+    "textarea[name='route']": "routeTextarea",
   };
 
   return {
@@ -92,6 +104,8 @@ const payload = {
   departureLocation: "Start",
   destinationLocation: "Ziel",
   costCenter: "Junioren allgemein (321000)",
+  kilometers: "143",
+  intermediateStops: ["Home -> Platz A", "Platz A -> Home"],
 };
 
 describe("hrworksAutomation", () => {
@@ -117,6 +131,25 @@ describe("hrworksAutomation", () => {
     const result = await fillHrworksTravelExpenseForm(page, payload, { confirmBeforeSave: true });
     expect(result.saved).toBe(true);
     expect(page.fields.saveButton.clicked).toBe(true);
+  });
+
+  it("supports save without destination location", async () => {
+    const page = createMockPage();
+    const result = await fillHrworksTravelExpenseForm(page, { ...payload, destinationLocation: "" }, { confirmBeforeSave: true });
+    expect(result.saved).toBe(true);
+    expect(page.fields.destinationLocationSelect.value).toBe("");
+  });
+
+  it("runs kilometer, route and reports flow after save", async () => {
+    const page = createMockPage();
+    const result = await fillHrworksTravelExpenseForm(page, payload, { confirmBeforeSave: true, runRouteFlow: true });
+    expect(result.routeFlowCompleted).toBe(true);
+    expect(page.fields.kilometersInput.value).toBe("143");
+    expect(page.fields.saveKilometersButton.clicked).toBe(true);
+    expect(page.fields.processRouteButton.clicked).toBe(true);
+    expect(page.fields.reportsButton.clicked).toBe(true);
+    expect(page.fields.completeReportsButton.clicked).toBe(true);
+    expect(page.fields.routeTextarea.value).toBe("Home -> Platz A | Platz A -> Home");
   });
 
   it("aborts when save selector is missing despite save confirmation", async () => {

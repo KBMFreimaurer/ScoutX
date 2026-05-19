@@ -11,6 +11,7 @@ describe("hrworksPolicy", () => {
     const policy = getDefaultHrworksPolicy();
     expect(policy.defaultCostCenter).toMatch(/321000/);
     expect(policy.requiredFields.purpose).toBe(true);
+    expect(policy.requiredFields.destinationLocation).toBe(false);
     expect(policy.requireSaveConfirmation).toBe(true);
     expect(policy.allowDebugScreenshots).toBe(false);
   });

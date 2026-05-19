@@ -18,7 +18,7 @@ import {
   validateHrworksImportPayload,
 } from "../services/hrworksImport";
 import { exportHrworksImportCsv } from "../services/hrworksCsvExport";
-import { parseHrworksTimesheetText, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
+import { parseHrworksTimesheetFile, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
 import { exportHrworksAuditLog } from "../services/hrworksAuditExport";
 import {
   advanceAutomationStep,
@@ -42,6 +42,23 @@ import { C } from "../styles/theme";
 import { normalizePresenceMinutes } from "../utils/arbeitszeit";
 import { downloadCalendarIcs } from "../utils/calendar";
 import { formatDistanceKm } from "../utils/geo";
+
+const HRWORKS_STEP_LABELS = {
+  open_hrworks: "HRworks öffnen",
+  wait_for_login: "Login prüfen",
+  open_travel_management: "Reisemanagement öffnen",
+  open_new_expense: "Neue Reisekostenanlage öffnen",
+  fill_form: "Formular vorbefüllen",
+  save_without_destination: "Daten vorbereiten",
+  save_kilometers: "Kilometer erfassen",
+  process_route: "Route verarbeiten",
+  complete_reports: "Prüfungen abschließen",
+  review_prefill: "Vorbefüllung prüfen",
+  confirm_save: "Speicherung bestätigen",
+  save: "Speichern",
+  done: "Abgeschlossen",
+};
+const HRWORKS_SMART_DEFAULTS_KEY = "scoutx.hrworksSmartDefaults.v1";
 
 function normalizePresenceMap(rawValue) {
   const source = rawValue && typeof rawValue === "object" ? rawValue : {};
@@ -86,6 +103,43 @@ function confirmAction(message) {
   } catch {
     return true;
   }
+}
+
+function pickDateFromOptions(options) {
+  const values = Array.isArray(options) ? options.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (values.length <= 1 || typeof window === "undefined" || typeof window.prompt !== "function") {
+    return values[0] || "";
+  }
+  const selection = window.prompt(
+    [
+      "Mehrere Arbeitstage erkannt. Bitte Datum für den Import wählen (YYYY-MM-DD):",
+      values.join(", "),
+    ].join("\n"),
+    values[0],
+  );
+  const normalized = String(selection || "").trim();
+  return values.includes(normalized) ? normalized : values[0];
+}
+
+function readHrworksSmartDefaults() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(HRWORKS_SMART_DEFAULTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeHrworksSmartDefaults(nextValue) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const safeValue = nextValue && typeof nextValue === "object" ? nextValue : {};
+  window.localStorage.setItem(HRWORKS_SMART_DEFAULTS_KEY, JSON.stringify(safeValue));
 }
 
 export function PlanPage() {
@@ -152,6 +206,7 @@ export function PlanPage() {
   const [hrworksSelectorMapping, setHrworksSelectorMapping] = useState(() => readHrworksSelectorMapping());
   const [hrworksPolicy, setHrworksPolicy] = useState(() => readHrworksPolicy());
   const [hrworksDebugScreenshotConsent, setHrworksDebugScreenshotConsent] = useState(false);
+  const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
@@ -197,6 +252,10 @@ export function PlanPage() {
   const displayJugendLabel = String(activeHistoryMeta?.jugendLabel || jugend?.label || "").trim();
   const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreisLabel || kreis?.label || "").trim();
   const effectiveScoutName = String(activeHistoryMeta?.scoutName || scoutName || "").trim();
+  const hrworksSmartDefaults = readHrworksSmartDefaults();
+  const scoutDefaults = hrworksSmartDefaults[effectiveScoutName] && typeof hrworksSmartDefaults[effectiveScoutName] === "object"
+    ? hrworksSmartDefaults[effectiveScoutName]
+    : {};
   const effectiveKmPauschale = Number(activeHistoryMeta?.kmPauschale);
   const scopedHrworksLog = useMemo(() => {
     const activePlanId = String(activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`).trim();
@@ -289,13 +348,43 @@ export function PlanPage() {
 
   const handleOpenHrworksReview = () => {
     const importLog = readHrworksImportLog();
+    const routePurpose = "Sichtung / Route des Arbeitstages";
+    const routeLegs = Array.isArray(routeOverview?.legs)
+      ? routeOverview.legs
+          .map((leg, index) => {
+            const from = String(leg?.from || "").trim();
+            const to = String(leg?.to || "").trim();
+            if (!from || !to) {
+              return null;
+            }
+            return {
+              id: `leg-${index}`,
+              from,
+              to,
+              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
+              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
+            };
+          })
+          .filter(Boolean)
+      : [];
+    const routeLabels = routeLegs.map((leg) => `${leg.from} -> ${leg.to}`);
     const payload = buildHrworksImportPayload({
       planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName: effectiveScoutName,
       games: activeGames,
-      startLocation: String(startLocation?.label || cfg?.startLocationLabel || ""),
-      costCenter: String(activeHistoryMeta?.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      purpose: routePurpose,
+      note: routePurpose,
+      intermediateStops: routeLabels,
+      routeLegs,
     });
+    payload.importSource = "plan";
+    payload.destinationLocation = "";
+    payload.note = String(payload.purpose || routePurpose).trim();
+    if (!String(payload.purpose || "").trim()) {
+      payload.purpose = routePurpose;
+    }
     const validation = validateHrworksImportPayload(payload, importLog, {
       requiredFields: hrworksPolicy.requiredFields,
     });
@@ -306,6 +395,7 @@ export function PlanPage() {
 
     setHrworksPayload(payload);
     setHrworksValidation({ errors: validation.errors, warnings });
+    setHrworksLoginConfirmed(false);
     setHrworksReviewOpen(true);
   };
 
@@ -324,6 +414,7 @@ export function PlanPage() {
         endTime: hrworksPayload?.endTime,
         purpose: hrworksPayload?.purpose,
         hrworksStatus: "needs_review",
+        sourceType: String(hrworksPayload?.importSource || "plan"),
         executedBy: hrworksPayload?.employeeName,
         technicalResult: "Import blockiert: fehlende Betriebsentscheidungen.",
         errorMessage: missingHrworksDecisions.join(" "),
@@ -343,6 +434,7 @@ export function PlanPage() {
           endTime: hrworksPayload.endTime,
           purpose: hrworksPayload.purpose,
           hrworksStatus: "skipped",
+          sourceType: String(hrworksPayload.importSource || "plan"),
           executedBy: hrworksPayload.employeeName,
           technicalResult: "Re-Import vom Nutzer abgebrochen.",
         });
@@ -353,7 +445,7 @@ export function PlanPage() {
     const mappingValidation = validateHrworksSelectorMapping(hrworksSelectorMapping);
     const preflight = canProceedAutomation({
       isReachable: true,
-      isLoggedIn: true,
+      isLoggedIn: hrworksLoginConfirmed === true,
       mappingReady: mappingValidation.ok,
       requireSaveConfirmation: hrworksPolicy.requireSaveConfirmation === true,
     });
@@ -365,6 +457,7 @@ export function PlanPage() {
         endTime: hrworksPayload.endTime,
         purpose: hrworksPayload.purpose,
         hrworksStatus: "failed",
+        sourceType: String(hrworksPayload.importSource || "plan"),
         executedBy: hrworksPayload.employeeName,
         technicalResult: "Automation-Preflight fehlgeschlagen.",
         errorMessage: preflight.failures.map((failure) => failure.message).join(" | "),
@@ -375,7 +468,7 @@ export function PlanPage() {
     }
 
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
-    const sessionRunning = advanceAutomationStep(sessionCreated, "review_prefill");
+    const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
 
     appendHrworksImportLog({
@@ -385,12 +478,14 @@ export function PlanPage() {
       endTime: hrworksPayload.endTime,
       purpose: hrworksPayload.purpose,
       hrworksStatus: "ready",
+      sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
-      technicalResult: `Review bestätigt; Runtime-Session ${sessionRunning?.id || "n/a"} gestartet.`,
+      technicalResult: "Review bestätigt; Runtime gestartet.",
     });
     setHrworksImportLog(readHrworksImportLog());
 
     setHrworksReviewOpen(false);
+    setHrworksLoginConfirmed(false);
     setErr("HRworks-Runtime gestartet. Bitte Login und finale Bestätigung im Browser durchführen.");
   };
 
@@ -408,6 +503,7 @@ export function PlanPage() {
         endTime: hrworksPayload.endTime,
         purpose: hrworksPayload.purpose,
         hrworksStatus: "failed",
+        sourceType: String(hrworksPayload.importSource || "plan"),
         executedBy: hrworksPayload.employeeName,
         technicalResult: "CSV-Export fehlgeschlagen.",
         errorMessage: String(error?.message || error || "Unbekannter Exportfehler"),
@@ -422,11 +518,13 @@ export function PlanPage() {
       endTime: hrworksPayload.endTime,
       purpose: hrworksPayload.purpose,
       hrworksStatus: "needs_review",
+      sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
       technicalResult: "Nur Exportdatei erstellt (Import nicht gestartet).",
     });
     setHrworksImportLog(readHrworksImportLog());
     setHrworksReviewOpen(false);
+    setHrworksLoginConfirmed(false);
     setErr("Exportmodus gewählt: Bitte Exportdatei an HRworks-Importprozess übergeben.");
   };
 
@@ -441,11 +539,13 @@ export function PlanPage() {
       endTime: hrworksPayload.endTime,
       purpose: hrworksPayload.purpose,
       hrworksStatus: "needs_review",
+      sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
       technicalResult: "Testlauf ohne Speichern bestätigt.",
     });
     setHrworksImportLog(readHrworksImportLog());
     setHrworksReviewOpen(false);
+    setHrworksLoginConfirmed(false);
     setErr("HRworks-Testlauf markiert. Produktives Speichern wurde nicht ausgelöst.");
   };
 
@@ -462,6 +562,7 @@ export function PlanPage() {
       endTime: hrworksPayload?.endTime,
       purpose: hrworksPayload?.purpose,
       hrworksStatus: "failed",
+      sourceType: String(hrworksPayload?.importSource || "plan"),
       executedBy: hrworksPayload?.employeeName,
       technicalResult: "Runtime-Session fehlgeschlagen.",
       errorMessage: message,
@@ -486,12 +587,32 @@ export function PlanPage() {
       endTime: hrworksPayload?.endTime,
       purpose: hrworksPayload?.purpose,
       hrworksStatus: "imported",
+      sourceType: String(hrworksPayload?.importSource || "plan"),
       executedBy: hrworksPayload?.employeeName,
       technicalResult: `Runtime-Session ${doneSession?.id || "n/a"} als importiert abgeschlossen.`,
       hrworksReference,
     });
     setHrworksImportLog(readHrworksImportLog());
     setErr("HRworks-Import als erfolgreich abgeschlossen markiert.");
+    if (effectiveScoutName) {
+      const nextDefaults = {
+        ...readHrworksSmartDefaults(),
+        [effectiveScoutName]: {
+          costCenter: String(hrworksPayload?.costCenter || ""),
+          startLocation: String(hrworksPayload?.departureLocation || ""),
+        },
+      };
+      writeHrworksSmartDefaults(nextDefaults);
+    }
+  };
+
+  const handleFinalizeRuntimeSession = () => {
+    const success = confirmAction("Konnte der Import in HRworks erfolgreich abgeschlossen werden?");
+    if (success) {
+      handleCompleteRuntimeSession();
+      return;
+    }
+    handleFailRuntimeSession("Nutzer meldet Abschlussproblem nach Runtime.");
   };
 
   const handlePickHrworksFile = () => {
@@ -512,9 +633,9 @@ export function PlanPage() {
       return;
     }
 
-    let fileText = "";
+    let parsed = null;
     try {
-      fileText = await file.text();
+      parsed = await parseHrworksTimesheetFile(file);
     } catch (error) {
       setErr(`Arbeitszeitdatei konnte nicht gelesen werden: ${String(error?.message || error || "Unbekannter Fehler")}`);
       return;
@@ -524,24 +645,58 @@ export function PlanPage() {
       }
     }
 
-    const parsed = parseHrworksTimesheetText(fileText);
     if (!Array.isArray(parsed.entries) || parsed.entries.length === 0) {
       setErr(parsed.warnings?.[0] || "Keine verwertbaren Arbeitszeitdaten gefunden.");
       return;
     }
 
-    const firstDate = parsed.entries[0].date;
-    const sameDateEntries = parsed.entries.filter((entry) => entry.date === firstDate);
+    const availableDates = Array.from(new Set(parsed.entries.map((entry) => String(entry?.date || "").trim()).filter(Boolean)));
+    const gameDates = Array.from(
+      new Set(
+        activeGames
+          .map((game) => {
+            const raw = game?.dateObj || game?.date;
+            const date = raw instanceof Date ? raw : new Date(raw);
+            return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+          })
+          .filter(Boolean),
+      ),
+    );
+    const autoSelectedDate = gameDates.find((date) => availableDates.includes(date)) || "";
+    let selectedDate = autoSelectedDate || "";
+    const hasMultipleDates = availableDates.length > 1;
+    if (!selectedDate) {
+      selectedDate = pickDateFromOptions(availableDates);
+    }
+    const sameDateEntries = parsed.entries.filter((entry) => entry.date === selectedDate);
     const totalHours = Number(sameDateEntries.reduce((acc, entry) => acc + Number(entry.workHours || 0), 0).toFixed(2));
     const startTime = sameDateEntries.map((entry) => String(entry.startTime || "")).sort()[0] || "";
     const endTime = sameDateEntries.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "";
-    const purpose = "Sichtung / Arbeitszeitimport";
-    const note = sameDateEntries.map((entry) => entry.note).filter(Boolean).join(" | ") || "Arbeitszeitimport aus Datei";
+    const purpose = "Sichtung / Route des Arbeitstages";
+    const note = purpose;
     const employeeName = sameDateEntries[0]?.employeeName || effectiveScoutName;
+    const routeLegs = Array.isArray(routeOverview?.legs)
+      ? routeOverview.legs
+          .map((leg, index) => {
+            const from = String(leg?.from || "").trim();
+            const to = String(leg?.to || "").trim();
+            if (!from || !to) {
+              return null;
+            }
+            return {
+              id: `leg-${index}`,
+              from,
+              to,
+              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
+              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
+            };
+          })
+          .filter(Boolean)
+      : [];
     const payload = {
-      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}-${firstDate}`,
+      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}-${selectedDate}`,
       employeeName,
-      date: firstDate,
+      date: selectedDate,
       startTime,
       endTime,
       breakStart: sameDateEntries[0]?.breakStart || "",
@@ -549,14 +704,16 @@ export function PlanPage() {
       workHours: totalHours,
       purpose,
       note,
-      departureLocation: String(startLocation?.label || cfg?.startLocationLabel || ""),
-      destinationLocation: String(sameDateEntries[0]?.note || activeGames[0]?.venue || ""),
-      intermediateStops: [],
-      costCenter: String(activeHistoryMeta?.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      departureLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      destinationLocation: "",
+      intermediateStops: routeLegs.map((leg) => `${leg.from} -> ${leg.to}`),
+      routeLegs,
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       travelExpenseRequired: true,
       receiptsRequired: false,
       sourceGames: activeGames,
       status: "draft",
+      importSource: "timesheet",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -566,8 +723,39 @@ export function PlanPage() {
       requiredFields: hrworksPolicy.requiredFields,
     });
     const warnings = [...(parsed.warnings || [])];
-    if (parsed.entries.some((entry) => entry.date !== firstDate)) {
-      warnings.push(`Datei enthält mehrere Tage; für den Import wurde ${firstDate} verwendet.`);
+    if (!String(payload.purpose || "").trim()) {
+      payload.purpose = purpose;
+      warnings.push("Zweck wurde automatisch ergänzt.");
+    }
+    if (!String(payload.note || "").trim()) {
+      payload.note = String(payload.purpose || purpose);
+      warnings.push("Bemerkung wurde automatisch ergänzt.");
+    }
+    if (parsed.entries.some((entry) => entry.date !== selectedDate)) {
+      warnings.push(`Datei enthält mehrere Tage; für den Import wurde ${selectedDate} verwendet.`);
+    }
+    if (hasMultipleDates) {
+      const runBatch = typeof window !== "undefined" && typeof window.confirm === "function"
+        ? window.confirm("Mehrere Tage erkannt. Batch-Vorbereitung für alle Tage in die Historie schreiben?")
+        : false;
+      if (runBatch) {
+        for (const date of availableDates) {
+          const entriesForDate = parsed.entries.filter((entry) => entry.date === date);
+          const dateHours = Number(entriesForDate.reduce((acc, entry) => acc + Number(entry.workHours || 0), 0).toFixed(2));
+          appendHrworksImportLog({
+            planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}-${date}`,
+            date,
+            startTime: entriesForDate.map((entry) => String(entry.startTime || "")).sort()[0] || "",
+            endTime: entriesForDate.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "",
+            purpose,
+            hrworksStatus: "needs_review",
+            sourceType: "timesheet",
+            executedBy: entriesForDate[0]?.employeeName || effectiveScoutName,
+            technicalResult: `Batch vorbereitet (${dateHours}h).`,
+          });
+        }
+        setHrworksImportLog(readHrworksImportLog());
+      }
     }
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
@@ -1079,9 +1267,15 @@ export function PlanPage() {
         payload={hrworksPayload}
         warnings={hrworksValidation.warnings}
         errors={hrworksValidation.errors}
-        onCancel={() => setHrworksReviewOpen(false)}
+        loginConfirmed={hrworksLoginConfirmed}
+        onLoginConfirmedChange={setHrworksLoginConfirmed}
+        onCancel={() => {
+          setHrworksReviewOpen(false);
+          setHrworksLoginConfirmed(false);
+        }}
         onEdit={() => {
           setHrworksReviewOpen(false);
+          setHrworksLoginConfirmed(false);
           setErr("Bitte Plan-/Abrechnungsdaten prüfen und anschließend erneut importieren.");
         }}
         onExportOnly={handleHrworksExportOnly}
@@ -1124,7 +1318,7 @@ export function PlanPage() {
         >
           <div style={{ fontSize: 12, color: C.offWhite, fontWeight: 700 }}>HRworks Runtime aktiv</div>
           <div style={{ fontSize: 12, color: C.gray, marginTop: 4 }}>
-            Session: {hrworksRuntimeSession.id} · Schritt: {hrworksRuntimeSession.currentStep}
+            Schritt: {HRWORKS_STEP_LABELS[hrworksRuntimeSession.currentStep] || "Import wird ausgeführt"}
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.grayLight }}>
             <input
@@ -1148,7 +1342,7 @@ export function PlanPage() {
           <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={handleCompleteRuntimeSession}
+              onClick={handleFinalizeRuntimeSession}
               style={{
                 fontSize: 11,
                 border: "none",
@@ -1159,22 +1353,7 @@ export function PlanPage() {
                 cursor: "pointer",
               }}
             >
-              Runtime als importiert markieren
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFailRuntimeSession("Manuell abgebrochen oder Save fehlgeschlagen.")}
-              style={{
-                fontSize: 11,
-                border: "none",
-                background: "transparent",
-                color: "#fca5a5",
-                textDecoration: "underline",
-                padding: 0,
-                cursor: "pointer",
-              }}
-            >
-              Runtime als fehlgeschlagen markieren
+              Import abschließen
             </button>
           </div>
         </div>
@@ -1241,6 +1420,9 @@ export function PlanPage() {
                 </div>
                 <div style={{ marginTop: 4, fontSize: 11, color: C.grayLight }}>
                   Status: <strong>{String(entry.hrworksStatus || "-")}</strong> · {String(entry.technicalResult || "-")}
+                </div>
+                <div style={{ marginTop: 2, fontSize: 11, color: C.gray }}>
+                  Quelle: {entry.sourceType === "timesheet" ? "Arbeitszeitdatei" : "Spielplan"}
                 </div>
                 {entry.hrworksReference ? (
                   <div style={{ marginTop: 4, fontSize: 11, color: C.gray }}>

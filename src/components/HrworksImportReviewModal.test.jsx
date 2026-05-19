@@ -9,6 +9,7 @@ describe("HrworksImportReviewModal", () => {
     const onConfirm = vi.fn();
     const onExportOnly = vi.fn();
     const onDryRun = vi.fn();
+    const onLoginConfirmedChange = vi.fn();
 
     render(
       <HrworksImportReviewModal
@@ -23,11 +24,14 @@ describe("HrworksImportReviewModal", () => {
           departureLocation: "Start",
           destinationLocation: "Ziel",
           intermediateStops: ["Stopp"],
+          routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
           costCenter: "321000",
           sourceGames: [{ home: "A", away: "B" }],
         }}
         warnings={[]}
         errors={["Fehler"]}
+        loginConfirmed={false}
+        onLoginConfirmedChange={onLoginConfirmedChange}
         onCancel={onCancel}
         onEdit={onEdit}
         onConfirm={onConfirm}
@@ -38,6 +42,7 @@ describe("HrworksImportReviewModal", () => {
 
     expect(screen.getByRole("dialog", { name: "HRworks-Import prüfen" })).toBeInTheDocument();
     expect(screen.getByText(/Fehler/)).toBeInTheDocument();
+    expect(screen.getByText(/Zuhause -> Spiel \| Spiel -> Zuhause/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import starten" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
@@ -50,5 +55,6 @@ describe("HrworksImportReviewModal", () => {
     expect(onExportOnly).toHaveBeenCalledTimes(1);
     expect(onDryRun).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(0);
+    expect(onLoginConfirmedChange).toHaveBeenCalledTimes(0);
   });
 });

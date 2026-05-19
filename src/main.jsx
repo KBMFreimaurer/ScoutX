@@ -5,8 +5,10 @@ import App from "./app";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isNativeCapacitorRuntime } from "./native/deepLinks";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
+import { bootstrapStorageRetention } from "./services/storageRetention";
 
 registerServiceWorker();
+bootstrapStorageRetention();
 
 function isIosNativeWebview() {
   if (typeof window === "undefined") {

@@ -48,10 +48,12 @@ Damit ist der Server nicht von einem lokal manuell gestarteten Adapter-Prozess a
 
 ## Google Maps
 
-- Der Google-API-Key ist zentral im Code hinterlegt (kein `.env`-Override, keine Runtime-Eingabe).
-- Optional kann nur der Strict-Mode konfiguriert werden:
+- Der Google-API-Key wird über `VITE_GOOGLE_MAPS_API_KEY` aus der Build-Umgebung gelesen.
+- Es gibt keine Runtime-Eingabe im UI; die Konfiguration erfolgt ausschließlich zur Build-Zeit.
+- Optional kann der Strict-Mode konfiguriert werden:
 
 ```bash
+VITE_GOOGLE_MAPS_API_KEY=dein_google_maps_api_key
 VITE_GOOGLE_MAPS_STRICT=false
 ```
 

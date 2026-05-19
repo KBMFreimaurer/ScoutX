@@ -1,11 +1,12 @@
 export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
+  const MAX_NATIONAL_IMPORT_GAMES = 500;
+  const MAX_KREIS_PDF_PREVIEW_GAMES = 1000;
   const {
     url,
     origin,
     requestId,
     clientIp,
     requestLogger,
-    state,
     nowIso,
     randomUUID,
     readBody,
@@ -13,7 +14,8 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
     sendJson,
     requireTeamSession,
     requireTeamWriteAllowed,
-    persistTeamState,
+    applyTeamStateMutation,
+    runTeamWriteIdempotent,
     normalizeAccountId,
     formatWizardDateForMeinturnierplan,
     toFilterKeywords,
@@ -189,7 +191,9 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
       return true;
     } catch (error) {
       requestLogger.warn("meinturnierplan import failed", { error });
-      sendJson(res, 502, { ok: false, error: "Turnierimport von meinturnierplan.de fehlgeschlagen." }, origin, requestId);
+      const statusCode = Number(error?.statusCode || 502);
+      const message = statusCode === 502 ? "Turnierimport von meinturnierplan.de fehlgeschlagen." : String(error?.message || "Turnierimport fehlgeschlagen.");
+      sendJson(res, statusCode, { ok: false, error: message }, origin, requestId);
       return true;
     }
   }
@@ -201,36 +205,38 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const name = String(payload?.name || payload?.title || "").trim();
-      if (!name) {
-        sendJson(res, 400, { ok: false, error: "Turniername ist erforderlich." }, origin, requestId);
-        return true;
-      }
-      const tournament = {
-        id: `tournament-${randomUUID()}`,
-        name,
-        source: "tournament",
-        dateFrom: String(payload?.dateFrom || "").trim(),
-        dateTo: String(payload?.dateTo || "").trim(),
-        venue: String(payload?.venue || "").trim(),
-        note: String(payload?.note || "").trim(),
-        createdBy: context.account.id,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        matches: [],
-      };
-      const tournaments = Array.isArray(state.team?.tournaments) ? state.team.tournaments : [];
-      const nextState = { ...state.team, tournaments: [tournament, ...tournaments] };
-      const persisted = await persistTeamState(nextState, requestLogger, "team-tournament-create");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Turnier konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { tournament } = await runTeamWriteIdempotent(req, context, "team-tournament-create", payload, async () => {
+        const name = String(payload?.name || payload?.title || "").trim();
+        if (!name) {
+          const validationError = new Error("Turniername ist erforderlich.");
+          validationError.statusCode = 400;
+          throw validationError;
+        }
+        const tournament = {
+          id: `tournament-${randomUUID()}`,
+          name,
+          source: "tournament",
+          dateFrom: String(payload?.dateFrom || "").trim(),
+          dateTo: String(payload?.dateTo || "").trim(),
+          venue: String(payload?.venue || "").trim(),
+          note: String(payload?.note || "").trim(),
+          createdBy: context.account.id,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          matches: [],
+        };
+        await applyTeamStateMutation(requestLogger, "team-tournament-create", (currentState) => {
+          const tournaments = Array.isArray(currentState?.tournaments) ? currentState.tournaments : [];
+          return { ...currentState, tournaments: [tournament, ...tournaments] };
+        });
+        return { tournament };
+      });
       sendJson(res, 201, { ok: true, tournament }, origin, requestId);
       return true;
     } catch (error) {
       requestLogger.warn("tournament create failed", { error });
-      sendJson(res, 400, { ok: false, error: "Turnier konnte nicht erstellt werden." }, origin, requestId);
+      const statusCode = Number(error?.statusCode || 400);
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Turnier konnte nicht erstellt werden.") }, origin, requestId);
       return true;
     }
   }
@@ -242,49 +248,64 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const providedGames = Array.isArray(payload?.games) ? payload.games : [];
-      const sourceGames = providedGames.length > 0 ? providedGames : await loadNationalGamesFromSource(payload);
-      const importedAt = nowIso();
-      const games = sourceGames
-        .map((game) => ({
-          id: normalizeAccountId(game?.id) || `national-${randomUUID()}`,
-          source: "national",
-          tournamentId: "",
-          home: String(game?.home || "").trim(),
-          away: String(game?.away || "").trim(),
-          date: String(game?.date || "").trim(),
-          time: String(game?.time || "").trim(),
-          venue: String(game?.venue || "").trim(),
-          status: String(game?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
-          note: String(game?.note || "").trim(),
-          createdBy: context.account.id,
-          createdAt: importedAt,
-          updatedAt: importedAt,
-          provenance: createGameProvenance({
+      const { games } = await runTeamWriteIdempotent(req, context, "team-import-national-games", payload, async () => {
+        const providedGames = Array.isArray(payload?.games) ? payload.games : [];
+        const sourceGames = providedGames.length > 0 ? providedGames : await loadNationalGamesFromSource(payload);
+        if (providedGames.length === 0 && sourceGames.length === 0) {
+          const error = new Error(
+            "Keine U-Nationalspiele gefunden. Bitte Spiele im Payload uebergeben oder eine DFB-Quelle konfigurieren.",
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        if (sourceGames.length > MAX_NATIONAL_IMPORT_GAMES) {
+          const error = new Error(
+            `Zu viele U-Nationalspiele im Import (${sourceGames.length}). Maximal ${MAX_NATIONAL_IMPORT_GAMES} pro Anfrage erlaubt.`,
+          );
+          error.statusCode = 413;
+          throw error;
+        }
+        const importedAt = nowIso();
+        const games = sourceGames
+          .map((game) => ({
+            id: normalizeAccountId(game?.id) || `national-${randomUUID()}`,
             source: "national",
-            method: "api-import",
-            provider: "dfb-national-games",
-            importedBy: context.account.id,
-            requestId,
-            ingestedAt: importedAt,
-          }),
-        }))
-        .filter((game) => game.home && game.away);
+            tournamentId: "",
+            home: String(game?.home || "").trim(),
+            away: String(game?.away || "").trim(),
+            date: String(game?.date || "").trim(),
+            time: String(game?.time || "").trim(),
+            venue: String(game?.venue || "").trim(),
+            status: String(game?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
+            note: String(game?.note || "").trim(),
+            createdBy: context.account.id,
+            createdAt: importedAt,
+            updatedAt: importedAt,
+            provenance: createGameProvenance({
+              source: "national",
+              method: "api-import",
+              provider: "dfb-national-games",
+              importedBy: context.account.id,
+              requestId,
+              ingestedAt: importedAt,
+            }),
+          }))
+          .filter((game) => game.home && game.away);
 
-      const existing = Array.isArray(state.team?.manualGames) ? state.team.manualGames : [];
-      const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
-      for (const game of games) byId.set(game.id, game);
-      const nextState = { ...state.team, manualGames: [...byId.values()] };
-      const persisted = await persistTeamState(nextState, requestLogger, "team-import-national-games");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Nationale Spiele konnten nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+        await applyTeamStateMutation(requestLogger, "team-import-national-games", (currentState) => {
+          const existing = Array.isArray(currentState?.manualGames) ? currentState.manualGames : [];
+          const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
+          for (const game of games) byId.set(game.id, game);
+          return { ...currentState, manualGames: [...byId.values()] };
+        });
+        return { games };
+      });
       sendJson(res, 200, { ok: true, importedCount: games.length, games }, origin, requestId);
       return true;
     } catch (error) {
       requestLogger.warn("national games import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Import der U-Nationalspiele fehlgeschlagen." }, origin, requestId);
+      const statusCode = Number(error?.statusCode || 400);
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Import der U-Nationalspiele fehlgeschlagen.") }, origin, requestId);
       return true;
     }
   }
@@ -334,6 +355,19 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
         if (games.length === 0 && multipartRawText) games = parseKreisPdfGamesFromText(multipartRawText);
         if (games.length === 0) {
           sendJson(res, 400, { ok: false, error: "Keine importierbaren Spiele im PDF-Text gefunden." }, origin, requestId);
+          return true;
+        }
+        if (games.length > MAX_KREIS_PDF_PREVIEW_GAMES) {
+          sendJson(
+            res,
+            413,
+            {
+              ok: false,
+              error: `Zu viele Spiele in der Kreis-PDF-Vorschau (${games.length}). Maximal ${MAX_KREIS_PDF_PREVIEW_GAMES} Spiele pro Upload erlaubt.`,
+            },
+            origin,
+            requestId,
+          );
           return true;
         }
         const previewToken = randomUUID();
@@ -394,35 +428,41 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
           return true;
         }
 
-        const importedAt = nowIso();
-        const games = (Array.isArray(preview.games) ? preview.games : []).map((game) => ({
-          ...game,
-          source: "manual",
-          createdBy: context.account.id,
-          createdAt: importedAt,
-          updatedAt: importedAt,
-          provenance: createGameProvenance({
-            source: "manual",
-            method: "pdf-import",
-            provider: "kreis-pdf",
-            importedBy: context.account.id,
-            requestId,
-            ingestedAt: importedAt,
-          }),
-        }));
-        const existing = Array.isArray(state.team?.manualGames) ? state.team.manualGames : [];
-        const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
-        for (const game of games) byId.set(String(game.id), game);
-        const nextState = { ...state.team, manualGames: [...byId.values()] };
-        const persisted = await persistTeamState(nextState, requestLogger, "team-import-kreis-pdf");
-        if (!persisted) {
-          sendJson(res, 500, { ok: false, error: "Kreis-PDF-Import konnte nicht gespeichert werden." }, origin, requestId);
-          return true;
-        }
-        teamKreisPdfPreviews.delete(previewToken);
-        if (runtimeDbEnabled) {
-          await deleteRuntimeKreisPdfPreview(previewToken, requestLogger);
-        }
+        const { games } = await runTeamWriteIdempotent(
+          req,
+          { account: { id: `kreis-preview:${previewToken}`, teamId: context.account.teamId } },
+          "team-import-kreis-pdf-confirm",
+          payload,
+          async () => {
+            const importedAt = nowIso();
+            const games = (Array.isArray(preview.games) ? preview.games : []).map((game) => ({
+              ...game,
+              source: "manual",
+              createdBy: context.account.id,
+              createdAt: importedAt,
+              updatedAt: importedAt,
+              provenance: createGameProvenance({
+                source: "manual",
+                method: "pdf-import",
+                provider: "kreis-pdf",
+                importedBy: context.account.id,
+                requestId,
+                ingestedAt: importedAt,
+              }),
+            }));
+            await applyTeamStateMutation(requestLogger, "team-import-kreis-pdf", (currentState) => {
+              const existing = Array.isArray(currentState?.manualGames) ? currentState.manualGames : [];
+              const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
+              for (const game of games) byId.set(String(game.id), game);
+              return { ...currentState, manualGames: [...byId.values()] };
+            });
+            teamKreisPdfPreviews.delete(previewToken);
+            if (runtimeDbEnabled) {
+              await deleteRuntimeKreisPdfPreview(previewToken, requestLogger);
+            }
+            return { games };
+          },
+        );
         sendJson(res, 200, { ok: true, importedCount: games.length, games }, origin, requestId);
         return true;
       }
@@ -431,7 +471,8 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
       return true;
     } catch (error) {
       requestLogger.warn("kreis pdf import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Kreis-PDF-Import fehlgeschlagen." }, origin, requestId);
+      const statusCode = Number(error?.statusCode || 400);
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Kreis-PDF-Import fehlgeschlagen.") }, origin, requestId);
       return true;
     }
   }
@@ -451,68 +492,78 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
         return true;
       }
 
-      const tournaments = Array.isArray(state.team?.tournaments) ? state.team.tournaments : [];
-      const index = tournaments.findIndex((item) => item?.id === tournamentId);
-      if (index < 0) {
-        sendJson(res, 404, { ok: false, error: "Turnier wurde nicht gefunden." }, origin, requestId);
-        return true;
-      }
+      const { mutationResult, nextMatches } = await runTeamWriteIdempotent(
+        req,
+        context,
+        `team-tournament-matches:${tournamentId}`,
+        payload,
+        async () => {
+          const createdAt = nowIso();
+          const nextMatches = matchesInput
+            .map((match) => ({
+              id: `tournament-match-${randomUUID()}`,
+              source: "tournament",
+              tournamentId,
+              home: String(match?.home || "").trim(),
+              away: String(match?.away || "").trim(),
+              date: String(match?.date || "").trim(),
+              time: String(match?.time || "").trim(),
+              venue: String(match?.venue || "").trim(),
+              status: String(match?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
+              note: String(match?.note || "").trim(),
+              createdBy: context.account.id,
+              createdAt,
+              updatedAt: createdAt,
+              provenance: createGameProvenance({
+                source: "tournament",
+                method: "tournament-match-import",
+                provider: "team-tournament",
+                importedBy: context.account.id,
+                requestId,
+                ingestedAt: createdAt,
+              }),
+            }))
+            .filter((match) => match.home && match.away);
+          if (nextMatches.length === 0) {
+            const validationError = new Error("Mindestens ein gueltiges Match ist erforderlich.");
+            validationError.statusCode = 400;
+            throw validationError;
+          }
 
-      const createdAt = nowIso();
-      const nextMatches = matchesInput
-        .map((match) => ({
-          id: `tournament-match-${randomUUID()}`,
-          source: "tournament",
-          tournamentId,
-          home: String(match?.home || "").trim(),
-          away: String(match?.away || "").trim(),
-          date: String(match?.date || "").trim(),
-          time: String(match?.time || "").trim(),
-          venue: String(match?.venue || "").trim(),
-          status: String(match?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
-          note: String(match?.note || "").trim(),
-          createdBy: context.account.id,
-          createdAt,
-          updatedAt: createdAt,
-          provenance: createGameProvenance({
-            source: "tournament",
-            method: "tournament-match-import",
-            provider: "team-tournament",
-            importedBy: context.account.id,
-            requestId,
-            ingestedAt: createdAt,
-          }),
-        }))
-        .filter((match) => match.home && match.away);
-      if (nextMatches.length === 0) {
-        sendJson(res, 400, { ok: false, error: "Mindestens ein gueltiges Match ist erforderlich." }, origin, requestId);
-        return true;
-      }
-
-      const nextTournaments = [...tournaments];
-      const existingTournament = nextTournaments[index];
-      nextTournaments[index] = {
-        ...existingTournament,
-        matches: [...(Array.isArray(existingTournament?.matches) ? existingTournament.matches : []), ...nextMatches],
-        updatedAt: createdAt,
-      };
-
-      const manualGames = Array.isArray(state.team?.manualGames) ? state.team.manualGames : [];
-      const nextState = {
-        ...state.team,
-        tournaments: nextTournaments,
-        manualGames: [...nextMatches, ...manualGames],
-      };
-      const persisted = await persistTeamState(nextState, requestLogger, "team-tournament-matches");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Turnier-Matches konnten nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, tournament: nextTournaments[index], matches: nextMatches }, origin, requestId);
+          const mutationResult = await applyTeamStateMutation(requestLogger, "team-tournament-matches", (currentState) => {
+            const tournaments = Array.isArray(currentState?.tournaments) ? currentState.tournaments : [];
+            const index = tournaments.findIndex((item) => item?.id === tournamentId);
+            if (index < 0) {
+              const error = new Error("Turnier wurde nicht gefunden.");
+              error.statusCode = 404;
+              throw error;
+            }
+            const nextTournaments = [...tournaments];
+            const existingTournament = nextTournaments[index];
+            nextTournaments[index] = {
+              ...existingTournament,
+              matches: [...(Array.isArray(existingTournament?.matches) ? existingTournament.matches : []), ...nextMatches],
+              updatedAt: createdAt,
+            };
+            const manualGames = Array.isArray(currentState?.manualGames) ? currentState.manualGames : [];
+            return {
+              state: {
+                ...currentState,
+                tournaments: nextTournaments,
+                manualGames: [...nextMatches, ...manualGames],
+              },
+              tournament: nextTournaments[index],
+            };
+          });
+          return { mutationResult, nextMatches };
+        },
+      );
+      sendJson(res, 200, { ok: true, tournament: mutationResult?.tournament, matches: nextMatches }, origin, requestId);
       return true;
     } catch (error) {
       requestLogger.warn("tournament matches failed", { error });
-      sendJson(res, 400, { ok: false, error: "Turnier-Matches konnten nicht gespeichert werden." }, origin, requestId);
+      const statusCode = Number(error?.statusCode || 400);
+      sendJson(res, statusCode, { ok: false, error: String(error?.message || "Turnier-Matches konnten nicht gespeichert werden.") }, origin, requestId);
       return true;
     }
   }

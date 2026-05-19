@@ -11,7 +11,8 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
     randomUUID,
     requireTeamSession,
     requireTeamWriteAllowed,
-    persistTeamState,
+    applyTeamStateMutation,
+    runTeamWriteIdempotent,
     toPublicAccount,
     toPublicTeam,
     buildTeamConflicts,
@@ -49,12 +50,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = publishTeamPlan(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-plan");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-plan", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-plan", (currentState) =>
+          publishTeamPlan(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,
@@ -88,16 +88,17 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const targetMemberId = String(payload?.id || payload?.userId || "").trim().toLowerCase();
-      const previousMember = (Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : []).find(
-        (item) => String(item?.id || "").trim().toLowerCase() === targetMemberId,
-      ) || null;
-      const result = upsertTeamMember(state.team, context.account, payload);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-member");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result, previousMember } = await runTeamWriteIdempotent(req, context, "team-member", payload, async () => {
+        const targetMemberId = String(payload?.id || payload?.userId || "").trim().toLowerCase();
+        const mutation = await applyTeamStateMutation(requestLogger, "team-member", (currentState) => {
+          const previousMember = (Array.isArray(currentState?.team?.accounts) ? currentState.team.accounts : []).find(
+            (item) => String(item?.id || "").trim().toLowerCase() === targetMemberId,
+          ) || null;
+          const result = upsertTeamMember(currentState, context.account, payload);
+          return { ...result, previousMember };
+        });
+        return { result: mutation, previousMember: mutation?.previousMember || null };
+      });
       const roleChanged = previousMember && String(previousMember.role || "") !== String(result.member?.role || "");
       const deactivated = previousMember && previousMember.active !== false && result.member?.active === false;
       if (roleChanged || deactivated) {
@@ -160,12 +161,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = upsertManualGame(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-manual-game");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-manual-game", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-manual-game", (currentState) =>
+          upsertManualGame(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,
@@ -201,12 +201,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = updateTeamGoals(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-goals");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      await runTeamWriteIdempotent(req, context, "team-goals", payload, async () => {
+        await applyTeamStateMutation(requestLogger, "team-goals", (currentState) =>
+          updateTeamGoals(currentState, context.account, payload, randomUUID));
+        return { ok: true };
+      });
       sendJson(
         res,
         200,
@@ -242,12 +241,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = markObservationSeen(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-seen");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-observation-seen", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-observation-seen", (currentState) =>
+          markObservationSeen(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,
@@ -281,12 +279,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
     }
     try {
       const payload = await readBody(req);
-      const result = reassignObservation(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-reassign");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-observation-reassign", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-observation-reassign", (currentState) =>
+          reassignObservation(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,
@@ -321,12 +318,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = linkObservationReport(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-report");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-observation-report", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-observation-report", (currentState) =>
+          linkObservationReport(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,
@@ -361,12 +357,11 @@ export async function handleTeamPlanningRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const result = updateObservationNote(state.team, context.account, payload, randomUUID);
-      const persisted = await persistTeamState(result.state, requestLogger, "team-observation-note");
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Team-State konnte nicht gespeichert werden." }, origin, requestId);
-        return true;
-      }
+      const { result } = await runTeamWriteIdempotent(req, context, "team-observation-note", payload, async () => {
+        const result = await applyTeamStateMutation(requestLogger, "team-observation-note", (currentState) =>
+          updateObservationNote(currentState, context.account, payload, randomUUID));
+        return { result };
+      });
       sendJson(
         res,
         200,

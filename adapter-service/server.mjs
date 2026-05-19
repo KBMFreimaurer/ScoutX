@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,7 +88,12 @@ function envNumber(name, fallback, { min = Number.NEGATIVE_INFINITY, max = Numbe
 const HOST = process.env.ADAPTER_HOST || "0.0.0.0";
 const PORT = envNumber("ADAPTER_PORT", 8787, { min: 1, max: 65535 });
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173";
+const NODE_ENV = String(process.env.NODE_ENV || "").trim().toLowerCase();
+const IS_PRODUCTION = NODE_ENV === "production";
 const EXPOSE_RESET_TOKEN_ON_REQUEST = process.env.ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST === "true";
+const EXPOSE_INVITATION_TOKEN_ON_CREATE = process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE
+  ? process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE === "true"
+  : !IS_PRODUCTION;
 const AUTH_READS_FROM_DB = process.env.ADAPTER_AUTH_READS_FROM_DB === "true";
 const SESSION_READS_FROM_DB = process.env.ADAPTER_SESSION_READS_FROM_DB === "true";
 const TEAM_STATE_READS_FROM_DB = process.env.ADAPTER_TEAM_STATE_READS_FROM_DB === "true";
@@ -115,6 +120,15 @@ const COOKIE_SECURE = process.env.ADAPTER_TEAM_COOKIE_SECURE
   : process.env.NODE_ENV !== "development";
 const COOKIE_SAME_SITE = String(process.env.ADAPTER_TEAM_COOKIE_SAMESITE || "Lax").trim();
 const AUTH_TOKEN = String(process.env.ADAPTER_TOKEN || "").trim();
+if (IS_PRODUCTION && EXPOSE_RESET_TOKEN_ON_REQUEST) {
+  throw new Error("ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST=true ist in Produktion nicht erlaubt.");
+}
+if (IS_PRODUCTION && EXPOSE_INVITATION_TOKEN_ON_CREATE) {
+  throw new Error("ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE=true ist in Produktion nicht erlaubt.");
+}
+if (IS_PRODUCTION && !AUTH_TOKEN) {
+  throw new Error("ADAPTER_TOKEN ist in Produktion verpflichtend.");
+}
 const MAX_BODY_BYTES = (() => {
   const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
   if (!Number.isFinite(configured) || configured <= 0) {
@@ -141,6 +155,8 @@ const TEAM_ARCHIVE_FILE =
 const REGISTRATION_TEAM = Object.freeze({
   key: "borussia-moenchengladbach",
 });
+const TEAM_JOIN_ALLOWLIST_ENABLED = process.env.ADAPTER_TEAM_JOIN_ALLOWLIST_ENABLED === "true";
+const TEAM_JOIN_ALLOWLIST_MAP = Object.freeze(parseTeamJoinAllowlist(process.env.ADAPTER_TEAM_JOIN_ALLOWLIST || ""));
 const CLUB_CATALOG_FILE =
   process.env.ADAPTER_CLUB_CATALOG_FILE || fileURLToPath(new URL("./data/clubs.catalog.json", import.meta.url));
 const CLUB_LOGOS_DIR =
@@ -1085,54 +1101,109 @@ function sendJson(res, statusCode, payload, origin, requestId = "") {
 
 async function readBody(req) {
   return new Promise((resolve, reject) => {
+    const declaredLength = Number(req.headers["content-length"] || 0);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      const payloadTooLarge = new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`);
+      payloadTooLarge.statusCode = 413;
+      reject(payloadTooLarge);
+      return;
+    }
     const chunks = [];
     let totalBytes = 0;
+    let tooLargeError = null;
+    let settled = false;
 
     req.on("data", (chunk) => {
+      if (settled) {
+        return;
+      }
       const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += chunkBuffer.length;
       if (totalBytes > MAX_BODY_BYTES) {
-        reject(new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`));
-        req.destroy();
+        tooLargeError = new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`);
+        tooLargeError.statusCode = 413;
         return;
       }
       chunks.push(chunkBuffer);
     });
 
     req.on("end", () => {
+      if (settled) {
+        return;
+      }
+      if (tooLargeError) {
+        settled = true;
+        reject(tooLargeError);
+        return;
+      }
       try {
         const text = Buffer.concat(chunks).toString("utf8");
+        settled = true;
         resolve(text ? JSON.parse(text) : {});
       } catch {
+        settled = true;
         reject(new Error("Ungültiges JSON im Request-Body."));
       }
     });
 
-    req.on("error", reject);
+    req.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    });
   });
 }
 
 async function readRawBody(req) {
   return new Promise((resolve, reject) => {
+    const declaredLength = Number(req.headers["content-length"] || 0);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      const payloadTooLarge = new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`);
+      payloadTooLarge.statusCode = 413;
+      reject(payloadTooLarge);
+      return;
+    }
     const chunks = [];
     let totalBytes = 0;
+    let tooLargeError = null;
+    let settled = false;
 
     req.on("data", (chunk) => {
+      if (settled) {
+        return;
+      }
       const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += chunkBuffer.length;
       if (totalBytes > MAX_BODY_BYTES) {
-        reject(new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`));
-        req.destroy();
+        tooLargeError = new Error(`Payload zu groß (max ${MAX_BODY_BYTES} Bytes).`);
+        tooLargeError.statusCode = 413;
         return;
       }
       chunks.push(chunkBuffer);
     });
 
     req.on("end", () => {
+      if (settled) {
+        return;
+      }
+      if (tooLargeError) {
+        settled = true;
+        reject(tooLargeError);
+        return;
+      }
+      settled = true;
       resolve(Buffer.concat(chunks));
     });
 
-    req.on("error", reject);
+    req.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    });
   });
 }
 
@@ -1290,6 +1361,57 @@ function normalizeAccountId(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function parseTeamJoinAllowlist(rawValue) {
+  const text = String(rawValue || "").trim();
+  if (!text) {
+    return {};
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error("ADAPTER_TEAM_JOIN_ALLOWLIST muss valides JSON sein.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("ADAPTER_TEAM_JOIN_ALLOWLIST muss ein JSON-Objekt sein (teamKey -> [userId]).");
+  }
+  const result = {};
+  for (const [teamKeyRaw, usersRaw] of Object.entries(parsed)) {
+    const teamKey = normalizeAccountId(teamKeyRaw);
+    if (!teamKey) {
+      continue;
+    }
+    if (!Array.isArray(usersRaw)) {
+      throw new Error(`ADAPTER_TEAM_JOIN_ALLOWLIST Eintrag fuer '${teamKeyRaw}' muss ein Array sein.`);
+    }
+    const users = new Set();
+    for (const userIdRaw of usersRaw) {
+      const userId = normalizeAccountId(userIdRaw);
+      if (userId) {
+        users.add(userId);
+      }
+    }
+    result[teamKey] = Object.freeze(Array.from(users));
+  }
+  return result;
+}
+
+function isTeamJoinAllowedByAllowlist({ teamKey, userId }) {
+  if (!TEAM_JOIN_ALLOWLIST_ENABLED) {
+    return true;
+  }
+  const normalizedTeamKey = normalizeAccountId(teamKey);
+  const normalizedUserId = normalizeAccountId(userId);
+  if (!normalizedTeamKey || !normalizedUserId) {
+    return false;
+  }
+  const teamAllowlist = TEAM_JOIN_ALLOWLIST_MAP[normalizedTeamKey];
+  if (!Array.isArray(teamAllowlist) || teamAllowlist.length === 0) {
+    return false;
+  }
+  return teamAllowlist.includes(normalizedUserId);
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -1309,7 +1431,7 @@ async function resolveAccountForAuth(userId, logger) {
   if (!normalizedId) {
     return null;
   }
-  if (AUTH_READS_FROM_DB) {
+  if (EFFECTIVE_AUTH_READS_FROM_DB) {
     const dbAccount = await fetchTeamAccountByIdFromDb(normalizedId, logger);
     if (dbAccount) {
       return dbAccount;
@@ -1509,8 +1631,8 @@ function clearTeamLoginFailure(loginUserId) {
   teamLoginLockStore.delete(key);
 }
 
-function buildTeamStatePayload(context) {
-  const normalized = normalizeTeamState(state.team);
+function buildTeamStatePayload(context, teamStateInput = null) {
+  const normalized = normalizeTeamState(teamStateInput || state.team);
   const recipientId = String(context?.account?.id || "").trim().toLowerCase();
   const visibleNotifications = (Array.isArray(normalized.notifications) ? normalized.notifications : []).filter((item) => {
     const target = String(item?.recipientId || "").trim().toLowerCase();
@@ -1689,6 +1811,147 @@ async function persistTeamState(nextTeamState, logger, reason) {
   }
 }
 
+let teamStateMutationChain = Promise.resolve();
+let storeMutationChain = Promise.resolve();
+const TEAM_WRITE_IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
+const TEAM_WRITE_IDEMPOTENCY_MAX = 2000;
+const TEAM_WRITE_IDEMPOTENCY_KEY_MAX_LENGTH = 256;
+const TEAM_WRITE_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]+$/;
+const teamWriteIdempotencyCache = new Map();
+
+function pruneTeamWriteIdempotencyCache(nowMs = Date.now()) {
+  const cutoff = Number(nowMs) - TEAM_WRITE_IDEMPOTENCY_TTL_MS;
+  for (const [key, entry] of teamWriteIdempotencyCache) {
+    if (!entry || Number(entry.createdAt || 0) < cutoff) {
+      teamWriteIdempotencyCache.delete(key);
+    }
+  }
+  while (teamWriteIdempotencyCache.size > TEAM_WRITE_IDEMPOTENCY_MAX) {
+    const oldestKey = teamWriteIdempotencyCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    teamWriteIdempotencyCache.delete(oldestKey);
+  }
+}
+
+function serializeIdempotencyPayload(payload) {
+  const canonicalize = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => canonicalize(item));
+    }
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value)
+        .sort(([a], [b]) => String(a).localeCompare(String(b)))
+        .map(([key, nestedValue]) => [key, canonicalize(nestedValue)]);
+      return Object.fromEntries(entries);
+    }
+    return value;
+  };
+  try {
+    return JSON.stringify(canonicalize(payload ?? null));
+  } catch {
+    return "";
+  }
+}
+
+async function runTeamWriteIdempotent(req, context, scope, payload, execute) {
+  const primaryHeader = String(req.headers["idempotency-key"] || "").trim();
+  const fallbackHeader = String(req.headers["x-idempotency-key"] || "").trim();
+  if (primaryHeader && fallbackHeader && primaryHeader !== fallbackHeader) {
+    const keyError = new Error("idempotency-key und x-idempotency-key widersprechen sich.");
+    keyError.statusCode = 400;
+    throw keyError;
+  }
+  const headerValue = primaryHeader || fallbackHeader;
+  if (!headerValue) {
+    const directResult = await execute();
+    return { ...directResult, replayed: false };
+  }
+  if (headerValue.length > TEAM_WRITE_IDEMPOTENCY_KEY_MAX_LENGTH) {
+    const keyError = new Error(`Idempotency-Key darf maximal ${TEAM_WRITE_IDEMPOTENCY_KEY_MAX_LENGTH} Zeichen enthalten.`);
+    keyError.statusCode = 400;
+    throw keyError;
+  }
+  if (!TEAM_WRITE_IDEMPOTENCY_KEY_PATTERN.test(headerValue)) {
+    const keyError = new Error("Idempotency-Key enthält ungültige Zeichen.");
+    keyError.statusCode = 400;
+    throw keyError;
+  }
+  const teamId = String(context?.account?.teamId || "").trim();
+  const userId = String(context?.account?.id || "").trim();
+  if (!teamId || !userId) {
+    const directResult = await execute();
+    return { ...directResult, replayed: false };
+  }
+
+  pruneTeamWriteIdempotencyCache();
+  const requestHash = createHash("sha256").update(serializeIdempotencyPayload(payload)).digest("base64url");
+  const method = String(req?.method || "").trim().toUpperCase();
+  const cacheKey = `${method}:${teamId}:${userId}:${String(scope || "")}:${headerValue}`;
+  const existing = teamWriteIdempotencyCache.get(cacheKey);
+  if (existing) {
+    if (String(existing.requestHash || "") !== requestHash) {
+      const conflictError = new Error("Idempotency-Key wurde bereits mit anderem Payload verwendet.");
+      conflictError.statusCode = 409;
+      throw conflictError;
+    }
+    const cachedResult = await existing.promise;
+    return { ...cachedResult, replayed: true };
+  }
+
+  const promise = Promise.resolve().then(execute);
+  teamWriteIdempotencyCache.set(cacheKey, {
+    createdAt: Date.now(),
+    requestHash,
+    promise,
+  });
+  try {
+    const result = await promise;
+    teamWriteIdempotencyCache.set(cacheKey, {
+      createdAt: Date.now(),
+      requestHash,
+      promise: Promise.resolve(result),
+    });
+    return { ...result, replayed: false };
+  } catch (error) {
+    teamWriteIdempotencyCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+async function applyTeamStateMutation(logger, reason, mutateFn) {
+  const runMutation = async () => {
+    const currentState = normalizeTeamState(state.team);
+    const mutation = await mutateFn(currentState);
+    const nextTeamState = mutation && typeof mutation === "object" && mutation.state ? mutation.state : mutation;
+    const persisted = await persistTeamState(nextTeamState, logger, reason);
+    if (!persisted) {
+      const error = new Error("Team-State konnte nicht gespeichert werden.");
+      error.statusCode = 500;
+      throw error;
+    }
+    return mutation;
+  };
+
+  const task = teamStateMutationChain.then(runMutation, runMutation);
+  teamStateMutationChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
+async function runStoreMutationSerialized(reason, mutateFn) {
+  const run = async () => mutateFn();
+  const task = storeMutationChain.then(run, run);
+  storeMutationChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
 async function readRecentTeamArchiveFromFile(filePath, limit) {
   if (!filePath) {
     return [];
@@ -1747,22 +2010,25 @@ async function refreshData(reason = "manual", logger = rootLogger) {
 
   refreshPromise = (async () => {
     try {
-      const result = await refreshStore({
-        aliasesFile: ALIASES_FILE,
-        importDir: IMPORT_DIR,
-        sampleFile: SAMPLE_FILE,
-        storeFile: STORE_FILE,
-        remoteUrl: REMOTE_URL,
-        remoteToken: REMOTE_TOKEN,
-        remoteTimeoutMs: REMOTE_TIMEOUT_MS,
-      });
+      const result = await runStoreMutationSerialized(`refresh-data:${String(reason || "manual")}`, async () => {
+        const next = await refreshStore({
+          aliasesFile: ALIASES_FILE,
+          importDir: IMPORT_DIR,
+          sampleFile: SAMPLE_FILE,
+          storeFile: STORE_FILE,
+          remoteUrl: REMOTE_URL,
+          remoteToken: REMOTE_TOKEN,
+          remoteTimeoutMs: REMOTE_TIMEOUT_MS,
+        });
 
-      state.games = result.games;
-      state.meta = result.meta;
-      state.aliasMap = result.aliasMap;
-      state.lastRefreshReason = reason;
-      state.lastError = null;
-      state.lastSuccessfulRefreshAt = nowIso();
+        state.games = next.games;
+        state.meta = next.meta;
+        state.aliasMap = next.aliasMap;
+        state.lastRefreshReason = reason;
+        state.lastError = null;
+        state.lastSuccessfulRefreshAt = nowIso();
+        return next;
+      });
       logger.info("adapter refresh completed", {
         reason,
         count: result.games.length,
@@ -1773,12 +2039,13 @@ async function refreshData(reason = "manual", logger = rootLogger) {
     } catch (error) {
       state.lastError = error.message || "Refresh fehlgeschlagen.";
       logger.error("adapter refresh failed", { reason, error });
-
-      const fallbackStore = await readStore(STORE_FILE);
-      if (fallbackStore.games.length > 0) {
-        state.games = fallbackStore.games;
-        state.meta = fallbackStore.meta;
-      }
+      await runStoreMutationSerialized(`refresh-fallback:${String(reason || "manual")}`, async () => {
+        const fallbackStore = await readStore(STORE_FILE);
+        if (fallbackStore.games.length > 0) {
+          state.games = fallbackStore.games;
+          state.meta = fallbackStore.meta;
+        }
+      });
 
       throw error;
     } finally {
@@ -1980,8 +2247,20 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
       weekRefresh: weekMeta,
     };
 
-    const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta }, logger);
-    if (!persisted) {
+    const serializedStoreResult = await runStoreMutationSerialized("auto-week", async () => {
+      const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta }, logger);
+      if (!persisted) {
+        return { persisted: false };
+      }
+      state.games = merged;
+      state.meta = nextMeta;
+      state.lastRefreshReason = "auto-week";
+      state.lastError = warnings.length ? warnings.join(" | ") : null;
+      state.lastSuccessfulRefreshAt = nowIso();
+      state.weekRefreshCache[cacheKey] = now;
+      return { persisted: true };
+    });
+    if (!serializedStoreResult?.persisted) {
       return {
         ran: false,
         reason: "store_write_failed",
@@ -1993,13 +2272,6 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
         warnings: [...warnings, "Store konnte nicht geschrieben werden."],
       };
     }
-
-    state.games = merged;
-    state.meta = nextMeta;
-    state.lastRefreshReason = "auto-week";
-    state.lastError = warnings.length ? warnings.join(" | ") : null;
-    state.lastSuccessfulRefreshAt = nowIso();
-    state.weekRefreshCache[cacheKey] = now;
     logger.info("week refresh completed", {
       cacheKey,
       added,
@@ -2424,6 +2696,8 @@ const server = createServer(async (req, res) => {
     readBody,
     sendJson,
     persistTeamState,
+    applyTeamStateMutation,
+    runTeamWriteIdempotent,
     findAccount,
     createTeamSessionForAccount,
     createSessionCookie,
@@ -2483,6 +2757,7 @@ const server = createServer(async (req, res) => {
       createSessionCookie,
       buildTeamStatePayload,
       registrationTeamKey: REGISTRATION_TEAM.key,
+      isTeamJoinAllowedByAllowlist,
       requireTeamSession,
       requireTeamWriteAllowed,
       clearSessionCookie,
@@ -2507,6 +2782,9 @@ const server = createServer(async (req, res) => {
       requireTeamWriteAllowed,
       teamInvitations,
       teamInvitationTtlSec: TEAM_INVITATION_TTL_SEC,
+      exposeInvitationTokenOnCreate: EXPOSE_INVITATION_TOKEN_ON_CREATE,
+      registrationTeamKey: REGISTRATION_TEAM.key,
+      isTeamJoinAllowedByAllowlist,
       runtimeDbEnabled: RUNTIME_DB_ENABLED,
       persistRuntimeInvitation,
       fetchRuntimeInvitationByToken,
@@ -2576,11 +2854,12 @@ const server = createServer(async (req, res) => {
     if (!context) {
       return;
     }
+    let responseTeamState = normalizeTeamState(state.team);
     if (EFFECTIVE_OBSERVATIONS_READS_FROM_DB) {
       const observationsFromDb = await fetchTeamObservationsFromDb(context.account.teamId, requestLogger);
       if (Array.isArray(observationsFromDb)) {
-        state.team = {
-          ...state.team,
+        responseTeamState = {
+          ...responseTeamState,
           observations: observationsFromDb,
         };
       }
@@ -2588,9 +2867,9 @@ const server = createServer(async (req, res) => {
     if (EFFECTIVE_REPORTS_READS_FROM_DB) {
       const reportMap = await fetchTeamReportMapFromDb(context.account.teamId, requestLogger);
       if (reportMap && typeof reportMap === "object") {
-        state.team = {
-          ...state.team,
-          observations: (Array.isArray(state.team?.observations) ? state.team.observations : []).map((item) => {
+        responseTeamState = {
+          ...responseTeamState,
+          observations: (Array.isArray(responseTeamState?.observations) ? responseTeamState.observations : []).map((item) => {
             const patch = reportMap[String(item?.id || "").trim()];
             if (!patch) {
               return item;
@@ -2607,13 +2886,13 @@ const server = createServer(async (req, res) => {
     if (EFFECTIVE_FEED_READS_FROM_DB) {
       const feedItemsFromDb = await fetchTeamFeedItemsFromDb(context.account.teamId, requestLogger);
       if (Array.isArray(feedItemsFromDb)) {
-        state.team = {
-          ...state.team,
+        responseTeamState = {
+          ...responseTeamState,
           feedItems: feedItemsFromDb,
         };
       }
     }
-    sendJson(res, 200, buildTeamStatePayload(context), origin, requestId);
+    sendJson(res, 200, buildTeamStatePayload(context, responseTeamState), origin, requestId);
     return;
   }
 
@@ -2719,6 +2998,8 @@ const server = createServer(async (req, res) => {
       normalizeGames,
       dedupeGames,
       writeStoreSafely,
+      runStoreMutationSerialized,
+      runTeamWriteIdempotent,
       dedupeClubEntries,
       writeClubCatalogFile: (clubs) => writeClubCatalogFile(CLUB_CATALOG_FILE, clubs),
       ingestionJobs,

@@ -15,8 +15,9 @@ export async function handleTeamNotificationsRoutes(req, res, routeContext) {
     sendJson,
     requireTeamSession,
     requireTeamWriteAllowed,
+    runTeamWriteIdempotent,
     normalizeEventId,
-    persistTeamState,
+    applyTeamStateMutation,
     teamPushSubscriptions,
     teamPushOutbox,
     pushedCriticalEventIds,
@@ -65,19 +66,23 @@ export async function handleTeamNotificationsRoutes(req, res, routeContext) {
     try {
       const payload = await readBody(req);
       const ids = parseEventIdsPayload(payload);
-      const { notifications, updatedCount } = markNotificationsRead(state.team?.notifications, ids, normalizeEventId);
-      const persisted = await persistTeamState(
-        {
-          ...state.team,
-          notifications,
-        },
-        requestLogger,
-        "team-notifications-read",
-      );
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Benachrichtigungen konnten nicht aktualisiert werden." }, origin, requestId);
-        return true;
-      }
+      const { updatedCount } = await runTeamWriteIdempotent(req, context, "team-notifications-read", payload, async () => {
+        const { updatedCount } = await applyTeamStateMutation(requestLogger, "team-notifications-read", (currentState) => {
+          const { notifications, updatedCount: nextUpdatedCount } = markNotificationsRead(
+            currentState?.notifications,
+            ids,
+            normalizeEventId,
+          );
+          return {
+            state: {
+              ...currentState,
+              notifications,
+            },
+            updatedCount: nextUpdatedCount,
+          };
+        });
+        return { updatedCount };
+      });
       sendJson(res, 200, { ok: true, updatedCount }, origin, requestId);
       return true;
     } catch (error) {
@@ -98,9 +103,12 @@ export async function handleTeamNotificationsRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const subscription = parsePushSubscriptionPayload(payload, context, nowIso);
-      teamPushSubscriptions.set(subscription.endpoint, subscription);
-      void persistPushSubscription(subscription, requestLogger);
+      const { subscription } = await runTeamWriteIdempotent(req, context, "team-notifications-push-subscribe", payload, async () => {
+        const subscription = parsePushSubscriptionPayload(payload, context, nowIso);
+        teamPushSubscriptions.set(subscription.endpoint, subscription);
+        void persistPushSubscription(subscription, requestLogger);
+        return { subscription };
+      });
       sendJson(res, 200, { ok: true, subscription }, origin, requestId);
       return true;
     } catch (error) {
@@ -189,8 +197,16 @@ export async function handleTeamNotificationsRoutes(req, res, routeContext) {
     try {
       const payload = await readBody(req);
       const ids = parseEventIdsPayload(payload);
-      const { removedCount } = applyPushAck(teamPushOutbox, pushedCriticalEventIds, ids);
-      void removePushOutboxEventsAndMarkAcked(ids, context.account.teamId, requestLogger);
+      const { removedCount } = await runTeamWriteIdempotent(req, context, "team-notifications-push-ack", payload, async () => {
+        const { removedCount } = applyPushAck(
+          teamPushOutbox,
+          pushedCriticalEventIds,
+          ids,
+          String(context.account?.teamId || ""),
+        );
+        void removePushOutboxEventsAndMarkAcked(ids, context.account.teamId, requestLogger);
+        return { removedCount };
+      });
       sendJson(res, 200, { ok: true, removedCount }, origin, requestId);
       return true;
     } catch (error) {

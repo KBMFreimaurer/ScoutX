@@ -17,7 +17,8 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
     findTeamAccountRecordById,
     hasTokenExpired,
     createPasswordHash,
-    persistTeamState,
+    applyTeamStateMutation,
+    runTeamWriteIdempotent,
     findAccount,
     createTeamSessionForAccount,
     createSessionCookie,
@@ -27,6 +28,9 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
     requireTeamWriteAllowed,
     teamInvitations,
     teamInvitationTtlSec,
+    exposeInvitationTokenOnCreate,
+    registrationTeamKey,
+    isTeamJoinAllowedByAllowlist,
     runtimeDbEnabled,
     persistRuntimeInvitation,
     fetchRuntimeInvitationByToken,
@@ -48,46 +52,64 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      const userId = normalizeAccountId(payload?.userId);
-      const name = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
-      const requestedRole = normalizeAccountId(payload?.role);
-      const role = normalizeInvitationRole(requestedRole);
-      if (!userId || userId.length < 3) {
-        sendJson(res, 400, { ok: false, error: "User-ID muss mindestens 3 Zeichen enthalten." }, origin, requestId);
-        return true;
-      }
-      if (findTeamAccountRecordById(userId)) {
-        sendJson(res, 409, { ok: false, error: "Diese User-ID ist bereits vergeben." }, origin, requestId);
-        return true;
-      }
-
-      const { token, createdAt, expiresAt } = createTimedToken(randomUUID, teamInvitationTtlSec, Date.now());
-      const invitation = {
-        token,
-        userId,
-        name,
-        role,
-        teamId: context.account.teamId,
-        invitedBy: context.account.id,
-        createdAt,
-        expiresAt,
-      };
-      if (!runtimeDbEnabled) {
-        teamInvitations.set(token, invitation);
-      }
-      if (runtimeDbEnabled) {
-        const persisted = await persistRuntimeInvitation(invitation, requestLogger);
-        if (!persisted) {
-          sendJson(res, 500, { ok: false, error: "Einladung konnte nicht persistent gespeichert werden." }, origin, requestId);
-          return true;
+      const { invitation } = await runTeamWriteIdempotent(req, context, "team-invitation-create", payload, async () => {
+        const userId = normalizeAccountId(payload?.userId);
+        const name = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
+        const requestedRole = normalizeAccountId(payload?.role);
+        const role = normalizeInvitationRole(requestedRole);
+        if (!userId || userId.length < 3) {
+          const validationError = new Error("User-ID muss mindestens 3 Zeichen enthalten.");
+          validationError.statusCode = 400;
+          throw validationError;
         }
-      }
+        if (!isTeamJoinAllowedByAllowlist({ teamKey: registrationTeamKey, userId })) {
+          const forbiddenError = new Error("Einladung nicht erlaubt. User ist nicht für den Team-Beitritt freigegeben.");
+          forbiddenError.statusCode = 403;
+          throw forbiddenError;
+        }
+        if (findTeamAccountRecordById(userId)) {
+          const conflictError = new Error("Diese User-ID ist bereits vergeben.");
+          conflictError.statusCode = 409;
+          throw conflictError;
+        }
+        const { token, createdAt, expiresAt } = createTimedToken(randomUUID, teamInvitationTtlSec, Date.now());
+        const invitation = {
+          token,
+          userId,
+          name,
+          role,
+          teamId: context.account.teamId,
+          invitedBy: context.account.id,
+          createdAt,
+          expiresAt,
+        };
+        if (!runtimeDbEnabled) {
+          teamInvitations.set(token, invitation);
+        }
+        if (runtimeDbEnabled) {
+          const persisted = await persistRuntimeInvitation(invitation, requestLogger);
+          if (!persisted) {
+            const persistenceError = new Error("Einladung konnte nicht persistent gespeichert werden.");
+            persistenceError.statusCode = 500;
+            throw persistenceError;
+          }
+        }
+        return { invitation };
+      });
       sendJson(
         res,
         201,
         {
           ok: true,
-          invitation: { token, userId, name, role, teamId: context.account.teamId, createdAt, expiresAt },
+          invitation: {
+            ...(exposeInvitationTokenOnCreate ? { token: invitation.token } : {}),
+            userId: invitation.userId,
+            name: invitation.name,
+            role: invitation.role,
+            teamId: invitation.teamId,
+            createdAt: invitation.createdAt,
+            expiresAt: invitation.expiresAt,
+          },
         },
         origin,
         requestId,
@@ -104,50 +126,69 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
     try {
       const payload = await readBody(req);
       const token = String(payload?.token || "").trim();
-      const password = assertPasswordMinLength(payload?.password, 8);
       if (!token) {
         sendJson(res, 400, { ok: false, error: "Einladungs-Token fehlt." }, origin, requestId);
         return true;
       }
+      const { account } = await runTeamWriteIdempotent(
+        req,
+        { account: { id: `invite:${token}`, teamId: "public" } },
+        "team-invitation-accept",
+        payload,
+        async () => {
+          const password = assertPasswordMinLength(payload?.password, 8);
+          const invitation = runtimeDbEnabled
+            ? await fetchRuntimeInvitationByToken(token, requestLogger)
+            : teamInvitations.get(token);
+          if (!invitation) {
+            const notFoundError = new Error("Einladung wurde nicht gefunden.");
+            notFoundError.statusCode = 404;
+            throw notFoundError;
+          }
+          if (hasTokenExpired(invitation.expiresAt)) {
+            teamInvitations.delete(token);
+            if (runtimeDbEnabled) {
+              await deleteRuntimeInvitation(token, requestLogger);
+            }
+            const expiredError = new Error("Einladung ist abgelaufen.");
+            expiredError.statusCode = 400;
+            throw expiredError;
+          }
+          if (findTeamAccountRecordById(invitation.userId)) {
+            teamInvitations.delete(token);
+            if (runtimeDbEnabled) {
+              await deleteRuntimeInvitation(token, requestLogger);
+            }
+            const conflictError = new Error("Diese User-ID ist bereits vergeben.");
+            conflictError.statusCode = 409;
+            throw conflictError;
+          }
+          if (!isTeamJoinAllowedByAllowlist({ teamKey: registrationTeamKey, userId: invitation.userId })) {
+            const forbiddenError = new Error("Einladung kann nicht angenommen werden. User ist nicht für den Team-Beitritt freigegeben.");
+            forbiddenError.statusCode = 403;
+            throw forbiddenError;
+          }
 
-      const invitation = runtimeDbEnabled
-        ? await fetchRuntimeInvitationByToken(token, requestLogger)
-        : teamInvitations.get(token);
-      if (!invitation) {
-        sendJson(res, 404, { ok: false, error: "Einladung wurde nicht gefunden." }, origin, requestId);
+          // Consume token before state mutation to keep invitation single-use under concurrent requests.
+          teamInvitations.delete(token);
+          if (runtimeDbEnabled) {
+            await deleteRuntimeInvitation(token, requestLogger);
+          }
+
+          const accountId = await acceptInvitation({
+            invitation,
+            passwordHash: createPasswordHash(password),
+            applyTeamStateMutation,
+            logger: requestLogger,
+          });
+          const account = findAccount(state.team, accountId);
+          return { account };
+        },
+      );
+      if (!account) {
+        sendJson(res, 500, { ok: false, error: "Team-Account konnte nach Einladung nicht geladen werden." }, origin, requestId);
         return true;
       }
-      if (hasTokenExpired(invitation.expiresAt)) {
-        teamInvitations.delete(token);
-        if (runtimeDbEnabled) {
-          await deleteRuntimeInvitation(token, requestLogger);
-        }
-        sendJson(res, 400, { ok: false, error: "Einladung ist abgelaufen." }, origin, requestId);
-        return true;
-      }
-      if (findTeamAccountRecordById(invitation.userId)) {
-        teamInvitations.delete(token);
-        if (runtimeDbEnabled) {
-          await deleteRuntimeInvitation(token, requestLogger);
-        }
-        sendJson(res, 409, { ok: false, error: "Diese User-ID ist bereits vergeben." }, origin, requestId);
-        return true;
-      }
-
-      await acceptInvitation({
-        state: state.team,
-        invitation,
-        passwordHash: createPasswordHash(password),
-        persistTeamState,
-        logger: requestLogger,
-        findAccount: (id) => findAccount(state.team, id),
-      });
-      teamInvitations.delete(token);
-      if (runtimeDbEnabled) {
-        await deleteRuntimeInvitation(token, requestLogger);
-      }
-
-      const account = findAccount(state.team, invitation.userId);
       const { sessionId, csrfToken } = await createTeamSessionForAccount(account, String(clientIp || ""), String(req.headers["user-agent"] || ""));
       res.setHeader("Set-Cookie", createSessionCookie(sessionId));
       sendJson(res, 201, { ...buildTeamStatePayload({ account }), csrfToken }, origin, requestId);

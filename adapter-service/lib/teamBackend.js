@@ -23,6 +23,12 @@ const DEFAULT_ACCOUNTS = Object.freeze([
 
 const WRITER_ROLES = new Set(["admin", "coordinator", "scout"]);
 const OBSERVATION_STATUSES = new Set(["planned", "seen", "reported", "followup"]);
+const OBSERVATION_STATUS_RANK = Object.freeze({
+  planned: 0,
+  seen: 1,
+  reported: 2,
+  followup: 3,
+});
 
 function compactText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
@@ -275,12 +281,15 @@ function normalizeManualGame(raw) {
   const source = ["manual", "tournament", "national"].includes(String(raw?.source || "").trim())
     ? String(raw?.source || "").trim()
     : "manual";
+  const manualTypeRaw = normalizeId(raw?.manualType || raw?.type || "manual");
+  const manualType = ["manual", "spontaneous", "inofficial"].includes(manualTypeRaw) ? manualTypeRaw : "manual";
   return {
     ...game,
     id: normalizeId(game.id) || `manual-${normalizeId(`${game.date}-${game.time}-${game.home}-${game.away}`)}`,
     source,
     tournamentId: source === "tournament" ? normalizeId(raw?.tournamentId) : "",
     note: String(raw?.note || ""),
+    manualType: source === "manual" ? manualType : "",
     status: game.status,
     createdBy: normalizeId(raw?.createdBy),
     createdAt: compactText(raw?.createdAt) || new Date(0).toISOString(),
@@ -317,10 +326,11 @@ function normalizeTournament(raw) {
 }
 
 function uniqueStrings(values) {
+  const MAX_VALUE_LENGTH = 120;
   const seen = new Set();
   const result = [];
   for (const value of Array.isArray(values) ? values : []) {
-    const text = compactText(value);
+    const text = compactText(value).slice(0, MAX_VALUE_LENGTH);
     const key = text.toLowerCase();
     if (!text || seen.has(key)) {
       continue;
@@ -332,12 +342,13 @@ function uniqueStrings(values) {
 }
 
 function normalizeTeamGoals(raw) {
+  const MAX_ITEMS_PER_GROUP = 30;
   const source = raw && typeof raw === "object" ? raw : {};
   return {
-    favoriteTeams: uniqueStrings(source.favoriteTeams),
-    favoriteClubs: uniqueStrings(source.favoriteClubs),
-    leaguePriorities: uniqueStrings(source.leaguePriorities),
-    ageGroups: uniqueStrings(source.ageGroups).map(normalizeId).filter(Boolean),
+    favoriteTeams: uniqueStrings(source.favoriteTeams).slice(0, MAX_ITEMS_PER_GROUP),
+    favoriteClubs: uniqueStrings(source.favoriteClubs).slice(0, MAX_ITEMS_PER_GROUP),
+    leaguePriorities: uniqueStrings(source.leaguePriorities).slice(0, MAX_ITEMS_PER_GROUP),
+    ageGroups: uniqueStrings(source.ageGroups).map(normalizeId).filter(Boolean).slice(0, MAX_ITEMS_PER_GROUP),
   };
 }
 
@@ -489,6 +500,7 @@ export function upsertManualGame(teamState, account, payload, randomId) {
     id: existingId || randomId(),
     ...payload,
     source: "manual",
+    manualType: payload?.manualType || payload?.type || "manual",
     createdBy: payload?.createdBy || account.id,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
@@ -822,12 +834,36 @@ export function reassignObservation(teamState, account, payload, randomId) {
     throw error;
   }
   const current = next.observations[index];
+  const duplicateIndex = next.observations.findIndex(
+    (item, itemIndex) => itemIndex !== index && item.gameId === current.gameId && item.scoutId === targetScoutId,
+  );
+  const duplicate = duplicateIndex >= 0 ? next.observations[duplicateIndex] : null;
+  const mergedStatus =
+    Number(OBSERVATION_STATUS_RANK[String(duplicate?.status || "planned")] || 0) >=
+    Number(OBSERVATION_STATUS_RANK[String(current?.status || "planned")] || 0)
+      ? String(duplicate?.status || "planned")
+      : String(current?.status || "planned");
   const reassigned = normalizeObservation({
     ...current,
+    ...(duplicate || {}),
+    note: duplicate?.note || current?.note || "",
+    reportId: duplicate?.reportId || current?.reportId || "",
+    reportUrl: duplicate?.reportUrl || current?.reportUrl || "",
+    plannedAt: duplicate?.plannedAt || current?.plannedAt,
+    seenAt: duplicate?.seenAt || current?.seenAt || "",
+    status: mergedStatus,
     scoutId: targetScoutId,
     id: `obs-${normalizeId(current.gameId)}-${targetScoutId}`,
   });
+  if (!reassigned) {
+    const error = new Error("Sichtung konnte nicht umverteilt werden.");
+    error.statusCode = 400;
+    throw error;
+  }
   next.observations[index] = reassigned;
+  if (duplicateIndex >= 0) {
+    next.observations = next.observations.filter((_, itemIndex) => itemIndex !== duplicateIndex);
+  }
   next.feedItems = addFeedItem(
     next,
     {

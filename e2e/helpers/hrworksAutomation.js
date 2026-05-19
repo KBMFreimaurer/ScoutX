@@ -32,8 +32,30 @@ async function fillOptionRequired(page, selector, value, label) {
   }
 }
 
+async function fillOptional(page, selector, value) {
+  const target = String(value || "").trim();
+  if (!target) {
+    return;
+  }
+  const locator = page.locator(selector);
+  if ((await locator.count()) === 0) {
+    return;
+  }
+  await locator.first().fill(target);
+}
+
+async function clickOptional(page, selector) {
+  const locator = page.locator(selector);
+  if ((await locator.count()) === 0) {
+    return false;
+  }
+  await locator.first().click();
+  return true;
+}
+
 export async function fillHrworksTravelExpenseForm(page, payload, options = {}) {
   const shouldSave = Boolean(options?.confirmBeforeSave);
+  const runRouteFlow = Boolean(options?.runRouteFlow);
   await page.getByRole("button", { name: "Reisekostenabrechnung" }).click();
   await page.getByRole("button", { name: "Neue Reisekostenabrechnung" }).click();
 
@@ -43,8 +65,13 @@ export async function fillHrworksTravelExpenseForm(page, payload, options = {}) 
   await fillRequired(page, selectors.startTimeInput, payload.startTime, "startTimeInput");
   await fillRequired(page, selectors.endTimeInput, payload.endTime, "endTimeInput");
   await fillOptionRequired(page, selectors.departureLocationSelect, payload.departureLocation, "departureLocationSelect");
-  await fillOptionRequired(page, selectors.destinationLocationSelect, payload.destinationLocation, "destinationLocationSelect");
   await fillOptionRequired(page, selectors.costCenterSelect, payload.costCenter, "costCenterSelect");
+  await fillOptional(page, selectors.destinationLocationSelect, payload.destinationLocation);
+  await fillOptional(
+    page,
+    selectors.routeTextarea,
+    Array.isArray(payload?.intermediateStops) ? payload.intermediateStops.join(" | ") : "",
+  );
 
   if (!shouldSave) {
     return { saved: false };
@@ -55,5 +82,15 @@ export async function fillHrworksTravelExpenseForm(page, payload, options = {}) 
     throw new Error("Selector fehlt: saveButton");
   }
   await saveButton.first().click();
-  return { saved: true };
+  if (!runRouteFlow) {
+    return { saved: true };
+  }
+
+  await fillOptional(page, selectors.kilometersInput, payload.kilometers);
+  await clickOptional(page, selectors.saveKilometersButton);
+  await clickOptional(page, selectors.processRouteButton);
+  await clickOptional(page, selectors.reportsButton);
+  await clickOptional(page, selectors.completeReportsButton);
+
+  return { saved: true, routeFlowCompleted: true };
 }

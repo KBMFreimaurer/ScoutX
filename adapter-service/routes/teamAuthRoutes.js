@@ -22,12 +22,14 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     resolveAccountForAuth,
     verifyPassword,
     createPasswordHash,
-    persistTeamState,
+    applyTeamStateMutation,
+    runTeamWriteIdempotent,
     findAccount,
     createTeamSessionForAccount,
     createSessionCookie,
     buildTeamStatePayload,
     registrationTeamKey,
+    isTeamJoinAllowedByAllowlist,
     requireTeamSession,
     clearSessionCookie,
     teamSessions,
@@ -48,32 +50,43 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
         sendJson(res, 429, { ok: false, error: `Konto vorübergehend gesperrt. Bitte in ${lockState.retryAfterSec}s erneut versuchen.` }, origin, requestId);
         return true;
       }
-      const account = await resolveAccountForAuth(payload?.userId, requestLogger);
-      if (!account || account.teamId !== state.team.team.id || !account.passwordHash || !verifyPassword(payload?.password, account.passwordHash)) {
-        const failureState = registerTeamLoginFailure(loginUserId);
-        if (failureState.locked) {
-          requestLogger.warn("team login locked", { loginUserId, failures: failureState.failures });
-          sendJson(
-            res,
-            429,
-            { ok: false, error: `Konto vorübergehend gesperrt. Bitte in ${failureState.retryAfterSec}s erneut versuchen.` },
-            origin,
-            requestId,
-          );
-          return true;
+      const loginContext = {
+        account: {
+          id: `login:${normalizeAccountId(payload?.userId) || "unknown"}`,
+          teamId: "public",
+        },
+      };
+      const { account, sessionId, csrfToken } = await runTeamWriteIdempotent(req, loginContext, "team-login", payload, async () => {
+        const account = await resolveAccountForAuth(payload?.userId, requestLogger);
+        if (!account || account.teamId !== state.team.team.id || !account.passwordHash || !verifyPassword(payload?.password, account.passwordHash)) {
+          const failureState = registerTeamLoginFailure(loginUserId);
+          if (failureState.locked) {
+            requestLogger.warn("team login locked", { loginUserId, failures: failureState.failures });
+            const lockError = new Error(`Konto vorübergehend gesperrt. Bitte in ${failureState.retryAfterSec}s erneut versuchen.`);
+            lockError.statusCode = 429;
+            throw lockError;
+          }
+          const authError = new Error("Unbekannter oder inaktiver Team-Account.");
+          authError.statusCode = 401;
+          throw authError;
         }
-        sendJson(res, 401, { ok: false, error: "Unbekannter oder inaktiver Team-Account." }, origin, requestId);
-        return true;
-      }
 
-      clearTeamLoginFailure(loginUserId);
-      const { sessionId, csrfToken } = await createTeamSessionForAccount(account, String(clientIp || ""), String(req.headers["user-agent"] || ""));
+        clearTeamLoginFailure(loginUserId);
+        const session = await createTeamSessionForAccount(account, String(clientIp || ""), String(req.headers["user-agent"] || ""));
+        return {
+          account,
+          sessionId: session.sessionId,
+          csrfToken: session.csrfToken,
+        };
+      });
       res.setHeader("Set-Cookie", createSessionCookie(sessionId));
       sendJson(res, 200, { ...buildTeamStatePayload({ account }), csrfToken }, origin, requestId);
       return true;
     } catch (error) {
       requestLogger.warn("team login failed", { error });
-      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 400, fallbackMessage: "Team-Login fehlgeschlagen." });
+      const statusCode = Number(error?.statusCode || error?.status || 400);
+      const message = String(error?.message || "Team-Login fehlgeschlagen.");
+      sendJson(res, statusCode, { ok: false, error: message }, origin, requestId);
       return true;
     }
   }
@@ -87,36 +100,59 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
         return true;
       }
 
-      const accountId = normalizeAccountId(payload?.userId);
-      const displayName = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
-      const password = assertPasswordMinLength(payload?.password, 8);
-      const requestedTeamKey = normalizeAccountId(payload?.teamKey);
-      if (!accountId || accountId.length < 3) {
-        sendJson(res, 400, { ok: false, error: "User-ID muss mindestens 3 Zeichen enthalten." }, origin, requestId);
-        return true;
-      }
-      if (requestedTeamKey !== registrationTeamKey) {
-        sendJson(res, 400, { ok: false, error: "Aktuell ist nur Team Borussia Mönchengladbach verfügbar." }, origin, requestId);
-        return true;
-      }
-      const exists = findAccount(state.team, accountId);
-      if (exists) {
-        sendJson(res, 409, { ok: false, error: "Diese User-ID ist bereits vergeben." }, origin, requestId);
-        return true;
-      }
-
-      const account = await registerAccount({
-        state: state.team,
-        accountId,
-        displayName,
-        passwordHash: createPasswordHash(password),
-        persistTeamState,
-        logger: requestLogger,
-        findAccount: (id) => findAccount(state.team, id),
+      const accountContext = {
+        account: {
+          id: `register:${normalizeAccountId(payload?.userId) || "unknown"}`,
+          teamId: `register:${normalizeAccountId(payload?.teamKey) || "unknown"}`,
+        },
+      };
+      const { account } = await runTeamWriteIdempotent(req, accountContext, "team-register", payload, async () => {
+        const accountId = normalizeAccountId(payload?.userId);
+        const displayName = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
+        const password = assertPasswordMinLength(payload?.password, 8);
+        const requestedTeamKey = normalizeAccountId(payload?.teamKey);
+        if (!accountId || accountId.length < 3) {
+          const validationError = new Error("User-ID muss mindestens 3 Zeichen enthalten.");
+          validationError.statusCode = 400;
+          throw validationError;
+        }
+        if (requestedTeamKey !== registrationTeamKey) {
+          const validationError = new Error("Aktuell ist nur Team Borussia Mönchengladbach verfügbar.");
+          validationError.statusCode = 400;
+          throw validationError;
+        }
+        if (!isTeamJoinAllowedByAllowlist({ teamKey: requestedTeamKey, userId: accountId })) {
+          const forbiddenError = new Error("Beitritt nicht erlaubt. Bitte Team-Admin kontaktieren.");
+          forbiddenError.statusCode = 403;
+          throw forbiddenError;
+        }
+        const exists = findAccount(state.team, accountId);
+        if (exists) {
+          const conflictError = new Error("Diese User-ID ist bereits vergeben.");
+          conflictError.statusCode = 409;
+          throw conflictError;
+        }
+        const account = await registerAccount({
+          accountId,
+          displayName,
+          passwordHash: createPasswordHash(password),
+          applyTeamStateMutation,
+          logger: requestLogger,
+        });
+        return { account };
       });
-      const { sessionId, csrfToken } = await createTeamSessionForAccount(account, String(clientIp || ""), String(req.headers["user-agent"] || ""));
+      const persistedAccount = findAccount(state.team, account);
+      if (!persistedAccount) {
+        sendJson(res, 500, { ok: false, error: "Team-Account konnte nach Registrierung nicht geladen werden." }, origin, requestId);
+        return true;
+      }
+      const { sessionId, csrfToken } = await createTeamSessionForAccount(
+        persistedAccount,
+        String(clientIp || ""),
+        String(req.headers["user-agent"] || ""),
+      );
       res.setHeader("Set-Cookie", createSessionCookie(sessionId));
-      sendJson(res, 201, { ...buildTeamStatePayload({ account }), csrfToken }, origin, requestId);
+      sendJson(res, 201, { ...buildTeamStatePayload({ account: persistedAccount }), csrfToken }, origin, requestId);
       return true;
     } catch (error) {
       requestLogger.warn("team registration failed", { error });

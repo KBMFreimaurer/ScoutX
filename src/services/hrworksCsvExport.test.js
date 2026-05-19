@@ -15,6 +15,10 @@ describe("hrworksCsvExport", () => {
       departureLocation: "Start",
       destinationLocation: "Ziel",
       intermediateStops: ["S1", "S2"],
+      routeLegs: [
+        { from: "Home", to: "Spiel A" },
+        { from: "Spiel A", to: "Home" },
+      ],
       costCenter: "321000",
       sourceGames: [{ home: "A", away: "B", venue: "V" }],
     });
@@ -23,5 +27,6 @@ describe("hrworksCsvExport", () => {
     expect(csv).toMatch(/20\.04\.2026/);
     expect(csv).toMatch(/"Spiel ""A"""/);
     expect(csv).toMatch(/S1 \| S2/);
+    expect(csv).toMatch(/Home -> Spiel A \| Spiel A -> Home/);
   });
 });

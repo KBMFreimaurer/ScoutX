@@ -10,7 +10,7 @@ const DEFAULT_POLICY = {
     purpose: true,
     note: true,
     departureLocation: true,
-    destinationLocation: true,
+    destinationLocation: false,
     costCenter: true,
   },
 };
@@ -33,7 +33,7 @@ function normalizePolicy(input) {
       purpose: required.purpose !== false,
       note: required.note !== false,
       departureLocation: required.departureLocation !== false,
-      destinationLocation: required.destinationLocation !== false,
+      destinationLocation: required.destinationLocation === true,
       costCenter: required.costCenter !== false,
     },
   };

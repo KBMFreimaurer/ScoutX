@@ -19,12 +19,15 @@ export function HrworksImportReviewModal({
   onConfirm,
   onExportOnly,
   onDryRun,
+  loginConfirmed,
+  onLoginConfirmedChange,
 }) {
   if (!open) {
     return null;
   }
 
   const games = Array.isArray(payload?.sourceGames) ? payload.sourceGames : [];
+  const routeLegs = Array.isArray(payload?.routeLegs) ? payload.routeLegs : [];
 
   return (
     <div
@@ -66,6 +69,7 @@ export function HrworksImportReviewModal({
           {fieldRow("Abfahrtsort", payload?.departureLocation)}
           {fieldRow("Zielort", payload?.destinationLocation)}
           {fieldRow("Zwischenorte", (payload?.intermediateStops || []).join(" | "))}
+          {fieldRow("Route (Plan)", routeLegs.map((leg) => `${leg.from} -> ${leg.to}`).join(" | "))}
           {fieldRow("Kostenstelle", payload?.costCenter)}
           {fieldRow("Zugehörige Spiele", games.map((game) => `${game.home} vs ${game.away}`).join(" | "))}
         </div>
@@ -89,13 +93,21 @@ export function HrworksImportReviewModal({
         <div style={{ marginTop: 12, color: C.gray, fontSize: 12 }}>
           Hinweis: HRworks wird im Browser geöffnet. Keine Zugangsdaten werden in ScoutX gespeichert.
         </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.grayLight }}>
+          <input
+            type="checkbox"
+            checked={loginConfirmed === true}
+            onChange={(event) => onLoginConfirmedChange?.(Boolean(event?.target?.checked))}
+          />
+          Ich bin in HRworks eingeloggt und kann den Import jetzt durchführen
+        </label>
 
         <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
           <button type="button" onClick={onCancel}>Abbrechen</button>
           <button type="button" onClick={onEdit}>Daten bearbeiten</button>
           <button type="button" onClick={onExportOnly}>Nur Exportdatei erstellen</button>
           <button type="button" onClick={onDryRun}>HRworks-Testlauf ohne Speichern</button>
-          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0}>Import starten</button>
+          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Import starten</button>
         </div>
       </div>
     </div>

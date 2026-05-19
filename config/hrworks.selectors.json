@@ -11,5 +11,11 @@
   "destinationLocationSelect": "input[name='destinationLocation']",
   "costCenterSelect": "input[name='costCenter']",
   "saveButton": "button:has-text('Speichern')",
-  "nextToReceiptsButton": "button:has-text('Weiter zu den digitalen Belegen')"
+  "nextToReceiptsButton": "button:has-text('Weiter zu den digitalen Belegen')",
+  "kilometersInput": "input[name='kilometers']",
+  "saveKilometersButton": "button:has-text('Kilometer speichern')",
+  "processRouteButton": "button:has-text('Route abarbeiten')",
+  "reportsButton": "button:has-text('Berichte')",
+  "completeReportsButton": "button:has-text('Abschließen')",
+  "routeTextarea": "textarea[name='route']"
 }

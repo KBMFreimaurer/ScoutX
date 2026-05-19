@@ -13,6 +13,8 @@ describe("ScoutX Integration", () => {
   async function renderSetupAndSubmit(fetchMock, options = {}) {
     const kreisIndices =
       Array.isArray(options?.kreisIndices) && options.kreisIndices.length > 0 ? options.kreisIndices : [0];
+    const jugendIndices =
+      Array.isArray(options?.jugendIndices) && options.jugendIndices.length > 0 ? options.jugendIndices : [0];
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -37,7 +39,18 @@ describe("ScoutX Integration", () => {
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
 
     const jugendButtons = await screen.findAllByRole("button", { name: /Jugend auswählen/i }, { timeout: 5000 });
-    fireEvent.click(jugendButtons[0]);
+    let clickedJugend = 0;
+    jugendIndices.forEach((index) => {
+      const button = jugendButtons[index];
+      if (!button) {
+        return;
+      }
+      fireEvent.click(button);
+      clickedJugend += 1;
+    });
+    if (clickedJugend === 0 && jugendButtons[0]) {
+      fireEvent.click(jugendButtons[0]);
+    }
 
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
@@ -630,4 +643,5 @@ describe("ScoutX Integration", () => {
     expect(adapterCalls).toHaveLength(2);
     expect(requestedKreise).toEqual(["duesseldorf", "duisburg"]);
   });
+
 });

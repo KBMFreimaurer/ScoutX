@@ -27,15 +27,17 @@ describe("team domain services", () => {
 
   it("applies push ack to outbox and acknowledged ids", () => {
     const outbox = new Map([
-      ["e1", { eventId: "e1" }],
-      ["e2", { eventId: "e2" }],
+      ["e1", { eventId: "e1", teamId: "team-a" }],
+      ["e2", { eventId: "e2", teamId: "team-b" }],
     ]);
     const acked = new Set();
-    const result = applyPushAck(outbox, acked, ["e1", "e3"]);
+    const result = applyPushAck(outbox, acked, ["e1", "e2", "e3"], "team-a");
     expect(result.removedCount).toBe(1);
     expect(outbox.has("e1")).toBe(false);
+    expect(outbox.has("e2")).toBe(true);
     expect(acked.has("e1")).toBe(true);
-    expect(acked.has("e3")).toBe(true);
+    expect(acked.has("e3")).toBe(false);
+    expect(acked.has("e2")).toBe(false);
   });
 
   it("normalizes invitation role and validates auth inputs", () => {

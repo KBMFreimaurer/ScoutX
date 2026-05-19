@@ -15,6 +15,14 @@ const REQUIRED_KEYS = [
   "saveButton",
   "nextToReceiptsButton",
 ];
+const OPTIONAL_KEYS = [
+  "kilometersInput",
+  "saveKilometersButton",
+  "processRouteButton",
+  "reportsButton",
+  "completeReportsButton",
+  "routeTextarea",
+];
 
 function normalizeMapping(input) {
   const source = input && typeof input === "object" ? input : {};
@@ -22,7 +30,7 @@ function normalizeMapping(input) {
     version: Number(source.version || 1),
   };
 
-  for (const key of REQUIRED_KEYS) {
+  for (const key of [...REQUIRED_KEYS, ...OPTIONAL_KEYS]) {
     normalized[key] = String(source[key] || "").trim();
   }
 

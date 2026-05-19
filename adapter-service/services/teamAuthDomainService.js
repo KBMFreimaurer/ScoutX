@@ -2,113 +2,103 @@ import { HttpError } from "../lib/httpErrors.js";
 
 export async function registerAccount(input) {
   const {
-    state,
     accountId,
     displayName,
     passwordHash,
-    persistTeamState,
+    applyTeamStateMutation,
     logger,
-    findAccount,
     reason = "team-register",
   } = input;
-  const accounts = Array.isArray(state.team?.accounts) ? state.team.accounts : [];
-  const persisted = await persistTeamState(
-    {
-      ...state,
-      team: {
-        ...(state.team || {}),
-        accounts: [
-          ...accounts,
-          {
-            id: accountId,
-            name: displayName,
-            role: "scout",
-            teamId: state.team?.id || "team-scoutx",
-            active: true,
-            passwordHash,
-          },
-        ],
+  const result = await applyTeamStateMutation(logger, reason, (currentState) => {
+    const accounts = Array.isArray(currentState.team?.accounts) ? currentState.team.accounts : [];
+    const exists = accounts.some((item) => String(item?.id || "") === accountId);
+    if (exists) {
+      throw new HttpError(409, "Diese User-ID ist bereits vergeben.");
+    }
+    const account = {
+      id: accountId,
+      name: displayName,
+      role: "scout",
+      teamId: currentState.team?.id || "team-scoutx",
+      active: true,
+      passwordHash,
+    };
+    return {
+      state: {
+        ...currentState,
+        team: {
+          ...(currentState.team || {}),
+          accounts: [...accounts, account],
+        },
       },
-    },
-    logger,
-    reason,
-  );
-  if (!persisted) {
-    throw new HttpError(500, "Team-Account konnte nicht gespeichert werden.");
-  }
-  return findAccount(accountId);
+      accountId: account.id,
+    };
+  });
+  return result?.accountId || accountId;
 }
 
 export async function acceptInvitation(input) {
   const {
-    state,
     invitation,
     passwordHash,
-    persistTeamState,
+    applyTeamStateMutation,
     logger,
-    findAccount,
     reason = "team-invitation-accept",
   } = input;
-  const accounts = Array.isArray(state.team?.accounts) ? state.team.accounts : [];
-  const persisted = await persistTeamState(
-    {
-      ...state,
-      team: {
-        ...(state.team || {}),
-        accounts: [
-          ...accounts,
-          {
-            id: invitation.userId,
-            name: invitation.name,
-            role: invitation.role,
-            teamId: invitation.teamId,
-            active: true,
-            passwordHash,
-          },
-        ],
+  const result = await applyTeamStateMutation(logger, reason, (currentState) => {
+    const accounts = Array.isArray(currentState.team?.accounts) ? currentState.team.accounts : [];
+    const exists = accounts.some((item) => String(item?.id || "") === String(invitation.userId || ""));
+    if (exists) {
+      throw new HttpError(409, "Diese User-ID ist bereits vergeben.");
+    }
+    const account = {
+      id: invitation.userId,
+      name: invitation.name,
+      role: invitation.role,
+      teamId: invitation.teamId,
+      active: true,
+      passwordHash,
+    };
+    return {
+      state: {
+        ...currentState,
+        team: {
+          ...(currentState.team || {}),
+          accounts: [...accounts, account],
+        },
       },
-    },
-    logger,
-    reason,
-  );
-  if (!persisted) {
-    throw new HttpError(500, "Team-Account konnte nicht gespeichert werden.");
-  }
-  return findAccount(invitation.userId);
+      accountId: account.id,
+    };
+  });
+  return result?.accountId || invitation.userId;
 }
 
 export async function confirmPasswordReset(input) {
   const {
-    state,
     reset,
     passwordHash,
-    persistTeamState,
+    applyTeamStateMutation,
     logger,
     reason = "team-password-reset",
   } = input;
-  const accounts = Array.isArray(state.team?.accounts) ? state.team.accounts : [];
-  const index = accounts.findIndex((item) => item?.id === reset.userId && item?.teamId === reset.teamId);
-  if (index < 0) {
-    throw new HttpError(404, "Team-Account wurde nicht gefunden.");
-  }
-  const nextAccounts = [...accounts];
-  nextAccounts[index] = {
-    ...nextAccounts[index],
-    active: true,
-    passwordHash,
-  };
-  const persisted = await persistTeamState(
-    {
-      ...state,
+  await applyTeamStateMutation(logger, reason, (currentState) => {
+    const accounts = Array.isArray(currentState.team?.accounts) ? currentState.team.accounts : [];
+    const index = accounts.findIndex((item) => item?.id === reset.userId && item?.teamId === reset.teamId);
+    if (index < 0) {
+      throw new HttpError(404, "Team-Account wurde nicht gefunden.");
+    }
+    const nextAccounts = [...accounts];
+    nextAccounts[index] = {
+      ...nextAccounts[index],
+      active: true,
+      passwordHash,
+    };
+    return {
+      ...currentState,
       team: {
-        ...(state.team || {}),
+        ...(currentState.team || {}),
         accounts: nextAccounts,
       },
-    },
-    logger,
-    reason,
-  );
-  if (!persisted) {
-    throw new HttpError(500, "Neues Passwort konnte nicht gespeichert werden.");
-  }
+    };
+  });
 }

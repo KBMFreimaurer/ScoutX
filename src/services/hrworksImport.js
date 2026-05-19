@@ -125,6 +125,7 @@ export function buildHrworksImportPayload({
   breakStart,
   breakEnd,
   intermediateStops,
+  routeLegs,
 }) {
   const sourceGames = buildSourceGames(games);
   const withEnd = sourceGames.map((game) => {
@@ -150,8 +151,10 @@ export function buildHrworksImportPayload({
 
   const gameLabels = withEnd.map((game) => `${game.home} - ${game.away}`).filter(Boolean);
   const nowIso = new Date().toISOString();
-  const fallbackPurpose = gameLabels.length > 0 ? `Sichtung / (${gameLabels.join(" - ")})` : "Sichtung";
-  const fallbackNote = gameLabels.length > 0 ? `Sichtung / (${gameLabels.join(" → ")})` : "Sichtung";
+  const fallbackPurpose = gameLabels.length > 0
+    ? `Sichtung / Route des Arbeitstages (${gameLabels.join(" - ")})`
+    : "Sichtung / Route des Arbeitstages";
+  const fallbackNote = fallbackPurpose;
 
   const rawHours = Number.isFinite(toMinutes(range.endTime)) && Number.isFinite(toMinutes(range.startTime))
     ? ((toMinutes(range.endTime) - toMinutes(range.startTime)) / 60)
@@ -173,6 +176,24 @@ export function buildHrworksImportPayload({
     intermediateStops: Array.isArray(intermediateStops)
       ? intermediateStops.map((item) => String(item || "").trim()).filter(Boolean)
       : withEnd.slice(1, -1).map((game) => game.venue).filter(Boolean),
+    routeLegs: Array.isArray(routeLegs)
+      ? routeLegs
+          .map((leg, index) => {
+            const from = String(leg?.from || "").trim();
+            const to = String(leg?.to || "").trim();
+            if (!from || !to) {
+              return null;
+            }
+            return {
+              id: String(leg?.id || `leg-${index}`),
+              from,
+              to,
+              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
+              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
+            };
+          })
+          .filter(Boolean)
+      : [],
     costCenter: String(costCenter || "").trim(),
     travelExpenseRequired: true,
     receiptsRequired: false,
@@ -301,6 +322,7 @@ export function appendHrworksImportLog(entry) {
       technicalResult: truncateText(redactSensitiveText(entry?.technicalResult), 240),
       errorMessage: truncateText(redactSensitiveText(entry?.errorMessage), 240),
       hrworksReference: truncateText(entry?.hrworksReference, 120),
+      sourceType: String(entry?.sourceType || "").trim().toLowerCase(),
     },
     ...current,
   ].slice(0, 200);

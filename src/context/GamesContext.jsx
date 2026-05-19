@@ -8,6 +8,7 @@ import { useSetup } from "./SetupContext";
 
 const GamesContext = createContext(null);
 const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const MAX_GAME_NOTE_LENGTH = 2000;
 const LEGACY_NRW_REGION_FALLBACKS = {
   duesseldorf: { searchName: "Düsseldorf", shortCode: "DU", areaKeywords: ["dusseldorf", "duesseldorf"] },
   duisburg: { searchName: "Duisburg", shortCode: "DUI", areaKeywords: ["duisburg", "mulheim", "dinslak"] },
@@ -145,6 +146,56 @@ function withNotes(games, notesById) {
   }));
 }
 
+function isUnknownVenue(value) {
+  return /^(?:\s*|k\/?a|n\/a|unbekannt|--+)$/i.test(String(value || "").trim());
+}
+
+function applyVenueFallbackHeuristics(games) {
+  const safeGames = Array.isArray(games) ? games : [];
+  const teamVenueCount = new Map();
+  for (const game of safeGames) {
+    const venue = String(game?.venue || "").trim();
+    if (isUnknownVenue(venue)) {
+      continue;
+    }
+    const teams = [String(game?.home || "").trim(), String(game?.away || "").trim()].filter(Boolean);
+    for (const team of teams) {
+      const bucket = teamVenueCount.get(team) || new Map();
+      bucket.set(venue, Number(bucket.get(venue) || 0) + 1);
+      teamVenueCount.set(team, bucket);
+    }
+  }
+  const resolveSuggestedVenue = (teamName) => {
+    const bucket = teamVenueCount.get(String(teamName || "").trim());
+    if (!bucket || bucket.size === 0) {
+      return "";
+    }
+    return [...bucket.entries()].sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0] || "";
+  };
+
+  return safeGames.map((game) => {
+    const venue = String(game?.venue || "").trim();
+    if (!isUnknownVenue(venue)) {
+      return game;
+    }
+    const suggestedVenue = resolveSuggestedVenue(game?.home) || resolveSuggestedVenue(game?.away);
+    if (!suggestedVenue) {
+      return {
+        ...game,
+        venue: "K/A",
+        venueSuggestion: "",
+        venueIsEstimated: false,
+      };
+    }
+    return {
+      ...game,
+      venue: "K/A",
+      venueSuggestion: suggestedVenue,
+      venueIsEstimated: true,
+    };
+  });
+}
+
 function ensureGameIds(games) {
   const safeGames = Array.isArray(games) ? games : [];
   const usedIds = new Set();
@@ -254,12 +305,13 @@ function buildGameMergeKey(game, fallbackIndex) {
   const timeText = String(game?.time || "").trim();
   const time = KNOWN_TIME_RE.test(timeText) ? timeText : "--:--";
   const venue = normalizeLookup(game?.venue || "");
+  const jugend = normalizeLookup(game?.jugendId || game?.jugendLabel || game?.ageGroup || "");
 
   if (!home || !away || !date) {
     return `fallback-${fallbackIndex}`;
   }
 
-  return `${home}|${away}|${date}|${time}|${venue}`;
+  return `${home}|${away}|${date}|${time}|${venue}|${jugend || "-"}`;
 }
 
 function mergeGamesAcrossKreise(gamesByKreis) {
@@ -288,6 +340,11 @@ function mergeGamesAcrossKreise(gamesByKreis) {
 
   return Array.from(mergedByKey.values());
 }
+
+export const __gamesContextTestables = {
+  mergeGamesAcrossKreise,
+  applyVenueFallbackHeuristics,
+};
 
 function buildTeamFilterMetaFromGames(games, teams) {
   const requestedTeams = Array.isArray(teams)
@@ -515,7 +572,8 @@ export function GamesProvider({ children }) {
       return {};
     }
     try {
-      const raw = window.sessionStorage.getItem(STORAGE_KEYS.notes);
+      const localRaw = window.localStorage.getItem(STORAGE_KEYS.notes);
+      const raw = localRaw || window.sessionStorage.getItem(STORAGE_KEYS.notes);
       if (!raw) {
         return {};
       }
@@ -544,9 +602,10 @@ export function GamesProvider({ children }) {
     }
 
     try {
+      window.localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify({ byId: gameNotes }));
       window.sessionStorage.setItem(STORAGE_KEYS.notes, JSON.stringify({ byId: gameNotes }));
     } catch {
-      // Ignore sessionStorage write errors.
+      // Ignore browser storage write errors.
     }
   }, [gameNotes]);
 
@@ -588,7 +647,7 @@ export function GamesProvider({ children }) {
   }, [navigate]);
 
   const onSetGameNote = useCallback((gameId, noteText) => {
-    const text = String(noteText || "");
+    const text = String(noteText || "").slice(0, MAX_GAME_NOTE_LENGTH);
 
     setGameNotes((prev) => {
       const next = { ...prev };
@@ -761,7 +820,7 @@ export function GamesProvider({ children }) {
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
-      const boostedGames = withFavoriteBoost(fetchedGames, favoriteSnapshot);
+      const boostedGames = withFavoriteBoost(applyVenueFallbackHeuristics(fetchedGames), favoriteSnapshot);
       const initialGames = ensureGameIds(withNotes(boostedGames, noteSnapshot));
       setGames(initialGames);
       setSelectedGameIds((prev) => {
@@ -804,7 +863,11 @@ export function GamesProvider({ children }) {
           if (buildRunRef.current !== runId) {
             return;
           }
-          setGames(ensureGameIds(withNotes(withFavoriteBoost(enrichedGames, favoritesRef.current), gameNotesRef.current)));
+          setGames(
+            ensureGameIds(
+              withNotes(withFavoriteBoost(applyVenueFallbackHeuristics(enrichedGames), favoritesRef.current), gameNotesRef.current),
+            ),
+          );
         })
         .catch(() => {
           // Keep initial games if enrichment fails.

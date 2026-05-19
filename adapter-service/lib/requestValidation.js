@@ -27,8 +27,12 @@ export function parsePushSubscriptionPayload(payload, context, nowIso) {
 
 export function parseEventIdsPayload(payload) {
   const ids = (Array.isArray(payload?.eventIds) ? payload.eventIds : [payload?.eventId]).map((item) => normalizeId(item)).filter(Boolean);
-  if (ids.length === 0) {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length > 200) {
+    throw new ValidationError("Maximal 200 eventIds pro Anfrage erlaubt.");
+  }
+  if (uniqueIds.length === 0) {
     throw new ValidationError("eventId/eventIds ist erforderlich.");
   }
-  return ids;
+  return uniqueIds;
 }

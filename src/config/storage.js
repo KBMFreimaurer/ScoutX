@@ -13,4 +13,29 @@ export const STORAGE_KEYS = {
   playerSheets: "scoutx.playerSheets.v1",
   scheduleWatch: "scoutx.scheduleWatch.v1",
   productDomain: "scoutx.product.v1",
+  geoCache: "scoutx.geo.cache.v1",
+  routeCache: "scoutx.route.cache.v1",
+  clubLogos: "scoutx.clubLogos.v1",
 };
+
+// Retention policy for browser storage keys.
+// ttlMs=null means durable until explicit user reset/logout or key version bump.
+export const STORAGE_RETENTION_RULES = Object.freeze([
+  { key: STORAGE_KEYS.selectedGames, storage: "sessionStorage", ttlMs: 7 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.notes, storage: "localStorage", ttlMs: 30 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.presence, storage: "sessionStorage", ttlMs: 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.geoCache, storage: "sessionStorage", ttlMs: 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.routeCache, storage: "sessionStorage", ttlMs: 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.planHistory, storage: "localStorage", ttlMs: 90 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.playerSheets, storage: "localStorage", ttlMs: 180 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.clubLogos, storage: "localStorage", ttlMs: 30 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.scheduleWatch, storage: "localStorage", ttlMs: 30 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.hrworksImports, storage: "localStorage", ttlMs: 30 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.hrworksSelectors, storage: "localStorage", ttlMs: 180 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.hrworksPolicy, storage: "localStorage", ttlMs: 365 * 24 * 60 * 60 * 1000 },
+  { key: STORAGE_KEYS.setup, storage: "localStorage", ttlMs: null },
+  { key: STORAGE_KEYS.abrechnungMeta, storage: "localStorage", ttlMs: null },
+  { key: STORAGE_KEYS.productDomain, storage: "localStorage", ttlMs: null },
+  { key: STORAGE_KEYS.location, storage: "localStorage", ttlMs: null },
+  { key: STORAGE_KEYS.favorites, storage: "localStorage", ttlMs: null },
+]);

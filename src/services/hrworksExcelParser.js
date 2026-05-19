@@ -1,3 +1,5 @@
+import * as XLSX from "xlsx";
+
 function excelSerialToDate(serial) {
   const value = Number(serial);
   if (!Number.isFinite(value)) {
@@ -42,6 +44,12 @@ function toIsoDate(value) {
 }
 
 export function toTimeHHmm(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const hours = String(value.getHours()).padStart(2, "0");
+    const minutes = String(value.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+  }
+
   if (typeof value === "number") {
     const totalMinutes = Math.round(value * 24 * 60) % (24 * 60);
     const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
@@ -125,6 +133,71 @@ export function parseHrworksTimesheetRows(rows) {
   return { entries, warnings };
 }
 
+function normalizeHeaderValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function findAzeHeaderRow(sheetRows) {
+  for (let rowIndex = 0; rowIndex < sheetRows.length; rowIndex += 1) {
+    const row = Array.isArray(sheetRows[rowIndex]) ? sheetRows[rowIndex] : [];
+    const normalized = row.map(normalizeHeaderValue);
+    const hasDatum = normalized.includes("datum");
+    const hasBeginn = normalized.includes("beginn");
+    const hasEnde = normalized.includes("ende");
+    const hasStunden = normalized.some((item) => item === "stunden" || item === "arbeits- stunden" || item === "arbeitsstunden");
+    if (hasDatum && hasBeginn && hasEnde && hasStunden) {
+      return rowIndex;
+    }
+  }
+  return -1;
+}
+
+function readAzeMetadata(sheetRows) {
+  let employeeName = "";
+  let month = "";
+
+  for (const row of sheetRows) {
+    const values = (Array.isArray(row) ? row : []).map((item) => String(item || "").trim());
+    for (let index = 0; index < values.length; index += 1) {
+      const current = values[index].toLowerCase();
+      if (current === "name:" && !employeeName) {
+        employeeName = String(values[index + 1] || "").trim();
+      }
+      if (current === "monat:" && !month) {
+        month = String(values[index + 1] || "").trim();
+      }
+    }
+  }
+
+  return { employeeName, month };
+}
+
+function rowsFromAzeWorksheet(worksheet) {
+  const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: "" });
+  const headerRowIndex = findAzeHeaderRow(rawRows);
+  if (headerRowIndex < 0) {
+    return [];
+  }
+  const headers = rawRows[headerRowIndex].map((value) => String(value || "").trim());
+  const { employeeName, month } = readAzeMetadata(rawRows.slice(0, headerRowIndex));
+  return rawRows.slice(headerRowIndex + 1).map((values) => {
+    const row = headers.reduce((acc, header, index) => {
+      acc[header] = values?.[index] ?? "";
+      return acc;
+    }, {});
+    if (employeeName && !row.Name && !row.Mitarbeitername) {
+      row.Name = employeeName;
+    }
+    if (month && !row.Monat) {
+      row.Monat = month;
+    }
+    return row;
+  });
+}
+
 function parseDelimitedLine(line, delimiter) {
   const result = [];
   let current = "";
@@ -181,6 +254,27 @@ export function parseHrworksTimesheetText(fileText) {
   return parseHrworksTimesheetRows(rows);
 }
 
+export async function parseHrworksTimesheetFile(file) {
+  const name = String(file?.name || "").toLowerCase();
+  if (name.endsWith(".csv") || name.endsWith(".txt")) {
+    const text = await file.text();
+    return parseHrworksTimesheetText(text);
+  }
+
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+    const rows = [];
+    for (const sheetName of workbook.SheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      rows.push(...rowsFromAzeWorksheet(worksheet));
+    }
+    return parseHrworksTimesheetRows(rows);
+  }
+
+  return { entries: [], warnings: ["Nicht unterstütztes Dateiformat. Bitte CSV, TXT oder XLSX verwenden."] };
+}
+
 export function validateHrworksTimesheetFile(file) {
   const name = String(file?.name || "").toLowerCase();
   if (!name) {
@@ -188,11 +282,7 @@ export function validateHrworksTimesheetFile(file) {
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    return {
-      ok: false,
-      message:
-        "Excel-Dateien (.xlsx/.xls) werden aktuell nicht direkt gelesen. Bitte als CSV exportieren und erneut importieren.",
-    };
+    return { ok: true, message: "" };
   }
 
   if (name.endsWith(".csv") || name.endsWith(".txt")) {

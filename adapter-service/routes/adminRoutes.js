@@ -15,6 +15,8 @@ export async function handleAdminRoutes(req, res, routeContext) {
     normalizeGames,
     dedupeGames,
     writeStoreSafely,
+    runStoreMutationSerialized,
+    runTeamWriteIdempotent,
     dedupeClubEntries,
     writeClubCatalogFile,
     ingestionJobs,
@@ -36,11 +38,15 @@ export async function handleAdminRoutes(req, res, routeContext) {
     }
 
     try {
-      await runRefreshIngestionJob("admin-refresh", requestLogger);
-      sendJson(res, 200, { ok: true, ...buildAdminMeta() }, origin, requestId);
+      const adminContext = { account: { id: "admin", teamId: "global-admin" } };
+      const { meta } = await runTeamWriteIdempotent(req, adminContext, "admin-refresh", {}, async () => {
+        await runRefreshIngestionJob("admin-refresh", requestLogger);
+        return { meta: buildAdminMeta() };
+      });
+      sendJson(res, 200, { ok: true, ...meta }, origin, requestId);
     } catch (error) {
       requestLogger.error("admin refresh failed", { error });
-      sendJson(res, 500, { ok: false, error: "Refresh fehlgeschlagen." }, origin, requestId);
+      sendJson(res, Number(error?.statusCode || 500), { ok: false, error: String(error?.message || "Refresh fehlgeschlagen.") }, origin, requestId);
     }
     return true;
   }
@@ -54,44 +60,50 @@ export async function handleAdminRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      if (!Array.isArray(payload.games)) {
-        throw new Error("`games` muss ein Array sein.");
-      }
+      const adminContext = { account: { id: "admin", teamId: "global-admin" } };
+      const result = await runTeamWriteIdempotent(req, adminContext, "admin-import", payload, async () => {
+        return runStoreMutationSerialized("admin-import", async () => {
+          if (!Array.isArray(payload.games)) {
+            throw new Error("`games` muss ein Array sein.");
+          }
+          const replace = Boolean(payload.replace);
+          const importedGames = normalizeGames(payload.games, {
+            aliasMap: state.aliasMap,
+            source: "manual-import",
+          });
 
-      const replace = Boolean(payload.replace);
-      const importedGames = normalizeGames(payload.games, {
-        aliasMap: state.aliasMap,
-        source: "manual-import",
+          const merged = replace ? dedupeGames(importedGames) : dedupeGames([...(state.games || []), ...importedGames]);
+
+          const meta = {
+            ...(state.meta || {}),
+            updatedAt: new Date().toISOString(),
+            counts: {
+              ...(state.meta?.counts || {}),
+              total: merged.length,
+              manualImport: importedGames.length,
+            },
+            warnings: state.meta?.warnings || [],
+          };
+
+          const persisted = await writeStoreSafely("admin-import", { games: merged, meta }, requestLogger);
+          if (!persisted) {
+            const persistenceError = new Error("Store konnte nicht geschrieben werden.");
+            persistenceError.statusCode = 500;
+            throw persistenceError;
+          }
+          state.games = merged;
+          state.meta = meta;
+          state.lastRefreshReason = replace ? "admin-import-replace" : "admin-import-merge";
+          state.lastError = null;
+          state.lastSuccessfulRefreshAt = nowIso();
+          return { imported: importedGames.length, total: merged.length };
+        });
       });
 
-      const merged = replace ? dedupeGames(importedGames) : dedupeGames([...(state.games || []), ...importedGames]);
-
-      const meta = {
-        ...(state.meta || {}),
-        updatedAt: new Date().toISOString(),
-        counts: {
-          ...(state.meta?.counts || {}),
-          total: merged.length,
-          manualImport: importedGames.length,
-        },
-        warnings: state.meta?.warnings || [],
-      };
-
-      const persisted = await writeStoreSafely("admin-import", { games: merged, meta }, requestLogger);
-      if (!persisted) {
-        sendJson(res, 500, { ok: false, error: "Store konnte nicht geschrieben werden." }, origin, requestId);
-        return true;
-      }
-      state.games = merged;
-      state.meta = meta;
-      state.lastRefreshReason = replace ? "admin-import-replace" : "admin-import-merge";
-      state.lastError = null;
-      state.lastSuccessfulRefreshAt = nowIso();
-
-      sendJson(res, 200, { ok: true, imported: importedGames.length, total: merged.length }, origin, requestId);
+      sendJson(res, 200, { ok: true, imported: result.imported, total: result.total }, origin, requestId);
     } catch (error) {
       requestLogger.error("admin import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Import fehlgeschlagen." }, origin, requestId);
+      sendJson(res, Number(error?.statusCode || 400), { ok: false, error: String(error?.message || "Import fehlgeschlagen.") }, origin, requestId);
     }
 
     return true;
@@ -106,32 +118,26 @@ export async function handleAdminRoutes(req, res, routeContext) {
 
     try {
       const payload = await readBody(req);
-      if (!Array.isArray(payload.clubs)) {
-        throw new Error("`clubs` muss ein Array sein.");
-      }
+      const adminContext = { account: { id: "admin", teamId: "global-admin" } };
+      const result = await runTeamWriteIdempotent(req, adminContext, "admin-clubs-import", payload, async () => {
+        return runStoreMutationSerialized("admin-clubs-import", async () => {
+          if (!Array.isArray(payload.clubs)) {
+            throw new Error("`clubs` muss ein Array sein.");
+          }
 
-      const replace = Boolean(payload.replace);
-      const importedClubs = dedupeClubEntries(payload.clubs);
-      const merged = replace ? importedClubs : dedupeClubEntries([...(state.clubs || []), ...importedClubs]);
-      const persisted = await writeClubCatalogFile(merged);
+          const replace = Boolean(payload.replace);
+          const importedClubs = dedupeClubEntries(payload.clubs);
+          const merged = replace ? importedClubs : dedupeClubEntries([...(state.clubs || []), ...importedClubs]);
+          const persisted = await writeClubCatalogFile(merged);
+          state.clubs = persisted;
+          return { imported: importedClubs.length, total: persisted.length, replace };
+        });
+      });
 
-      state.clubs = persisted;
-
-      sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          imported: importedClubs.length,
-          total: persisted.length,
-          replace,
-        },
-        origin,
-        requestId,
-      );
+      sendJson(res, 200, { ok: true, imported: result.imported, total: result.total, replace: result.replace }, origin, requestId);
     } catch (error) {
       requestLogger.error("admin clubs import failed", { error });
-      sendJson(res, 400, { ok: false, error: "Vereinskatalog-Import fehlgeschlagen." }, origin, requestId);
+      sendJson(res, Number(error?.statusCode || 400), { ok: false, error: String(error?.message || "Vereinskatalog-Import fehlgeschlagen.") }, origin, requestId);
     }
 
     return true;

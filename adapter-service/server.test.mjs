@@ -355,6 +355,459 @@ describe("adapter-service server integration", () => {
     expect(typeof payload.count).toBe("number");
   });
 
+  it("handles concurrent admin refresh requests without failure", async () => {
+    const [firstRefresh, secondRefresh] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/refresh`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+        },
+      }),
+      fetch(`${baseUrl}/api/admin/refresh`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+        },
+      }),
+    ]);
+    expect(firstRefresh.status).toBe(200);
+    expect(secondRefresh.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstRefresh);
+    const secondPayload = await parseJsonSafe(secondRefresh);
+    expect(firstPayload.ok).toBe(true);
+    expect(secondPayload.ok).toBe(true);
+    expect(typeof firstPayload.count).toBe("number");
+    expect(typeof secondPayload.count).toBe("number");
+  });
+
+  it("deduplicates admin refresh with same idempotency key", async () => {
+    const headers = {
+      authorization: "Bearer test-token",
+      "idempotency-key": `admin-refresh-idem-${Date.now()}`,
+    };
+    const [firstRefresh, secondRefresh] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/refresh`, {
+        method: "POST",
+        headers,
+      }),
+      fetch(`${baseUrl}/api/admin/refresh`, {
+        method: "POST",
+        headers,
+      }),
+    ]);
+    expect(firstRefresh.status).toBe(200);
+    expect(secondRefresh.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstRefresh);
+    const secondPayload = await parseJsonSafe(secondRefresh);
+    expect(firstPayload.ok).toBe(true);
+    expect(secondPayload.ok).toBe(true);
+    expect(secondPayload.count).toBe(firstPayload.count);
+  });
+
+  it("handles concurrent admin refresh and admin import without server errors", async () => {
+    const importBody = JSON.stringify({
+      replace: false,
+      games: [
+        {
+          date: "2026-05-07",
+          time: "13:00",
+          home: `Admin Mixed ${Date.now()}`,
+          away: "Admin Mixed Gegner",
+          venue: "Admin Mixed Platz",
+        },
+      ],
+    });
+
+    const [refreshResponse, importResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/refresh`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+        },
+      }),
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: importBody,
+      }),
+    ]);
+
+    expect(refreshResponse.status).toBe(200);
+    expect(importResponse.status).toBe(200);
+    const refreshPayload = await parseJsonSafe(refreshResponse);
+    const importPayload = await parseJsonSafe(importResponse);
+    expect(refreshPayload.ok).toBe(true);
+    expect(importPayload.ok).toBe(true);
+  });
+
+  it("scopes admin idempotency by endpoint so same key across refresh and import does not conflict", async () => {
+    const sameKey = `admin-cross-scope-${Date.now()}`;
+
+    const refreshResponse = await fetch(`${baseUrl}/api/admin/refresh`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "idempotency-key": sameKey,
+      },
+    });
+    expect(refreshResponse.status).toBe(200);
+
+    const importResponse = await fetch(`${baseUrl}/api/admin/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+        "idempotency-key": sameKey,
+      },
+      body: JSON.stringify({
+        replace: false,
+        games: [
+          {
+            date: "2026-05-08",
+            time: "14:00",
+            home: `Admin Scope Home ${Date.now()}`,
+            away: "Admin Scope Away",
+            venue: "Admin Scope Platz",
+          },
+        ],
+      }),
+    });
+    expect(importResponse.status).toBe(200);
+    const importPayload = await parseJsonSafe(importResponse);
+    expect(importPayload.ok).toBe(true);
+  });
+
+  it("handles concurrent admin game import and club import without losing either update", async () => {
+    const gameHome = `Admin Mixed Store ${Date.now()}`;
+    const clubName = `Admin Mixed Club ${Date.now()}`;
+
+    const [gameImportResponse, clubImportResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({
+          replace: false,
+          games: [
+            {
+              date: "2026-05-09",
+              time: "10:30",
+              home: gameHome,
+              away: "Admin Mixed Gegner",
+              venue: "Admin Mixed Platz",
+            },
+          ],
+        }),
+      }),
+      fetch(`${baseUrl}/api/admin/clubs/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({
+          replace: false,
+          clubs: [{ name: clubName, aliases: ["AMC"] }],
+        }),
+      }),
+    ]);
+    expect(gameImportResponse.status).toBe(200);
+    expect(clubImportResponse.status).toBe(200);
+
+    const gamesResponse = await fetch(`${baseUrl}/api/games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+      },
+      body: JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-05-01",
+        toDate: "2026-05-15",
+        teams: [],
+        ensureWeekData: false,
+      }),
+    });
+    expect(gamesResponse.status).toBe(200);
+    const gamesPayload = await parseJsonSafe(gamesResponse);
+    const homes = (Array.isArray(gamesPayload.games) ? gamesPayload.games : []).map((item) => String(item?.home || ""));
+    expect(homes).toContain(gameHome);
+
+    const clubsResponse = await fetch(`${baseUrl}/api/clubs/search?q=Admin Mixed Club&limit=50`, {
+      headers: {
+        authorization: "Bearer test-token",
+      },
+    });
+    expect(clubsResponse.status).toBe(200);
+    const clubsPayload = await parseJsonSafe(clubsResponse);
+    const names = (Array.isArray(clubsPayload.clubs) ? clubsPayload.clubs : []).map((item) => String(item?.name || ""));
+    expect(names).toContain(clubName);
+  });
+
+  it("applies concurrent admin imports without losing games", async () => {
+    const gameA = {
+      date: "2026-05-03",
+      time: "10:00",
+      home: `Admin Parallel A ${Date.now()}`,
+      away: "Admin Gegner A",
+      venue: "Admin Platz A",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+    };
+    const gameB = {
+      date: "2026-05-03",
+      time: "11:00",
+      home: `Admin Parallel B ${Date.now()}`,
+      away: "Admin Gegner B",
+      venue: "Admin Platz B",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+    };
+
+    const [firstImport, secondImport] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({ replace: false, games: [gameA] }),
+      }),
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({ replace: false, games: [gameB] }),
+      }),
+    ]);
+    expect(firstImport.status).toBe(200);
+    expect(secondImport.status).toBe(200);
+
+    const gamesResponse = await fetch(`${baseUrl}/api/games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+      },
+      body: JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-05-01",
+        toDate: "2026-05-10",
+        teams: [],
+        ensureWeekData: false,
+      }),
+    });
+    expect(gamesResponse.status).toBe(200);
+    const gamesPayload = await parseJsonSafe(gamesResponse);
+    const homes = (Array.isArray(gamesPayload.games) ? gamesPayload.games : []).map((item) => String(item?.home || ""));
+    expect(homes).toContain(gameA.home);
+    expect(homes).toContain(gameB.home);
+  });
+
+  it("rejects admin import idempotency-key reuse with different payload", async () => {
+    const idempotencyKey = `admin-import-conflict-${Date.now()}`;
+    const firstResponse = await fetch(`${baseUrl}/api/admin/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        replace: false,
+        games: [
+          {
+            date: "2026-05-05",
+            time: "10:00",
+            home: `Admin Idem A ${Date.now()}`,
+            away: "Admin Gegner A",
+            venue: "Admin Platz A",
+          },
+        ],
+      }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const secondResponse = await fetch(`${baseUrl}/api/admin/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        replace: false,
+        games: [
+          {
+            date: "2026-05-05",
+            time: "11:00",
+            home: `Admin Idem B ${Date.now()}`,
+            away: "Admin Gegner B",
+            venue: "Admin Platz B",
+          },
+        ],
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
+  it("deduplicates admin import with same idempotency key and payload", async () => {
+    const idempotencyKey = `admin-import-dedupe-${Date.now()}`;
+    const body = JSON.stringify({
+      replace: false,
+      games: [
+        {
+          date: "2026-05-06",
+          time: "12:00",
+          home: `Admin Dedupe ${Date.now()}`,
+          away: "Admin Dedupe Gegner",
+          venue: "Admin Dedupe Platz",
+        },
+      ],
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: "Bearer test-token",
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/admin/import`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.ok).toBe(true);
+    expect(secondPayload.ok).toBe(true);
+    expect(secondPayload.total).toBe(firstPayload.total);
+    expect(secondPayload.imported).toBe(firstPayload.imported);
+  });
+
+  it("applies concurrent admin club imports without losing entries", async () => {
+    const clubA = { name: `Parallel Club A ${Date.now()}`, aliases: ["PCA"] };
+    const clubB = { name: `Parallel Club B ${Date.now()}`, aliases: ["PCB"] };
+
+    const [firstImport, secondImport] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/clubs/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({ replace: false, clubs: [clubA] }),
+      }),
+      fetch(`${baseUrl}/api/admin/clubs/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-token",
+        },
+        body: JSON.stringify({ replace: false, clubs: [clubB] }),
+      }),
+    ]);
+    expect(firstImport.status).toBe(200);
+    expect(secondImport.status).toBe(200);
+
+    const clubsSearchResponse = await fetch(`${baseUrl}/api/clubs/search?q=Parallel Club&limit=50`, {
+      headers: {
+        authorization: "Bearer test-token",
+      },
+    });
+    expect(clubsSearchResponse.status).toBe(200);
+    const clubsSearchPayload = await parseJsonSafe(clubsSearchResponse);
+    const names = (Array.isArray(clubsSearchPayload.clubs) ? clubsSearchPayload.clubs : []).map((item) => String(item?.name || ""));
+    expect(names).toContain(clubA.name);
+    expect(names).toContain(clubB.name);
+  });
+
+  it("rejects admin clubs import idempotency-key reuse with different payload", async () => {
+    const idempotencyKey = `admin-clubs-conflict-${Date.now()}`;
+    const firstResponse = await fetch(`${baseUrl}/api/admin/clubs/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        replace: false,
+        clubs: [{ name: `Conflict Club A ${Date.now()}`, aliases: ["CCA"] }],
+      }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const secondResponse = await fetch(`${baseUrl}/api/admin/clubs/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        replace: false,
+        clubs: [{ name: `Conflict Club B ${Date.now()}`, aliases: ["CCB"] }],
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
+  it("deduplicates admin clubs import with same idempotency key and payload", async () => {
+    const idempotencyKey = `admin-clubs-dedupe-${Date.now()}`;
+    const body = JSON.stringify({
+      replace: false,
+      clubs: [{ name: `Dedupe Club ${Date.now()}`, aliases: ["DCP"] }],
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: "Bearer test-token",
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/admin/clubs/import`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/admin/clubs/import`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.ok).toBe(true);
+    expect(secondPayload.ok).toBe(true);
+    expect(secondPayload.total).toBe(firstPayload.total);
+    expect(secondPayload.imported).toBe(firstPayload.imported);
+  });
+
   it("validates mandant-probe input", async () => {
     const response = await fetch(`${baseUrl}/api/admin/mandant-probe?mandant=invalid`, {
       headers: {
@@ -536,6 +989,264 @@ describe("adapter-service server integration", () => {
     expect(statePayload.feedItems).toEqual([]);
   });
 
+  it("deduplicates concurrent logins with same idempotency key", async () => {
+    const idempotencyKey = `login-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD });
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/login`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/team/auth/login`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstCookie = String(firstResponse.headers.get("set-cookie") || "").split(";")[0];
+    const secondCookie = String(secondResponse.headers.get("set-cookie") || "").split(";")[0];
+    expect(firstCookie).toBeTruthy();
+    expect(secondCookie).toBe(firstCookie);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.csrfToken).toBeTruthy();
+    expect(secondPayload.csrfToken).toBe(firstPayload.csrfToken);
+    expect(secondPayload.user?.id).toBe("user-scout");
+  });
+
+  it("rejects login idempotency-key reuse with different payload", async () => {
+    const idempotencyKey = `login-idem-conflict-${Date.now()}`;
+    const firstResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ userId: "user-scout", password: "wrong-password" }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
+  it("scopes login idempotency by user so same key across users does not conflict", async () => {
+    const idempotencyKey = `login-cross-user-${Date.now()}`;
+    const [scoutResponse, coordinatorResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/login`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+      }),
+      fetch(`${baseUrl}/api/team/auth/login`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+      }),
+    ]);
+
+    expect(scoutResponse.status).toBe(200);
+    expect(coordinatorResponse.status).toBe(200);
+    const scoutPayload = await parseJsonSafe(scoutResponse);
+    const coordinatorPayload = await parseJsonSafe(coordinatorResponse);
+    expect(scoutPayload.user?.id).toBe("user-scout");
+    expect(coordinatorPayload.user?.id).toBe("user-coordinator");
+  });
+
+  it("rejects excessively long idempotency keys", async () => {
+    const longKey = "k".repeat(300);
+    const response = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": longKey,
+      },
+      body: JSON.stringify({
+        userId: `long-key-user-${Date.now()}`,
+        name: "Long Key User",
+        password: "Long-key-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(response.status).toBe(400);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Idempotency-Key/i);
+  });
+
+  it("rejects idempotency keys with invalid characters", async () => {
+    const invalidKey = "bad key with spaces";
+    const response = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": invalidKey,
+      },
+      body: JSON.stringify({
+        userId: `invalid-key-user-${Date.now()}`,
+        name: "Invalid Key User",
+        password: "Invalid-key-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(response.status).toBe(400);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Idempotency-Key/i);
+  });
+
+  it("rejects conflicting idempotency headers when both variants are present", async () => {
+    const response = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "key-a",
+        "x-idempotency-key": "key-b",
+      },
+      body: JSON.stringify({
+        userId: `conflict-header-user-${Date.now()}`,
+        name: "Conflict Header User",
+        password: "Conflict-header-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(response.status).toBe(400);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/idempotency-key/i);
+  });
+
+  it("rejects oversized request bodies with 413", async () => {
+    const oversized = "a".repeat(1024 * 1024 + 4096);
+    const response = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD, oversized }),
+    });
+    expect(response.status).toBe(413);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Payload zu gro/);
+  });
+
+  it("returns 413 for oversized /api/games requests", async () => {
+    const oversized = "a".repeat(1024 * 1024 + 4096);
+    const response = await fetch(`${baseUrl}/api/games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token",
+      },
+      body: JSON.stringify({
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-04-27",
+        toDate: "2026-05-03",
+        teams: [],
+        ensureWeekData: false,
+        oversized,
+      }),
+    });
+    expect(response.status).toBe(413);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Payload zu gro/);
+  });
+
+  it("preserves 413 status on notifications/read when routed through sendRouteError", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const oversized = "x".repeat(1024 * 1024 + 4096);
+    const response = await fetch(`${baseUrl}/api/team/notifications/read`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        eventIds: ["evt-1"],
+        oversized,
+      }),
+    });
+    expect(response.status).toBe(413);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Payload zu gro/);
+  });
+
+  it("returns 413 for oversized multipart uploads on kreis-pdf import", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const boundary = "----ScoutXBoundaryOversize";
+    const oversizedText = "x".repeat(1024 * 1024 + 4096);
+    const multipartBody = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="mode"',
+      "",
+      "preview",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="file"; filename="oversized.txt"',
+      "Content-Type: text/plain",
+      "",
+      oversizedText,
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+
+    const response = await fetch(`${baseUrl}/api/team/import/kreis-pdf`, {
+      method: "POST",
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: multipartBody,
+    });
+    expect(response.status).toBe(413);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Payload zu gro/);
+  });
+
   it("registers a scout account into Borussia Mönchengladbach team", async () => {
     const registerResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
       method: "POST",
@@ -643,6 +1354,238 @@ describe("adapter-service server integration", () => {
     expect(acceptedPayload.user).toMatchObject({ id: "invite-scout", role: "scout", active: true });
   });
 
+  it("deduplicates concurrent invitation create requests with same idempotency key", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const idempotencyKey = `invite-create-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      cookie: coordinatorCookie,
+      "x-csrf-token": coordinatorPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({
+      userId: `invite-create-idem-user-${Date.now()}`,
+      name: "Invite Create Idem",
+      role: "scout",
+    });
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/invitations/create`, { method: "POST", headers, body }),
+      fetch(`${baseUrl}/api/team/invitations/create`, { method: "POST", headers, body }),
+    ]);
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(201);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.invitation?.token).toBeTruthy();
+    expect(secondPayload.invitation?.token).toBe(firstPayload.invitation?.token);
+  });
+
+  it("rejects invitation create idempotency-key reuse with different payload", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const userId = `invite-create-conflict-user-${Date.now()}`;
+    const idempotencyKey = `invite-create-conflict-${Date.now()}`;
+    const firstResponse = await fetch(`${baseUrl}/api/team/invitations/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Invite Create Conflict",
+        role: "scout",
+      }),
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/invitations/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Invite Create Conflict Changed",
+        role: "scout",
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
+  it("consumes invitation token on first concurrent accept", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const userId = `invite-parallel-${Date.now()}`;
+    const createInviteResponse = await fetch(`${baseUrl}/api/team/invitations/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Invite Parallel",
+        role: "scout",
+      }),
+    });
+    expect(createInviteResponse.status).toBe(201);
+    const invitePayload = await parseJsonSafe(createInviteResponse);
+    const token = String(invitePayload?.invitation?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const [firstAccept, secondAccept] = await Promise.all([
+      fetch(`${baseUrl}/api/team/invitations/accept`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, password: "Invite-parallel-pass-2026" }),
+      }),
+      fetch(`${baseUrl}/api/team/invitations/accept`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, password: "Invite-parallel-pass-2026" }),
+      }),
+    ]);
+
+    const statuses = [firstAccept.status, secondAccept.status].sort((a, b) => a - b);
+    expect(statuses[0]).toBe(201);
+    expect([404, 409]).toContain(statuses[1]);
+  });
+
+  it("deduplicates concurrent invitation accept requests with same idempotency key", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const userId = `invite-idem-${Date.now()}`;
+    const createInviteResponse = await fetch(`${baseUrl}/api/team/invitations/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Invite Idem",
+        role: "scout",
+      }),
+    });
+    expect(createInviteResponse.status).toBe(201);
+    const invitePayload = await parseJsonSafe(createInviteResponse);
+    const token = String(invitePayload?.invitation?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const idempotencyKey = `invite-accept-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({ token, password: "Invite-idem-pass-2026" });
+    const [firstAccept, secondAccept] = await Promise.all([
+      fetch(`${baseUrl}/api/team/invitations/accept`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/team/invitations/accept`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstAccept.status).toBe(201);
+    expect(secondAccept.status).toBe(201);
+    const firstPayload = await parseJsonSafe(firstAccept);
+    const secondPayload = await parseJsonSafe(secondAccept);
+    expect(firstPayload.user?.id).toBe(userId);
+    expect(secondPayload.user?.id).toBe(userId);
+  });
+
+  it("rejects invitation accept idempotency-key reuse with different payload for the same token", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const createInviteResponse = await fetch(`${baseUrl}/api/team/invitations/create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorPayload.csrfToken,
+      },
+      body: JSON.stringify({ userId: `invite-idem-conflict-${Date.now()}`, name: "Invite Idem Conflict", role: "scout" }),
+    });
+    expect(createInviteResponse.status).toBe(201);
+    const createdInvitePayload = await parseJsonSafe(createInviteResponse);
+    const token = String(createdInvitePayload?.invitation?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const idempotencyKey = `invite-accept-conflict-${Date.now()}`;
+    const firstResponse = await fetch(`${baseUrl}/api/team/invitations/accept`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ token, password: "Invite-conflict-pass-2026" }),
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/invitations/accept`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ token, password: "Invite-conflict-pass-OTHER-2026" }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
   it("runs password reset request and confirm flow", async () => {
     const requestResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
       method: "POST",
@@ -690,6 +1633,34 @@ describe("adapter-service server integration", () => {
     expect(newLoginResponse.status).toBe(200);
   });
 
+  it("deduplicates concurrent password reset requests with same idempotency key", async () => {
+    const idempotencyKey = `reset-request-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({ userId: "new-scout" });
+
+    const [firstRequest, secondRequest] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstRequest.status).toBe(200);
+    expect(secondRequest.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstRequest);
+    const secondPayload = await parseJsonSafe(secondRequest);
+    expect(String(firstPayload?.reset?.token || "")).toBeTruthy();
+    expect(secondPayload?.reset?.token).toBe(firstPayload?.reset?.token);
+  });
+
   it("invalidates password reset tokens after first successful use", async () => {
     const requestResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
       method: "POST",
@@ -730,6 +1701,107 @@ describe("adapter-service server integration", () => {
     expect(replayPayload.ok).toBe(false);
   });
 
+  it("consumes password reset token on first concurrent confirm", async () => {
+    const requestResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "new-scout" }),
+    });
+    expect(requestResponse.status).toBe(200);
+    const requestPayload = await parseJsonSafe(requestResponse);
+    const token = String(requestPayload?.reset?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const [firstConfirm, secondConfirm] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, password: "Parallel-reset-password-2026" }),
+      }),
+      fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, password: "Parallel-reset-password-2026" }),
+      }),
+    ]);
+
+    const statuses = [firstConfirm.status, secondConfirm.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 404]);
+  });
+
+  it("deduplicates concurrent password reset confirms with same idempotency key", async () => {
+    const requestResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "new-scout" }),
+    });
+    expect(requestResponse.status).toBe(200);
+    const requestPayload = await parseJsonSafe(requestResponse);
+    const token = String(requestPayload?.reset?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const idempotencyKey = `reset-confirm-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({ token, password: "Parallel-reset-idem-password-2026" });
+    const [firstConfirm, secondConfirm] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+
+    expect(firstConfirm.status).toBe(200);
+    expect(secondConfirm.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstConfirm);
+    const secondPayload = await parseJsonSafe(secondConfirm);
+    expect(firstPayload.user?.id).toBe("new-scout");
+    expect(secondPayload.user?.id).toBe("new-scout");
+  });
+
+  it("rejects password reset confirm idempotency-key reuse with different payload for the same token", async () => {
+    const resetRequest = await fetch(`${baseUrl}/api/team/auth/password-reset/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "new-scout" }),
+    });
+    expect(resetRequest.status).toBe(200);
+    const resetPayload = await parseJsonSafe(resetRequest);
+    const token = String(resetPayload?.reset?.token || "");
+    expect(token.length).toBeGreaterThan(10);
+
+    const idempotencyKey = `reset-confirm-conflict-${Date.now()}`;
+    const firstConfirmResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ token, password: "Reset-conflict-pass-2026" }),
+    });
+    expect(firstConfirmResponse.status).toBe(200);
+
+    const secondConfirmResponse = await fetch(`${baseUrl}/api/team/auth/password-reset/confirm`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ token, password: "Reset-conflict-pass-OTHER-2026" }),
+    });
+    expect(secondConfirmResponse.status).toBe(409);
+    const secondConfirmPayload = await parseJsonSafe(secondConfirmResponse);
+    expect(secondConfirmPayload.ok).toBe(false);
+  });
+
   it("stores web-push subscriptions for logged-in team users", async () => {
     const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
       method: "POST",
@@ -767,6 +1839,102 @@ describe("adapter-service server integration", () => {
       userId: "user-scout",
       teamId: "team-scoutx",
     });
+  });
+
+  it("deduplicates concurrent push subscribe requests with same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `push-subscribe-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({
+      subscription: {
+        endpoint: `https://push.example.test/sub-idem-${Date.now()}`,
+        keys: {
+          p256dh: "idem-p256dh",
+          auth: "idem-auth",
+        },
+      },
+    });
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/notifications/push/subscribe`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+      fetch(`${baseUrl}/api/team/notifications/push/subscribe`, {
+        method: "POST",
+        headers,
+        body,
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.subscription?.endpoint).toBe(firstPayload.subscription?.endpoint);
+    expect(secondPayload.subscription?.userId).toBe("user-scout");
+  });
+
+  it("rejects push subscribe idempotency-key reuse with different payload", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `push-subscribe-conflict-${Date.now()}`;
+
+    const firstResponse = await fetch(`${baseUrl}/api/team/notifications/push/subscribe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        subscription: {
+          endpoint: `https://push.example.test/sub-conflict-a-${Date.now()}`,
+          keys: { p256dh: "conflict-a", auth: "conflict-a" },
+        },
+      }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/notifications/push/subscribe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        subscription: {
+          endpoint: `https://push.example.test/sub-conflict-b-${Date.now()}`,
+          keys: { p256dh: "conflict-b", auth: "conflict-b" },
+        },
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
   });
 
   it("queues critical push events with same event ids as feed/inbox and deduplicates after ack", async () => {
@@ -868,6 +2036,159 @@ describe("adapter-service server integration", () => {
     expect(pendingAfterAckResponse.status).toBe(200);
     const pendingAfterAckPayload = await parseJsonSafe(pendingAfterAckResponse);
     expect(pendingAfterAckPayload.events.some((item) => item.eventId === feedEvent.id)).toBe(false);
+  });
+
+  it("does not remove pending outbox events when ack ids are unknown to the team", async () => {
+    const scoutLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(scoutLoginResponse.status).toBe(200);
+    const scoutCookie = String(scoutLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const scoutPayload = await parseJsonSafe(scoutLoginResponse);
+
+    const createManualResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: scoutCookie,
+        "x-csrf-token": scoutPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        home: "Cross Team A",
+        away: "Cross Team B",
+        date: "2026-09-06",
+        time: "17:00",
+        venue: "Cross Platz",
+      }),
+    });
+    expect(createManualResponse.status).toBe(200);
+    const createManualPayload = await parseJsonSafe(createManualResponse);
+    const manualGame = createManualPayload.manualGame;
+
+    const cancelResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: scoutCookie,
+        "x-csrf-token": scoutPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        ...manualGame,
+        status: "cancelled",
+      }),
+    });
+    expect(cancelResponse.status).toBe(200);
+    const cancelPayload = await parseJsonSafe(cancelResponse);
+    const criticalEventId = String(cancelPayload.feedItems?.[0]?.id || "");
+    expect(criticalEventId.length).toBeGreaterThan(0);
+
+    const unknownAckResponse = await fetch(`${baseUrl}/api/team/notifications/push/ack`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: scoutCookie,
+        "x-csrf-token": scoutPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        eventIds: ["foreign-team-event-id"],
+      }),
+    });
+    expect(unknownAckResponse.status).toBe(200);
+    const unknownAckPayload = await parseJsonSafe(unknownAckResponse);
+    expect(unknownAckPayload.removedCount).toBe(0);
+
+    const scoutPendingResponse = await fetch(`${baseUrl}/api/team/notifications/push/pending`, {
+      headers: { cookie: scoutCookie },
+    });
+    expect(scoutPendingResponse.status).toBe(200);
+    const scoutPendingPayload = await parseJsonSafe(scoutPendingResponse);
+    expect(scoutPendingPayload.events.some((item) => String(item?.eventId || "") === criticalEventId)).toBe(true);
+  });
+
+  it("deduplicates concurrent push ack requests with the same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const createManualResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        home: "Idem Ack A",
+        away: "Idem Ack B",
+        date: "2026-09-12",
+        time: "18:30",
+        venue: "Ack Platz",
+      }),
+    });
+    expect(createManualResponse.status).toBe(200);
+    const createManualPayload = await parseJsonSafe(createManualResponse);
+    const manualGame = createManualPayload.manualGame;
+
+    const cancelResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        ...manualGame,
+        status: "cancelled",
+      }),
+    });
+    expect(cancelResponse.status).toBe(200);
+    const cancelPayload = await parseJsonSafe(cancelResponse);
+    const criticalEventId = String(cancelPayload.feedItems?.[0]?.id || "");
+    expect(criticalEventId.length).toBeGreaterThan(0);
+
+    const idempotencyKey = `push-ack-idem-${Date.now()}`;
+    const ackBody = JSON.stringify({ eventIds: [criticalEventId] });
+    const ackHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstAckResponse, secondAckResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/notifications/push/ack`, {
+        method: "POST",
+        headers: ackHeaders,
+        body: ackBody,
+      }),
+      fetch(`${baseUrl}/api/team/notifications/push/ack`, {
+        method: "POST",
+        headers: ackHeaders,
+        body: ackBody,
+      }),
+    ]);
+    expect(firstAckResponse.status).toBe(200);
+    expect(secondAckResponse.status).toBe(200);
+    const firstAckPayload = await parseJsonSafe(firstAckResponse);
+    const secondAckPayload = await parseJsonSafe(secondAckResponse);
+    expect(firstAckPayload.removedCount).toBe(1);
+    expect(secondAckPayload.removedCount).toBe(1);
+
+    const pendingResponse = await fetch(`${baseUrl}/api/team/notifications/push/pending`, {
+      headers: { cookie },
+    });
+    expect(pendingResponse.status).toBe(200);
+    const pendingPayload = await parseJsonSafe(pendingResponse);
+    expect(pendingPayload.events.some((item) => String(item?.eventId || "") === criticalEventId)).toBe(false);
   });
 
   it("streams critical push events via SSE for logged-in team users", async () => {
@@ -1182,6 +2503,292 @@ describe("adapter-service server integration", () => {
     expect(gameObservation.status).toBe("seen");
     expect(statePayload.feedItems.map((item) => item.type)).toContain("game_seen");
     expect(statePayload.feedItems.map((item) => item.type)).toContain("plan_published");
+  });
+
+  it("deduplicates concurrent observation seen updates with same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const gameId = `idem-seen-game-${Date.now()}`;
+    const planResponse = await fetch(`${baseUrl}/api/team/plans`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        planHistoryId: `idem-seen-plan-${Date.now()}`,
+        games: [{ id: gameId, date: "2026-09-02", home: "Seen Team A", away: "Seen Team B", venue: "Seen Platz" }],
+      }),
+    });
+    expect(planResponse.status).toBe(200);
+
+    const idempotencyKey = `observation-seen-idem-${Date.now()}`;
+    const seenHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+    const seenBody = JSON.stringify({ gameId, reportUrl: "https://example.test/report/idem-seen" });
+    const [firstSeenResponse, secondSeenResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/observations/seen`, { method: "POST", headers: seenHeaders, body: seenBody }),
+      fetch(`${baseUrl}/api/team/observations/seen`, { method: "POST", headers: seenHeaders, body: seenBody }),
+    ]);
+    expect(firstSeenResponse.status).toBe(200);
+    expect(secondSeenResponse.status).toBe(200);
+    const firstSeenPayload = await parseJsonSafe(firstSeenResponse);
+    const secondSeenPayload = await parseJsonSafe(secondSeenResponse);
+    expect(firstSeenPayload.observation?.id).toBeTruthy();
+    expect(secondSeenPayload.observation?.id).toBe(firstSeenPayload.observation?.id);
+  });
+
+  it("deduplicates concurrent observation reassign/report/note updates with same idempotency keys", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const gameId = `idem-multi-obs-${Date.now()}`;
+    const planResponse = await fetch(`${baseUrl}/api/team/plans`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        planHistoryId: `idem-multi-obs-plan-${Date.now()}`,
+        games: [{ id: gameId, date: "2026-09-03", home: "Obs Team A", away: "Obs Team B", venue: "Obs Platz" }],
+      }),
+    });
+    expect(planResponse.status).toBe(200);
+
+    const seenResponse = await fetch(`${baseUrl}/api/team/observations/seen`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({ gameId }),
+    });
+    expect(seenResponse.status).toBe(200);
+    const seenPayload = await parseJsonSafe(seenResponse);
+    const observationId = String(seenPayload?.observation?.id || "");
+    expect(observationId).toBeTruthy();
+
+    const reassignHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": `obs-reassign-idem-${Date.now()}`,
+    };
+    const reassignBody = JSON.stringify({ observationId, targetScoutId: "user-scout-b" });
+    const [firstReassign, secondReassign] = await Promise.all([
+      fetch(`${baseUrl}/api/team/observations/reassign`, { method: "POST", headers: reassignHeaders, body: reassignBody }),
+      fetch(`${baseUrl}/api/team/observations/reassign`, { method: "POST", headers: reassignHeaders, body: reassignBody }),
+    ]);
+    expect(firstReassign.status).toBe(200);
+    expect(secondReassign.status).toBe(200);
+    const firstReassignPayload = await parseJsonSafe(firstReassign);
+    const secondReassignPayload = await parseJsonSafe(secondReassign);
+    expect(firstReassignPayload.observation?.id).toBeTruthy();
+    expect(secondReassignPayload.observation?.id).toBe(firstReassignPayload.observation?.id);
+    expect(firstReassignPayload.observation?.scoutId).toBe("user-scout-b");
+    expect(secondReassignPayload.observation?.scoutId).toBe("user-scout-b");
+    const reassignedObservationId = String(firstReassignPayload?.observation?.id || "");
+
+    const reportHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": `obs-report-idem-${Date.now()}`,
+    };
+    const reportBody = JSON.stringify({ observationId: reassignedObservationId, reportId: `idem-report-${Date.now()}`, reportUrl: "#idem-report" });
+    const [firstReport, secondReport] = await Promise.all([
+      fetch(`${baseUrl}/api/team/observations/report`, { method: "POST", headers: reportHeaders, body: reportBody }),
+      fetch(`${baseUrl}/api/team/observations/report`, { method: "POST", headers: reportHeaders, body: reportBody }),
+    ]);
+    expect(firstReport.status).toBe(200);
+    expect(secondReport.status).toBe(200);
+    const firstReportPayload = await parseJsonSafe(firstReport);
+    const secondReportPayload = await parseJsonSafe(secondReport);
+    expect(firstReportPayload.observation?.id).toBe(reassignedObservationId);
+    expect(secondReportPayload.observation?.id).toBe(reassignedObservationId);
+    expect(firstReportPayload.observation?.status).toBe("reported");
+    expect(secondReportPayload.observation?.status).toBe("reported");
+
+    const noteHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": `obs-note-idem-${Date.now()}`,
+    };
+    const noteBody = JSON.stringify({ observationId: reassignedObservationId, note: "Idempotent note text." });
+    const [firstNote, secondNote] = await Promise.all([
+      fetch(`${baseUrl}/api/team/observations/note`, { method: "POST", headers: noteHeaders, body: noteBody }),
+      fetch(`${baseUrl}/api/team/observations/note`, { method: "POST", headers: noteHeaders, body: noteBody }),
+    ]);
+    expect(firstNote.status).toBe(200);
+    expect(secondNote.status).toBe(200);
+    const firstNotePayload = await parseJsonSafe(firstNote);
+    const secondNotePayload = await parseJsonSafe(secondNote);
+    expect(firstNotePayload.observation?.id).toBe(reassignedObservationId);
+    expect(secondNotePayload.observation?.id).toBe(reassignedObservationId);
+    expect(firstNotePayload.observation?.note).toBe("Idempotent note text.");
+    expect(secondNotePayload.observation?.note).toBe("Idempotent note text.");
+  });
+
+  it("stores manual game type for spontaneous and inofficial entries", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-scout", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const spontaneousResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        home: "Spontan Team A",
+        away: "Spontan Team B",
+        date: "2026-09-05",
+        time: "15:00",
+        venue: "Nebenplatz",
+        manualType: "spontaneous",
+      }),
+    });
+    expect(spontaneousResponse.status).toBe(200);
+    const spontaneousPayload = await parseJsonSafe(spontaneousResponse);
+    expect(spontaneousPayload.manualGame?.manualType).toBe("spontaneous");
+
+    const inofficialResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        home: "Inoffiziell Team A",
+        away: "Inoffiziell Team B",
+        date: "2026-09-06",
+        time: "12:30",
+        venue: "Trainingsplatz",
+        manualType: "inofficial",
+      }),
+    });
+    expect(inofficialResponse.status).toBe(200);
+    const inofficialPayload = await parseJsonSafe(inofficialResponse);
+    expect(inofficialPayload.manualGame?.manualType).toBe("inofficial");
+  });
+
+  it("merges duplicate observations when reassigning to a scout who already has the same game", async () => {
+    const coordinatorLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(coordinatorLoginResponse.status).toBe(200);
+    const coordinatorCookie = String(coordinatorLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const coordinatorLoginPayload = await parseJsonSafe(coordinatorLoginResponse);
+
+    const gameId = `merge-reassign-${Date.now()}`;
+    const planResponse = await fetch(`${baseUrl}/api/team/plans`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorLoginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        planHistoryId: `merge-reassign-plan-${Date.now()}`,
+        games: [{ id: gameId, date: "2026-09-04", home: "Merge Team A", away: "Merge Team B", venue: "Merge Platz" }],
+      }),
+    });
+    expect(planResponse.status).toBe(200);
+
+    const coordinatorSeenResponse = await fetch(`${baseUrl}/api/team/observations/seen`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorLoginPayload.csrfToken,
+      },
+      body: JSON.stringify({ gameId }),
+    });
+    expect(coordinatorSeenResponse.status).toBe(200);
+    const coordinatorSeenPayload = await parseJsonSafe(coordinatorSeenResponse);
+    const sourceObservationId = String(coordinatorSeenPayload?.observation?.id || "");
+    expect(sourceObservationId).toBeTruthy();
+
+    const scoutBLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-scout-b", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(scoutBLoginResponse.status).toBe(200);
+    const scoutBCookie = String(scoutBLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const scoutBLoginPayload = await parseJsonSafe(scoutBLoginResponse);
+
+    const scoutBPlanResponse = await fetch(`${baseUrl}/api/team/plans`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: scoutBCookie,
+        "x-csrf-token": scoutBLoginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        planHistoryId: `merge-reassign-plan-b-${Date.now()}`,
+        games: [{ id: gameId, date: "2026-09-04", home: "Merge Team A", away: "Merge Team B", venue: "Merge Platz" }],
+      }),
+    });
+    expect(scoutBPlanResponse.status).toBe(200);
+
+    const reassignResponse = await fetch(`${baseUrl}/api/team/observations/reassign`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: coordinatorCookie,
+        "x-csrf-token": coordinatorLoginPayload.csrfToken,
+      },
+      body: JSON.stringify({ observationId: sourceObservationId, targetScoutId: "user-scout-b" }),
+    });
+    expect(reassignResponse.status).toBe(200);
+    const reassignPayload = await parseJsonSafe(reassignResponse);
+    expect(reassignPayload.observation?.scoutId).toBe("user-scout-b");
+
+    const stateResponse = await fetch(`${baseUrl}/api/team/state`, {
+      headers: {
+        cookie: coordinatorCookie,
+      },
+    });
+    expect(stateResponse.status).toBe(200);
+    const statePayload = await parseJsonSafe(stateResponse);
+    const gameObservations = (statePayload.observations || []).filter((item) => item.gameId === gameId);
+    expect(gameObservations).toHaveLength(1);
+    expect(gameObservations[0]?.scoutId).toBe("user-scout-b");
   });
 
   it("returns filtered team audit-log entries", async () => {
@@ -1875,6 +3482,108 @@ describe("adapter-service server integration", () => {
     });
   });
 
+  it("deduplicates concurrent tournament create requests with the same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `tournament-create-idem-${Date.now()}`;
+    const requestBody = JSON.stringify({
+      name: `Idem Tournament ${Date.now()}`,
+      dateFrom: "2026-10-20",
+      dateTo: "2026-10-21",
+      venue: "Idem Arena",
+    });
+    const requestHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/tournaments`, { method: "POST", headers: requestHeaders, body: requestBody }),
+      fetch(`${baseUrl}/api/team/tournaments`, { method: "POST", headers: requestHeaders, body: requestBody }),
+    ]);
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(201);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.tournament?.id).toBeTruthy();
+    expect(secondPayload.tournament?.id).toBe(firstPayload.tournament?.id);
+  });
+
+  it("deduplicates concurrent tournament match imports with the same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const createTournamentResponse = await fetch(`${baseUrl}/api/team/tournaments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        name: `Idem Match Tournament ${Date.now()}`,
+        dateFrom: "2026-10-22",
+        dateTo: "2026-10-23",
+      }),
+    });
+    expect(createTournamentResponse.status).toBe(201);
+    const createTournamentPayload = await parseJsonSafe(createTournamentResponse);
+    const tournamentId = String(createTournamentPayload?.tournament?.id || "");
+    expect(tournamentId).toBeTruthy();
+
+    const idempotencyKey = `tournament-match-idem-${Date.now()}`;
+    const requestBody = JSON.stringify({
+      matches: [
+        {
+          home: "Idem Match Home",
+          away: "Idem Match Away",
+          date: "2026-10-22",
+          time: "11:00",
+          venue: "Idem Platz",
+        },
+      ],
+    });
+    const requestHeaders = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/tournaments/${encodeURIComponent(tournamentId)}/matches`, {
+        method: "POST",
+        headers: requestHeaders,
+        body: requestBody,
+      }),
+      fetch(`${baseUrl}/api/team/tournaments/${encodeURIComponent(tournamentId)}/matches`, {
+        method: "POST",
+        headers: requestHeaders,
+        body: requestBody,
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.matches?.[0]?.id).toBeTruthy();
+    expect(secondPayload.matches?.[0]?.id).toBe(firstPayload.matches?.[0]?.id);
+  });
+
   it("imports national games into team flows", async () => {
     const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
       method: "POST",
@@ -1924,6 +3633,47 @@ describe("adapter-service server integration", () => {
     });
   });
 
+  it("deduplicates concurrent national-game imports with same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const idempotencyKey = `national-import-idem-${Date.now()}`;
+    const body = JSON.stringify({
+      games: [
+        {
+          home: "Deutschland U16",
+          away: "Belgien U16",
+          date: "2026-07-11",
+          time: "15:00",
+          venue: "DFB Campus 2",
+        },
+      ],
+    });
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/import/dfb-national-games`, { method: "POST", headers, body }),
+      fetch(`${baseUrl}/api/team/import/dfb-national-games`, { method: "POST", headers, body }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.games?.[0]?.id).toBeTruthy();
+    expect(secondPayload.games?.[0]?.id).toBe(firstPayload.games?.[0]?.id);
+  });
+
   it("imports national games from configured source when payload has no games", async () => {
     const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
       method: "POST",
@@ -1960,6 +3710,43 @@ describe("adapter-service server integration", () => {
       home: "Deutschland U15",
       away: "Italien U15",
     });
+  });
+
+  it("returns 413 when national import payload contains too many games", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const response = await fetch(`${baseUrl}/api/team/import/dfb-national-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        games: Array.from({ length: 501 }, (_, index) => ({
+          id: `overflow-${index}`,
+          home: `Team ${index}A`,
+          away: `Team ${index}B`,
+          date: "2026-06-10",
+          time: "12:00",
+          venue: "DFB Campus",
+        })),
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(false);
+    expect(String(payload.error || "")).toMatch(/Zu viele U-Nationalspiele im Import/i);
   });
 
   it("imports tournaments from meinturnierplan using wizard filters", async () => {
@@ -2286,6 +4073,91 @@ describe("adapter-service server integration", () => {
     });
   });
 
+  it("returns 413 when kreis-pdf preview contains too many games", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const extractedText = Array.from({ length: 1001 }, (_, index) => {
+      const minute = String(index % 60).padStart(2, "0");
+      return `10.08.2026 1${index % 10}:${minute} Team ${index}A - Team ${index}B | Platz ${index}`;
+    }).join("\n");
+
+    const previewResponse = await fetch(`${baseUrl}/api/team/import/kreis-pdf`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        mode: "preview",
+        fileName: "kreis-auswahl-oversized.pdf",
+        extractedText,
+      }),
+    });
+    expect(previewResponse.status).toBe(413);
+    const previewPayload = await parseJsonSafe(previewResponse);
+    expect(previewPayload.ok).toBe(false);
+    expect(String(previewPayload.error || "")).toMatch(/Zu viele Spiele in der Kreis-PDF-Vorschau/i);
+  });
+
+  it("deduplicates concurrent kreis-pdf confirms with same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const previewResponse = await fetch(`${baseUrl}/api/team/import/kreis-pdf`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        mode: "preview",
+        fileName: "kreis-auswahl-idem.txt",
+        extractedText: "12.08.2026 12:15 Team One U15 - Team Two U15 | Platz Alpha",
+      }),
+    });
+    expect(previewResponse.status).toBe(200);
+    const previewPayload = await parseJsonSafe(previewResponse);
+    const previewToken = String(previewPayload.previewToken || "");
+    expect(previewToken).toBeTruthy();
+
+    const idempotencyKey = `kreis-confirm-idem-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+    const body = JSON.stringify({ mode: "confirm", previewToken });
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/import/kreis-pdf`, { method: "POST", headers, body }),
+      fetch(`${baseUrl}/api/team/import/kreis-pdf`, { method: "POST", headers, body }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.games?.[0]?.id).toBeTruthy();
+    expect(secondPayload.games?.[0]?.id).toBe(firstPayload.games?.[0]?.id);
+  });
+
   it("accepts multipart file upload for kreis-pdf preview", async () => {
     const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
       method: "POST",
@@ -2374,6 +4246,441 @@ describe("adapter-service server integration", () => {
       leaguePriorities: ["Niederrheinliga"],
       ageGroups: ["d-jugend"],
     });
+  });
+
+  it("normalizes and limits oversized team goals payloads", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const oversizedLeagues = Array.from({ length: 50 }, (_, index) => `Liga ${index + 1}`);
+    const response = await fetch(`${baseUrl}/api/team/goals`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        favoriteTeams: ["  MSV Duisburg U13  ", "msv duisburg u13", "VfL Test U12"],
+        favoriteClubs: ["  MSV Duisburg  ", "MSV DUISBURG"],
+        leaguePriorities: oversizedLeagues,
+        ageGroups: ["D-JUGEND", "d-jugend", "c-jugend"],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await parseJsonSafe(response);
+    expect(payload.ok).toBe(true);
+    expect(payload.teamGoals.favoriteTeams).toEqual(["MSV Duisburg U13", "VfL Test U12"]);
+    expect(payload.teamGoals.favoriteClubs).toEqual(["MSV Duisburg"]);
+    expect(payload.teamGoals.leaguePriorities).toHaveLength(30);
+    expect(payload.teamGoals.ageGroups).toEqual(["d-jugend", "c-jugend"]);
+  });
+
+  it("applies concurrent team writes without losing updates", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+    };
+
+    const [goalsResponse, manualResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/goals`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          favoriteTeams: ["Parallel Team A"],
+          favoriteClubs: ["Parallel Club A"],
+          leaguePriorities: ["Parallel League A"],
+          ageGroups: ["d-jugend"],
+        }),
+      }),
+      fetch(`${baseUrl}/api/team/manual-games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          id: `parallel-manual-${Date.now()}`,
+          home: "Parallel Home",
+          away: "Parallel Away",
+          date: "2026-06-20",
+          time: "12:30",
+          venue: "Parallel Platz",
+        }),
+      }),
+    ]);
+
+    expect(goalsResponse.status).toBe(200);
+    expect(manualResponse.status).toBe(200);
+
+    const stateResponse = await fetch(`${baseUrl}/api/team/state`, {
+      headers: { cookie },
+    });
+    expect(stateResponse.status).toBe(200);
+    const statePayload = await parseJsonSafe(stateResponse);
+    expect(statePayload.teamGoals.favoriteTeams).toContain("Parallel Team A");
+    expect(
+      (Array.isArray(statePayload.manualGames) ? statePayload.manualGames : []).some(
+        (game) => String(game?.home || "") === "Parallel Home" && String(game?.away || "") === "Parallel Away",
+      ),
+    ).toBe(true);
+  });
+
+  it("scopes idempotency by endpoint scope so same key across different writes does not conflict", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const sameKey = `cross-scope-idem-${Date.now()}`;
+
+    const goalsResponse = await fetch(`${baseUrl}/api/team/goals`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": sameKey,
+      },
+      body: JSON.stringify({
+        favoriteTeams: ["Scope Team"],
+        favoriteClubs: ["Scope Club"],
+        leaguePriorities: ["Scope League"],
+        ageGroups: ["c-jugend"],
+      }),
+    });
+    expect(goalsResponse.status).toBe(200);
+
+    const manualResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": sameKey,
+      },
+      body: JSON.stringify({
+        home: "Scope Home",
+        away: "Scope Away",
+        date: "2026-10-25",
+        time: "12:00",
+        venue: "Scope Platz",
+      }),
+    });
+    expect(manualResponse.status).toBe(200);
+    const manualPayload = await parseJsonSafe(manualResponse);
+    expect(String(manualPayload.manualGame?.id || "")).toBeTruthy();
+  });
+
+  it("deduplicates concurrent manual-game writes with the same idempotency key", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `manual-idem-${Date.now()}`;
+    const payload = {
+      home: `Idem Home ${Date.now()}`,
+      away: "Idem Away",
+      date: "2026-10-12",
+      time: "13:00",
+      venue: "Idem Platz",
+    };
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/manual-games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      }),
+      fetch(`${baseUrl}/api/team/manual-games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      }),
+    ]);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(String(firstPayload.manualGame?.id || "")).toBeTruthy();
+    expect(secondPayload.manualGame?.id).toBe(firstPayload.manualGame?.id);
+
+    const stateResponse = await fetch(`${baseUrl}/api/team/state`, {
+      headers: { cookie },
+    });
+    expect(stateResponse.status).toBe(200);
+    const statePayload = await parseJsonSafe(stateResponse);
+    const matches = (Array.isArray(statePayload.manualGames) ? statePayload.manualGames : []).filter(
+      (item) => String(item?.id || "") === String(firstPayload.manualGame?.id || ""),
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it("deduplicates requests when x-idempotency-key header is used", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `manual-x-idem-${Date.now()}`;
+    const payload = {
+      home: `X-Idem Home ${Date.now()}`,
+      away: "X-Idem Away",
+      date: "2026-11-02",
+      time: "15:30",
+      venue: "X-Idem Platz",
+    };
+    const headers = {
+      "content-type": "application/json",
+      cookie,
+      "x-csrf-token": loginPayload.csrfToken,
+      "x-idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/manual-games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      }),
+      fetch(`${baseUrl}/api/team/manual-games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      }),
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(String(firstPayload.manualGame?.id || "")).toBeTruthy();
+    expect(secondPayload.manualGame?.id).toBe(firstPayload.manualGame?.id);
+  });
+
+  it("rejects idempotency key reuse with a different payload", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const loginPayload = await parseJsonSafe(loginResponse);
+    const idempotencyKey = `manual-idem-conflict-${Date.now()}`;
+
+    const firstResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        home: `Idem Conflict A ${Date.now()}`,
+        away: "Away A",
+        date: "2026-10-14",
+        time: "13:00",
+        venue: "Idem Platz A",
+      }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/manual-games`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": loginPayload.csrfToken,
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        home: `Idem Conflict B ${Date.now()}`,
+        away: "Away B",
+        date: "2026-10-15",
+        time: "14:00",
+        venue: "Idem Platz B",
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
+  });
+
+  it("prevents duplicate accounts on concurrent registration for same userId", async () => {
+    const userId = `parallel-user-${Date.now()}`;
+    const registerBody = {
+      userId,
+      name: "Parallel User",
+      password: "Parallel-pass-2026",
+      teamKey: "borussia-moenchengladbach",
+    };
+
+    const [first, second] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(registerBody),
+      }),
+      fetch(`${baseUrl}/api/team/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(registerBody),
+      }),
+    ]);
+
+    const statuses = [first.status, second.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 409]);
+
+    const adminLoginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-admin", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(adminLoginResponse.status).toBe(200);
+    const adminCookie = String(adminLoginResponse.headers.get("set-cookie") || "").split(";")[0];
+
+    const teamStateResponse = await fetch(`${baseUrl}/api/team/state`, {
+      headers: { cookie: adminCookie },
+    });
+    expect(teamStateResponse.status).toBe(200);
+    const teamStatePayload = await parseJsonSafe(teamStateResponse);
+    const matches = (Array.isArray(teamStatePayload?.team?.accounts) ? teamStatePayload.team.accounts : []).filter(
+      (account) => String(account?.id || "") === userId,
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it("deduplicates concurrent registration with same idempotency key", async () => {
+    const userId = `register-idem-${Date.now()}`;
+    const idempotencyKey = `register-idem-key-${Date.now()}`;
+    const body = JSON.stringify({
+      userId,
+      name: "Register Idem",
+      password: "Register-idem-pass-2026",
+      teamKey: "borussia-moenchengladbach",
+    });
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/team/auth/register`, { method: "POST", headers, body }),
+      fetch(`${baseUrl}/api/team/auth/register`, { method: "POST", headers, body }),
+    ]);
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(201);
+    const firstPayload = await parseJsonSafe(firstResponse);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(firstPayload.user?.id).toBe(userId);
+    expect(secondPayload.user?.id).toBe(userId);
+  });
+
+  it("treats same registration payload with different JSON key order as same idempotent request", async () => {
+    const userId = `register-idem-order-${Date.now()}`;
+    const idempotencyKey = `register-idem-order-key-${Date.now()}`;
+    const headers = {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    };
+
+    const firstResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        userId,
+        name: "Register Order",
+        password: "Register-order-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        teamKey: "borussia-moenchengladbach",
+        password: "Register-order-pass-2026",
+        name: "Register Order",
+        userId,
+      }),
+    });
+    expect(secondResponse.status).toBe(201);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.user?.id).toBe(userId);
+  });
+
+  it("rejects registration idempotency-key reuse with different payload", async () => {
+    const userId = `register-idem-conflict-${Date.now()}`;
+    const idempotencyKey = `register-idem-conflict-key-${Date.now()}`;
+
+    const firstResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Register Conflict",
+        password: "Register-conflict-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        userId,
+        name: "Register Conflict Other",
+        password: "Register-conflict-pass-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const secondPayload = await parseJsonSafe(secondResponse);
+    expect(secondPayload.ok).toBe(false);
   });
 
   it("rate-limits repeated invalid team login attempts", async () => {

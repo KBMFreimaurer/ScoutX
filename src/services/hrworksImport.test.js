@@ -20,12 +20,14 @@ describe("hrworksImport", () => {
       endTime: "10:00",
       purpose: "Sehr lange Zweckbeschreibung mit potenziell unnötigen Details",
       hrworksStatus: "ready",
+      sourceType: "timesheet",
       executedBy: "Max Mustermann",
       technicalResult: "Review bestätigt und Übergabe vorbereitet",
     });
     const logs = readHrworksImportLog();
     expect(logs[0].executedBy).toMatch(/M\*\*\* M\*\*\*/);
     expect(logs[0].purpose.length).toBeLessThanOrEqual(121);
+    expect(logs[0].sourceType).toBe("timesheet");
   });
 
   it("does not persist raw credential-like content in technical log fields", () => {
@@ -64,10 +66,19 @@ describe("hrworksImport", () => {
       ],
       startLocation: "Start",
       costCenter: "Junioren allgemein (321000)",
+      routeLegs: [
+        { from: "Start", to: "A", distanceKm: 10 },
+        { from: "A", to: "B", distanceKm: 5 },
+        { from: "B", to: "Start", distanceKm: 12 },
+      ],
     });
 
     const result = validateHrworksImportPayload(payload, []);
     expect(result.isValid).toBe(true);
+    expect(payload.purpose).toMatch(/Sichtung \/ Route des Arbeitstages/);
+    expect(payload.note).toBe(payload.purpose);
+    expect(payload.routeLegs).toHaveLength(3);
+    expect(payload.routeLegs[2].to).toBe("Start");
   });
 
   it("detects missing fields", () => {
