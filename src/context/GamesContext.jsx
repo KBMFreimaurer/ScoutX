@@ -902,7 +902,10 @@ export function GamesProvider({ children }) {
 
       const source = successfulRuns[0]?.source || "adapter";
       const fetchedGamesRaw = mergeGamesAcrossKreise(successfulRuns.map((run) => run?.games || []));
-      const fetchedGames = filterGamesByLeagueQueries(fetchedGamesRaw, activeTeams);
+      const leagueFilteredGames = filterGamesByLeagueQueries(fetchedGamesRaw, activeTeams);
+      // Safety fallback: if league tags were requested but provider data does not expose
+      // league metadata reliably, keep base games so plan generation never collapses to zero.
+      const fetchedGames = leagueFilteredGames.length > 0 ? leagueFilteredGames : fetchedGamesRaw;
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
