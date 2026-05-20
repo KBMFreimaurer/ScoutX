@@ -63,4 +63,19 @@ describe("GamesContext filterGamesByLeagueQueries", () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("g1");
   });
+
+  it("keeps national and tournament games when a league filter is active", () => {
+    const { filterGamesByLeagueQueries } = __gamesContextTestables;
+    const result = filterGamesByLeagueQueries(
+      [
+        { id: "league", home: "A", away: "B", league: "Niederrheinliga", source: "adapter" },
+        { id: "national", home: "Deutschland U17", away: "Niederlande U17", source: "national" },
+        { id: "tournament", home: "Pfingstcup U12", away: "Turnier", source: "tournament", turnier: true },
+        { id: "wrong", home: "C", away: "D", league: "Kreisklasse", source: "adapter" },
+      ],
+      ["Niederrheinliga"],
+    );
+
+    expect(result.map((game) => game.id).sort()).toEqual(["league", "national", "tournament"]);
+  });
 });

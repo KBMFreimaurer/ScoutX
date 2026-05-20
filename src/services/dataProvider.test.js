@@ -242,6 +242,90 @@ describe("data provider", () => {
     expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledTimes(1);
   });
 
+  it("returns adapter games without waiting for a blocked tournament provider", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockImplementation(() => new Promise(() => {}));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-06-02",
+              time: "11:00",
+              home: "Adapter Team A",
+              away: "Adapter Team B",
+              venue: "Platz 1",
+              jugendId: "d-jugend",
+              kreisId: "duisburg",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await Promise.race([
+      fetchGamesWithProviders({
+        mode: "adapter",
+        kreisId: "duisburg",
+        jugendId: "d-jugend",
+        fromDate: "2026-06-01",
+        toDate: "2026-06-07",
+        teams: [],
+        uploadedGames: [],
+        adapterEndpoint: "http://localhost:3333/games",
+        includeTournaments: true,
+      }),
+      new Promise((resolve) => setTimeout(() => resolve("blocked"), 20)),
+    ]);
+
+    expect(result).not.toBe("blocked");
+    expect(result.source).toBe("combined");
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].home).toBe("Adapter Team A");
+  });
+
+  it("matches selected league against adapter staffelName aliases", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              date: "2026-06-02",
+              time: "11:00",
+              home: "Team NL A",
+              away: "Team NL B",
+              venue: "Platz 1",
+              jugendId: "d-jugend",
+              kreisId: "duisburg",
+              staffelName: "D-Junioren Niederrheinliga",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: ["Niederrheinliga"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0]).toMatchObject({
+      league: "D-Junioren Niederrheinliga",
+      competitionName: "D-Junioren Niederrheinliga",
+    });
+  });
+
   it("returns only adapter games matching selected league query", async () => {
     vi.stubGlobal(
       "fetch",

@@ -19,6 +19,10 @@ const ADAPTER_TIMEOUT_MS = Math.min(
 );
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const SKIP_RETRY_WAIT = import.meta.env?.MODE === "test";
+const OPTIONAL_PROVIDER_TIMEOUT_MS =
+  import.meta.env?.MODE === "test"
+    ? 10
+    : Math.min(20000, Math.max(3000, Number(import.meta.env?.VITE_OPTIONAL_PROVIDER_TIMEOUT_MS || 12000) || 12000));
 const GENERIC_TEAM_TOKENS = new Set([
   "sv",
   "sc",
@@ -260,6 +264,10 @@ function buildAdapterEndpointCandidates(adapterEndpoint) {
 function isAdapterConnectivityError(error) {
   const message = String(error?.message || "").toLowerCase();
   return message.includes("nicht erreichbar") || message.includes("timeout");
+}
+
+function isOptionalAggregateProvider(providerName) {
+  return providerName === "national" || providerName === "tournament";
 }
 
 function compactResponsePreview(rawValue, maxLength = 180) {
@@ -543,6 +551,36 @@ async function runProviderWithRetry(providerName, providerFn, context, retryDela
   throw lastError ?? new Error(`Provider fehlgeschlagen: ${providerName}`);
 }
 
+async function runOptionalProviderWithTimeout(providerName, providerFn, context, retryDelaysMs) {
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      resolve({
+        providerName,
+        timedOut: true,
+        providerResult: {
+          games: [],
+          meta: { warning: `${providerName} Timeout nach ${OPTIONAL_PROVIDER_TIMEOUT_MS}ms` },
+        },
+      });
+    }, OPTIONAL_PROVIDER_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([
+      runProviderWithRetry(providerName, providerFn, context, retryDelaysMs).then((providerResult) => ({
+        providerName,
+        providerResult,
+      })),
+      timeout,
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 function toBoolean(value) {
   if (typeof value === "boolean") {
     return value;
@@ -592,10 +630,13 @@ function normalizeUploadedGame(rawGame, index, context) {
     rawGame.liga ??
     rawGame.competition ??
     rawGame.wettbewerb ??
+    rawGame.wettbewerbName ??
     rawGame.division ??
     rawGame.spielklasse ??
+    rawGame.spielklasseName ??
     rawGame.klasse ??
     rawGame.staffel ??
+    rawGame.staffelName ??
     rawGame.leagueName ??
     rawGame.competitionName ??
     "";
@@ -1356,14 +1397,44 @@ export async function fetchGamesWithProviders({
     (mode === "adapter" || mode === "auto") && (context.includeNationalGames || context.turnier);
 
   if (shouldAggregateProviders) {
+    const providerTasks = providerOrder.map(async (providerName) => {
+      const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
+      try {
+        if (isOptionalAggregateProvider(providerName)) {
+          return await runOptionalProviderWithTimeout(providerName, providerMap[providerName], context, providerRetryDelays);
+        }
+        const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
+        return { providerName, providerResult };
+      } catch (error) {
+        return { providerName, error };
+      }
+    });
+    const settledProviders = await Promise.all(providerTasks);
     const aggregatedGames = [];
-    const aggregatedMeta = { providers: [] };
+    const aggregatedMeta = { providers: [], warnings: [] };
     let baseError = null;
 
-    for (const providerName of providerOrder) {
+    for (const settled of settledProviders) {
+      const providerName = settled.providerName;
+      if (settled.error) {
+        if (isOptionalAggregateProvider(providerName)) {
+          aggregatedMeta.warnings.push(`${providerName}: ${settled.error?.message || "fehlgeschlagen"}`);
+        } else {
+          baseError = settled.error;
+        }
+        continue;
+      }
+
+      if (settled.timedOut) {
+        const warning = settled.providerResult?.meta?.warning;
+        if (warning) {
+          aggregatedMeta.warnings.push(warning);
+        }
+        continue;
+      }
+
       try {
-        const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
-        const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
+        const providerResult = settled.providerResult;
         const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
         if (!games.length) {
           continue;
@@ -1371,7 +1442,9 @@ export async function fetchGamesWithProviders({
         aggregatedGames.push(...games);
         aggregatedMeta.providers.push(providerName);
       } catch (error) {
-        if (providerName === "adapter" || providerName === "csv" || providerName === "mock") {
+        if (isOptionalAggregateProvider(providerName)) {
+          aggregatedMeta.warnings.push(`${providerName}: ${error?.message || "fehlgeschlagen"}`);
+        } else {
           baseError = error;
         }
       }

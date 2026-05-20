@@ -29,6 +29,13 @@ npm run test
 npm run build
 ```
 
+## Aktuelle Import-Härtung
+
+- Optionale DFB- und Turnier-Provider laufen parallel zum Adapter und blockieren die Planerstellung nicht mehr bei Provider-Timeouts.
+- fussball.de-Exporter gibt Liga-/Staffel-Metadaten (`league`, `competitionName`, `staffelName`) aus, damit strikte Liga-Filter wie `Niederrheinliga` belastbar matchen.
+- DFB-Nationalspiele und Turniere bleiben bei aktivem Liga-Filter im kombinierten Spiele- und Plan-Flow erhalten.
+- HRworks-Review-Tests prüfen die getrennten Aktionen für Exportdatei, Testlauf und produktives Speichern.
+
 ## Adapter-Betrieb
 
 - Frontend verwendet standardmäßig `/api/games` (Proxy über Vite/Nginx).

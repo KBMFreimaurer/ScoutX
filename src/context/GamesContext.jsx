@@ -85,6 +85,11 @@ function isLeagueMatch(query, game) {
   });
 }
 
+function isLeagueFilterExemptGame(game) {
+  const source = normalizeLookup(game?.source || game?.provider);
+  return Boolean(game?.turnier) || source === "national" || source === "tournament" || source === "dfb national games";
+}
+
 function resolveRegionByLooseId(value) {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -465,7 +470,9 @@ function filterGamesByLeagueQueries(games, teams) {
   if (leagueQueries.length === 0) {
     return Array.isArray(games) ? games : [];
   }
-  return (Array.isArray(games) ? games : []).filter((game) => leagueQueries.some((query) => isLeagueMatch(query, game)));
+  return (Array.isArray(games) ? games : []).filter(
+    (game) => isLeagueFilterExemptGame(game) || leagueQueries.some((query) => isLeagueMatch(query, game)),
+  );
 }
 
 function hasLeagueQueries(teams) {

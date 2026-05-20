@@ -869,6 +869,10 @@ async function enrichMatches(matchCandidates, dateRangeSet) {
         regionName: regionParams.regionName,
         regionShortCode: regionParams.regionShortCode,
         jugendId,
+        league: candidate.competitionLabel || "",
+        competitionName: candidate.competitionLabel || "",
+        staffelName: candidate.competitionLabel || "",
+        competitionUrl: candidate.competitionUrl || "",
       };
     } catch (error) {
       warn(`Match detail failed (${candidate.matchUrl}): ${error.message || error}`);
