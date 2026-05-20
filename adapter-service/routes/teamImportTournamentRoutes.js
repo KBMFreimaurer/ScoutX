@@ -1,3 +1,8 @@
+import {
+  extractMeinturnierplanTournaments,
+  parseDfbNationalGamesFromHtml,
+} from "../lib/externalGameScrapers.js";
+
 export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
   const MAX_NATIONAL_IMPORT_GAMES = 500;
   const MAX_KREIS_PDF_PREVIEW_GAMES = 1000;
@@ -19,9 +24,8 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
     normalizeAccountId,
     formatWizardDateForMeinturnierplan,
     toFilterKeywords,
-    extractMeinturnierplanJson,
-    parseGermanDateToIso,
     meinturnierplanBaseUrl,
+    dfbNationalBaseUrl,
     parseMultipartFormData,
     extractTextFromPdfBuffer,
     parseKreisPdfGamesFromText,
@@ -75,10 +79,95 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
     }
   };
 
+  const fetchTextWithTimeout = async (urlToFetch, timeoutMs, token) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const headers = {
+        accept: "text/html,application/xhtml+xml,text/plain,*/*",
+        "user-agent": "ScoutX-Adapter/1.0",
+      };
+      if (token) {
+        headers.authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(urlToFetch, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.text();
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(`Timeout nach ${timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const normalizeNationalAgeGroup = (value) => {
+    const match = String(value || "").match(/U\s*[- ]?\s*(15|16|17|18|19)/i);
+    return match ? `U${match[1]}` : "";
+  };
+
+  const buildDfbNationalUrl = (ageGroup) => {
+    const number = String(ageGroup || "").replace(/\D/g, "");
+    const base = String(dfbNationalBaseUrl || "https://www.dfb.de").replace(/\/+$/, "");
+    return `${base}/maenner/nationalmannschaften/u-${number}/spiele-und-termine`;
+  };
+
+  const loadNationalGamesFromDfbPages = async (payload) => {
+    const requestedAgeGroups = Array.isArray(payload?.ageGroups) && payload.ageGroups.length > 0
+      ? payload.ageGroups
+      : [payload?.ageGroup || payload?.jugendId || "U15"];
+    const ageGroups = [...new Set(requestedAgeGroups.map(normalizeNationalAgeGroup).filter(Boolean))];
+    if (ageGroups.length === 0) {
+      return [];
+    }
+
+    const startedAt = Date.now();
+    const results = await Promise.allSettled(
+      ageGroups.map(async (ageGroup) => {
+        const sourceUrl = buildDfbNationalUrl(ageGroup);
+        const html = await fetchTextWithTimeout(
+          sourceUrl,
+          Number(dfbNationalSourceTimeoutMs || 20000),
+          String(dfbNationalSourceToken || "").trim(),
+        );
+        const games = parseDfbNationalGamesFromHtml(html, {
+          ageGroup,
+          sourceUrl,
+          fromDate: String(payload?.fromDate || ""),
+          toDate: String(payload?.toDate || payload?.fromDate || ""),
+        });
+        requestLogger.info("dfb national source parsed", {
+          ageGroup,
+          count: games.length,
+          durationMs: Date.now() - startedAt,
+        });
+        return games;
+      }),
+    );
+
+    const games = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        games.push(...result.value);
+      } else {
+        requestLogger.warn("dfb national source failed", { error: result.reason });
+      }
+    }
+    return games;
+  };
+
   const loadNationalGamesFromSource = async (payload) => {
     const template = String(dfbNationalSourceUrlTemplate || "").trim();
     if (!template) {
-      return [];
+      return loadNationalGamesFromDfbPages(payload);
     }
     const builtUrl = fillTemplate(template, {
       fromDate: String(payload?.fromDate || ""),
@@ -132,42 +221,17 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
         },
       });
       const html = await response.text();
-      const json = extractMeinturnierplanJson(html);
-      const features = Array.isArray(json?.features) ? json.features : [];
       const keywords = toFilterKeywords(payload);
-
-      const tournaments = features
-        .map((feature) => {
-          const props = feature?.properties || {};
-          const name = String(props?.name || "").trim();
-          const relativeUrl = String(props?.url || "").trim();
-          const id = normalizeAccountId(relativeUrl.replace(/^.*id=/, ""));
-          const startDate = parseGermanDateToIso(props?.startDate);
-          const endDate = parseGermanDateToIso(props?.endDate);
-          if (!name || !relativeUrl || !id) return null;
-          const normalizedName = String(name || "")
-            .trim()
-            .toLowerCase()
-            .normalize("NFKD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/\s+/g, " ");
-          if (keywords.length > 0 && !keywords.some((keyword) => normalizedName.includes(keyword))) {
-            return null;
-          }
-          return {
-            id: `mtp-${id}`,
-            externalId: id,
-            source: "tournament",
-            provider: "meinturnierplan.de",
-            name,
-            dateFrom: startDate,
-            dateTo: endDate,
-            url: relativeUrl.startsWith("http") ? relativeUrl : `${base}${relativeUrl}`,
-            venue: "",
-            note: "",
-          };
-        })
-        .filter(Boolean);
+      const tournaments = extractMeinturnierplanTournaments(html, {
+        baseUrl: base,
+        fromDate: String(payload?.fromDate || ""),
+        toDate: String(payload?.toDate || payload?.fromDate || ""),
+        keywords,
+      });
+      requestLogger.info("meinturnierplan source parsed", {
+        count: tournaments.length,
+        keywordsCount: keywords.length,
+      });
 
       sendJson(
         res,
@@ -274,8 +338,11 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
             home: String(game?.home || "").trim(),
             away: String(game?.away || "").trim(),
             date: String(game?.date || "").trim(),
-            time: String(game?.time || "").trim(),
+            time: String(game?.time || "--:--").trim(),
             venue: String(game?.venue || "").trim(),
+            url: String(game?.url || game?.matchUrl || "").trim(),
+            ageGroup: normalizeNationalAgeGroup(game?.ageGroup),
+            competitionName: String(game?.competitionName || "").trim(),
             status: String(game?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
             note: String(game?.note || "").trim(),
             createdBy: context.account.id,

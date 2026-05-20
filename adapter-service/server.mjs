@@ -191,6 +191,7 @@ const TEAM_SESSION_TTL_SEC = envNumber("ADAPTER_TEAM_SESSION_TTL_SEC", 28800, { 
 const TEAM_INVITATION_TTL_SEC = envNumber("ADAPTER_TEAM_INVITATION_TTL_SEC", 604800, { min: 300, max: 86400 * 365 });
 const TEAM_PASSWORD_RESET_TTL_SEC = envNumber("ADAPTER_TEAM_PASSWORD_RESET_TTL_SEC", 3600, { min: 300, max: 86400 * 30 });
 const MEINTURNIERPLAN_BASE_URL = String(process.env.ADAPTER_MEINTURNIERPLAN_BASE_URL || "https://www.meinturnierplan.de").trim();
+const DFB_NATIONAL_BASE_URL = String(process.env.ADAPTER_DFB_NATIONAL_BASE_URL || "https://www.dfb.de").trim();
 const DFB_NATIONAL_SOURCE_URL_TEMPLATE = String(process.env.ADAPTER_DFB_NATIONAL_SOURCE_URL_TEMPLATE || "").trim();
 const DFB_NATIONAL_SOURCE_TOKEN = String(process.env.ADAPTER_DFB_NATIONAL_SOURCE_TOKEN || "").trim();
 const DFB_NATIONAL_SOURCE_TIMEOUT_MS = envNumber("ADAPTER_DFB_NATIONAL_SOURCE_TIMEOUT_MS", 20000, { min: 1000, max: 120000 });
@@ -2831,6 +2832,7 @@ const server = createServer(async (req, res) => {
       extractMeinturnierplanJson,
       parseGermanDateToIso,
       meinturnierplanBaseUrl: MEINTURNIERPLAN_BASE_URL,
+      dfbNationalBaseUrl: DFB_NATIONAL_BASE_URL,
       parseMultipartFormData,
       extractTextFromPdfBuffer,
       parseKreisPdfGamesFromText,

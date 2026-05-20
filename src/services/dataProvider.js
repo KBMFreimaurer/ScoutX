@@ -1198,6 +1198,7 @@ function tournamentToGame(item, index, params) {
   const tournamentName = String(item?.name || "Turnier").trim();
   const venue = String(item?.venue || item?.location || "Turnierort").trim();
   const matchUrl = String(item?.url || "").trim();
+  const time = String(item?.timeFrom || item?.startTime || item?.time || "--:--").trim();
 
   return {
     id: String(item?.id || `mtp-${index}`),
@@ -1206,7 +1207,7 @@ function tournamentToGame(item, index, params) {
     dateObj,
     dateLabel: formatDate(dateObj),
     date: toIsoDate(dateObj),
-    time: "--:--",
+    time: TIME_RE.test(time) ? time : "--:--",
     venue,
     matchUrl,
     km: null,

@@ -32,6 +32,8 @@ npm run build
 ## Aktuelle Import-Härtung
 
 - Optionale DFB- und Turnier-Provider laufen parallel zum Adapter und blockieren die Planerstellung nicht mehr bei Provider-Timeouts.
+- DFB U15-U19 wird bei fehlender Source-Template-Konfiguration direkt über die offiziellen `dfb.de/.../spiele-und-termine`-Seiten gelesen; `ADAPTER_DFB_NATIONAL_BASE_URL` kann für Tests/Staging überschrieben werden.
+- meinturnierplan-Import unterstützt sowohl die Karten-Suchdaten als auch öffentliche Turnierlisten mit Datum, Zeitslots und Ort.
 - fussball.de-Exporter gibt Liga-/Staffel-Metadaten (`league`, `competitionName`, `staffelName`) aus, damit strikte Liga-Filter wie `Niederrheinliga` belastbar matchen.
 - DFB-Nationalspiele und Turniere bleiben bei aktivem Liga-Filter im kombinierten Spiele- und Plan-Flow erhalten.
 - HRworks-Review-Tests prüfen die getrennten Aktionen für Exportdatei, Testlauf und produktives Speichern.

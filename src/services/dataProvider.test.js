@@ -161,6 +161,7 @@ describe("data provider", () => {
           name: "Pfingstcup U12",
           dateFrom: "2026-06-01",
           dateTo: "2026-06-01",
+          timeFrom: "09:30",
           url: "https://www.meinturnierplan.de/showit.php?id=1",
           venue: "Sportpark Nord",
         },
@@ -187,6 +188,7 @@ describe("data provider", () => {
       turnier: true,
       provider: "meinturnierplan.de",
       matchUrl: "https://www.meinturnierplan.de/showit.php?id=1",
+      time: "09:30",
     });
     expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledWith(
       expect.objectContaining({
