@@ -242,6 +242,55 @@ describe("data provider", () => {
     expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledTimes(1);
   });
 
+  it("returns only adapter games matching selected league query", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            games: [
+              {
+                date: "2026-06-02",
+                time: "11:00",
+                home: "Team NL A",
+                away: "Team NL B",
+                venue: "Platz 1",
+                jugendId: "d-jugend",
+                kreisId: "duisburg",
+                league: "Niederrheinliga",
+              },
+              {
+                date: "2026-06-02",
+                time: "13:00",
+                home: "Team KL A",
+                away: "Team KL B",
+                venue: "Platz 2",
+                jugendId: "d-jugend",
+                kreisId: "duisburg",
+                league: "Kreisklasse",
+              },
+            ],
+          }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: ["Niederrheinliga"],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      turnier: false,
+    });
+
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0].league).toBe("Niederrheinliga");
+  });
+
   it("faellt auf benachbarte Woche zurück, wenn der gewählte Zeitraum leer ist", async () => {
     const fetchMock = vi.fn(async (_input, init) => {
       const payload = JSON.parse(String(init?.body || "{}"));

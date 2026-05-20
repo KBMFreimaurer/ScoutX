@@ -139,6 +139,23 @@ function isLeagueMatch(query, game) {
   });
 }
 
+function splitLeagueAndTeamQueries(values) {
+  const teams = [];
+  const leagues = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    const normalized = String(value || "").trim();
+    if (!normalized) {
+      continue;
+    }
+    if (isLeagueLikeQuery(normalized)) {
+      leagues.push(normalized);
+    } else {
+      teams.push(normalized);
+    }
+  }
+  return { teams, leagues };
+}
+
 function createTimeoutController(timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -570,7 +587,18 @@ function normalizeUploadedGame(rawGame, index, context) {
   const jugendId =
     rawGame.jugendId ?? rawGame.jugend ?? rawGame.altersklasse ?? rawGame.ageGroup ?? context.jugendId ?? "";
   const kreisId = rawGame.kreisId ?? rawGame.kreis ?? rawGame.district ?? context.kreisId ?? "";
-  const league = rawGame.league ?? rawGame.liga ?? rawGame.competition ?? rawGame.wettbewerb ?? rawGame.division ?? "";
+  const league =
+    rawGame.league ??
+    rawGame.liga ??
+    rawGame.competition ??
+    rawGame.wettbewerb ??
+    rawGame.division ??
+    rawGame.spielklasse ??
+    rawGame.klasse ??
+    rawGame.staffel ??
+    rawGame.leagueName ??
+    rawGame.competitionName ??
+    "";
 
   return {
     issues,
@@ -589,7 +617,7 @@ function normalizeUploadedGame(rawGame, index, context) {
       jugendId,
       kreisId,
       league: String(league || "").trim(),
-      competitionName: String(rawGame.competitionName ?? rawGame.wettbewerbName ?? "").trim(),
+      competitionName: String(rawGame.competitionName ?? rawGame.wettbewerbName ?? rawGame.spielklasseName ?? rawGame.staffelName ?? "").trim(),
     },
   };
 }
@@ -911,6 +939,10 @@ async function fetchGamesAdapter(params) {
   }
 
   const requestedRange = normalizeRequestedDateRange(params.fromDate, params.toDate);
+  const querySplit = splitLeagueAndTeamQueries([
+    ...(Array.isArray(params.teams) ? params.teams : []),
+    ...(Array.isArray(params.leagues) ? params.leagues : []),
+  ]);
   const fallbackRangeCandidates = buildAdapterRangeCandidates(requestedRange);
   const liveRangeCandidates = [requestedRange];
   const endpointCandidates = buildAdapterEndpointCandidates(adapterEndpoint);
@@ -938,7 +970,8 @@ async function fetchGamesAdapter(params) {
               jugendId: params.jugendId,
               fromDate: candidateRange.fromDate,
               toDate: candidateRange.toDate,
-              teams: params.teams,
+              teams: querySplit.teams,
+              leagues: querySplit.leagues,
               ensureWeekData: true,
             }),
           },
@@ -1005,7 +1038,8 @@ async function fetchGamesAdapter(params) {
                 jugendId: params.jugendId,
                 fromDate: candidateRange.fromDate,
                 toDate: candidateRange.toDate,
-                teams: params.teams,
+                teams: querySplit.teams,
+                leagues: querySplit.leagues,
                 ensureWeekData: false,
               }),
             },
@@ -1067,18 +1101,30 @@ async function fetchGamesAdapter(params) {
     defaultFallbackTime: "--:--",
   });
 
-  const broadFilteredGames = filterGamesBySelection(report.games, {
+  let broadFilteredGames = filterGamesBySelection(report.games, {
     ...params,
     fromDate: usedRange.fromDate,
     toDate: usedRange.toDate,
     teams: [],
   });
 
+  if (querySplit.leagues.length > 0) {
+    const strictLeagueMatches = broadFilteredGames.filter((game) =>
+      querySplit.leagues.some((leagueQuery) => isLeagueMatch(leagueQuery, game)),
+    );
+    if (strictLeagueMatches.length === 0) {
+      throw new Error(
+        `Keine Spiele für Liga-Filter gefunden (${querySplit.leagues.join(", ")}). Adapterdaten enthalten keine passenden Liga-Metadaten.`,
+      );
+    }
+    broadFilteredGames = strictLeagueMatches;
+  }
+
   if (broadFilteredGames.length > 0) {
-    const fallbackTeamFilter = createTeamFilterMeta(broadFilteredGames, params.teams);
+    const fallbackTeamFilter = createTeamFilterMeta(broadFilteredGames, querySplit.teams);
 
     return {
-      games: markSelectedTeamGames(broadFilteredGames, params.teams),
+      games: markSelectedTeamGames(broadFilteredGames, querySplit.teams),
       meta: {
         teamFilter:
           payload && !Array.isArray(payload) && payload.teamFilter
@@ -1261,6 +1307,7 @@ export async function fetchGamesWithProviders({
   retryDelaysMs,
 }) {
   const normalizedRange = normalizeRequestedDateRange(fromDate, toDate);
+  const querySplit = splitLeagueAndTeamQueries(teams);
   const context = {
     kreisId,
     stateCode,
@@ -1270,7 +1317,8 @@ export async function fetchGamesWithProviders({
     jugendId,
     fromDate: normalizedRange.fromDate,
     toDate: normalizedRange.toDate,
-    teams,
+    teams: querySplit.teams,
+    leagues: querySplit.leagues,
     uploadedGames,
     adapterEndpoint,
     adapterToken,

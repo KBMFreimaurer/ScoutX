@@ -468,6 +468,10 @@ function filterGamesByLeagueQueries(games, teams) {
   return (Array.isArray(games) ? games : []).filter((game) => leagueQueries.some((query) => isLeagueMatch(query, game)));
 }
 
+function hasLeagueQueries(teams) {
+  return (Array.isArray(teams) ? teams : []).some((team) => isLeagueLikeQuery(team));
+}
+
 async function applyExactStartRoute(games, startLocation) {
   const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
   if (!hasLocation || !Array.isArray(games) || games.length === 0) {
@@ -903,9 +907,16 @@ export function GamesProvider({ children }) {
       const source = successfulRuns[0]?.source || "adapter";
       const fetchedGamesRaw = mergeGamesAcrossKreise(successfulRuns.map((run) => run?.games || []));
       const leagueFilteredGames = filterGamesByLeagueQueries(fetchedGamesRaw, activeTeams);
-      // Safety fallback: if league tags were requested but provider data does not expose
-      // league metadata reliably, keep base games so plan generation never collapses to zero.
-      const fetchedGames = leagueFilteredGames.length > 0 ? leagueFilteredGames : fetchedGamesRaw;
+      const strictLeagueMode = hasLeagueQueries(activeTeams);
+      const fetchedGames =
+        strictLeagueMode
+          ? leagueFilteredGames
+          : leagueFilteredGames.length > 0
+            ? leagueFilteredGames
+            : fetchedGamesRaw;
+      if (strictLeagueMode && fetchedGames.length === 0) {
+        throw new Error("Keine passenden Spiele für die gewählte Liga gefunden. Bitte Zeitraum oder Liga prüfen.");
+      }
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
