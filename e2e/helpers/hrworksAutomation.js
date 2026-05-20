@@ -53,11 +53,32 @@ async function clickOptional(page, selector) {
   return true;
 }
 
+async function clickRequired(page, selector, label) {
+  const locator = page.locator(selector);
+  if ((await locator.count()) === 0) {
+    throw new Error(`Selector fehlt: ${label}`);
+  }
+  await locator.first().click();
+}
+
+async function fillKilometerLeg(page, leg, payload) {
+  await clickRequired(page, selectors.newKilometerEntryButton, "newKilometerEntryButton");
+  await fillRequired(page, selectors.mileageFromInput, leg.from, "mileageFromInput");
+  await fillRequired(page, selectors.mileageToInput, leg.to, "mileageToInput");
+  await fillRequired(page, selectors.mileageDateInput, payload.date, "mileageDateInput");
+  if (Number.isFinite(Number(leg.distanceKm))) {
+    await fillRequired(page, selectors.mileageKilometersInput, String(leg.distanceKm), "mileageKilometersInput");
+  } else {
+    await fillOptional(page, selectors.mileageKilometersInput, payload.kilometers);
+  }
+  await clickRequired(page, selectors.saveKilometerEntryButton, "saveKilometerEntryButton");
+}
+
 export async function fillHrworksTravelExpenseForm(page, payload, options = {}) {
   const shouldSave = Boolean(options?.confirmBeforeSave);
   const runRouteFlow = Boolean(options?.runRouteFlow);
-  await page.getByRole("button", { name: "Reisekostenabrechnung" }).click();
-  await page.getByRole("button", { name: "Neue Reisekostenabrechnung" }).click();
+  await page.getByRole("button", { name: "Reisekostenabrechnung", exact: true }).click();
+  await page.getByRole("button", { name: "Neue Reisekostenabrechnung", exact: true }).click();
 
   await fillRequired(page, selectors.purposeInput, payload.purpose, "purposeInput");
   await fillRequired(page, selectors.noteTextarea, payload.note, "noteTextarea");
@@ -82,15 +103,16 @@ export async function fillHrworksTravelExpenseForm(page, payload, options = {}) 
     throw new Error("Selector fehlt: saveButton");
   }
   await saveButton.first().click();
+  await clickOptional(page, selectors.confirmMissingIntermediateStopsButton);
   if (!runRouteFlow) {
     return { saved: true };
   }
 
-  await fillOptional(page, selectors.kilometersInput, payload.kilometers);
-  await clickOptional(page, selectors.saveKilometersButton);
-  await clickOptional(page, selectors.processRouteButton);
+  const routeLegs = Array.isArray(payload?.routeLegs) ? payload.routeLegs : [];
+  for (const leg of routeLegs) {
+    await fillKilometerLeg(page, leg, payload);
+  }
   await clickOptional(page, selectors.reportsButton);
-  await clickOptional(page, selectors.completeReportsButton);
 
-  return { saved: true, routeFlowCompleted: true };
+  return { saved: true, routeFlowCompleted: true, kilometerEntriesCreated: routeLegs.length };
 }

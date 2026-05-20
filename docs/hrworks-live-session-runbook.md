@@ -15,19 +15,24 @@ Manueller End-to-End-Test des ScoutX-HRworks-Imports mit aktivem Nutzer-Login, o
 
 ## Ablauf
 1. In ScoutX `In HRworks importieren` öffnen.
-2. Review prüfen und `Import starten` wählen.
+2. Review prüfen. Bei mehrtägigen Plänen wird pro Datum eine eigene HRworks-Abrechnung vorbereitet.
 3. HRworks im Browser öffnen.
 4. Nutzer loggt sich manuell ein.
 5. Runtime-Status in ScoutX prüfen (`HRworks Runtime aktiv`).
-6. In HRworks Felder prüfen (Zweck, Datum, Zeiten, Orte, Kostenstelle).
-7. Vor Speichern explizit bestätigen.
-8. In ScoutX `Runtime als importiert markieren` oder bei Fehler `Runtime als fehlgeschlagen markieren`.
+6. In HRworks `Reisedaten` anlegen: Zweck und Bemerkung müssen `Sichtung / (Spiel1 - Spiel2 - ...)` aus den ScoutX-Spielen des Tages enthalten.
+7. Datum, Beginn und Ende aus dem ScoutX-Tag übernehmen und speichern.
+8. HRworks-Warnung zu fehlenden Zwischenorten bewusst mit `Ja` bestätigen.
+9. In `Kilometerangaben` für jedes Leg `+ Neu` / `Neue Kilometerangabe` öffnen und genau einen Streckenabschnitt speichern: `Startort -> Spiel1`, `Spiel1 -> Spiel2`, ..., `letztes Spiel -> Startort`.
+10. Zur Berichtseite wechseln. HRworks generiert die Berichte aus Reisedaten und Kilometerangaben.
+11. `Abschließen` bleibt eine manuelle User-Aktion und wird nicht automatisiert.
+12. In ScoutX `Import abschließen` erst nach User-Prüfung markieren; bei Fehler Runtime als fehlgeschlagen markieren.
 
 ## Abbruchkriterien
 - Feld oder Dropdown in HRworks nicht gefunden.
 - Kostenstelle in HRworks nicht auflösbar.
 - HRworks-Validierungsfehler beim Speichern.
 - Unklare UI-Änderungen in HRworks.
+- Unklarer Berichtabschluss: nicht automatisiert fortfahren, User muss selbst abschließen.
 
 ## Nachweise
 - Eintrag in `HRworks-Importhistorie` mit Status `imported` oder `failed`.

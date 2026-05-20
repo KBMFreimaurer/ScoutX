@@ -13,8 +13,11 @@
 
 ## Geplantes/umgesetztes Datenmodell
 - Neues Modell `HrworksImportPayload` in `src/services/hrworksImport.js`.
-- Felder: `planId`, `employeeName`, `date`, `startTime`, `endTime`, `breakStart`, `breakEnd`, `workHours`, `purpose`, `note`, `departureLocation`, `destinationLocation`, `intermediateStops`, `costCenter`, `travelExpenseRequired`, `receiptsRequired`, `sourceGames`, `status`, `createdAt`, `updatedAt`.
+- Felder: `planId`, `employeeName`, `date`, `startTime`, `endTime`, `breakStart`, `breakEnd`, `workHours`, `purpose`, `note`, `departureLocation`, `destinationLocation`, `intermediateStops`, `routeLegs`, `costCenter`, `travelExpenseRequired`, `receiptsRequired`, `sourceGames`, `status`, `createdAt`, `updatedAt`.
 - Validierung: Pflichtfelder, Zeitlogik, Arbeitsstunden, negatives Stundenverbot, Duplikatwarnung.
+- Mehrtägige ScoutX-Pläne werden mit `buildHrworksDailyImportPayloads` pro Datum in einzelne HRworks-Payloads getrennt.
+- Für Planimporte gilt: `purpose` und `note` sind identisch und folgen `Sichtung / (Spiel1 - Spiel2 - ...)`; die Spielreihenfolge kommt aus dem ScoutX-Plan des jeweiligen Tages.
+- Kilometerroute wird pro Tag als einzelne Legs modelliert: `Startort -> Spiel1 -> Spiel2 -> ... -> Startort`; Zwischenorte bleiben in den Reisedaten bewusst leer, weil HRworks danach eine Warnung anzeigt, die bestätigt wird.
 
 ## Geplante/umgesetzte UI-Änderungen
 - Neuer Button `In HRworks importieren` in `src/pages/PlanPage.jsx`.
@@ -54,19 +57,20 @@ Quellen:
   - Erlaubte Werte werden validiert: `aggregationMode` = `per_day|combined`, `finalSaveMode` = `prefill_only|auto_save`.
   - Zusätzlich sichtbare Warnkarte in `PlanPage`, solange diese Entscheidungen fehlen.
   - Schnellhilfe in UI: `HRworks Setup (Empfohlen)` setzt `per_day` + `prefill_only`.
+- Live-Workflow-Regel aus echter HRworks-Session: Nach dem Speichern der Reisedaten muss die Warnung zu fehlenden Zwischenorten mit `Ja` bestätigt werden. Anschließend wird unter `Kilometerangaben` für jedes Leg über `+ Neu` / `Neue Kilometerangabe` ein separater Kilometerdatensatz angelegt. Die Berichtseite wird nur erreicht/vorbereitet; `Abschließen` bleibt beim User.
 
 ## Fortschritt gegen Prompt-Schritte (Stand)
 - 1 Analyse/Notiz: erledigt.
 - 2 Datenmodell + Validierung: erledigt (Basisumfang).
 - 3 UI-Button + Review: erledigt.
 - 4 API-zuerst-Strategie: dokumentiert, endgültige Tenant-Entscheidung offen.
-- 5 Browser-Automation mit Nutzer-Login: Mock-Prototyp erledigt, echte Session offen.
+- 5 Browser-Automation mit Nutzer-Login: Mock-Prototyp erledigt; Live-Workflow für Reisedaten/Kilometerangaben aus echter Session nachgezogen.
   - Live-Testablauf dokumentiert in `docs/hrworks-live-session-runbook.md`.
 - 6 Selector-Mapping: erledigt (Version 1 + UI-Setupmodus).
 - 7 Excel-/CSV-Arbeitszeitparser: CSV/Text-Import erledigt; `.xlsx/.xls` werden kontrolliert mit klarer Umwandlungshinweis-Meldung abgefangen.
 - 8 Duplikatschutz + Audit-Log: erledigt (lokal).
   - Duplikaterkennung greift bei `gleicher Plan + gleicher Tag` oder identischem Zeitfenster am selben Tag.
-- 9 Fehlerbehandlung: teilweise erledigt, echte HRworks-Laufzeitfehler offen.
+- 9 Fehlerbehandlung: teilweise erledigt, echte HRworks-Laufzeitfehler offen; Berichtabschluss wird nicht automatisiert.
 - 10 Datenschutz/Sicherheit: teilweise umgesetzt (keine Credentials-Persistenz im aktuellen Stand).
 - Pflichtfeld-/Kostenstellen-Regeln sind jetzt lokal konfigurierbar, aber organisatorisch noch nicht final abgestimmt.
 - Import-Logs wurden datensparsam reduziert (Pseudonymisierung `executedBy`, Trunkierung technischer Texte).
@@ -78,7 +82,7 @@ Quellen:
 - 3 UI-Button + Review-Modal: [src/pages/PlanPage.jsx](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/pages/PlanPage.jsx), [src/components/HrworksImportReviewModal.jsx](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/components/HrworksImportReviewModal.jsx), Test in `src/components/HrworksImportReviewModal.test.jsx`.
   - Ergänzende Seiten-UI-Tests in `src/pages/PlanPage.test.jsx` (Button sichtbar/deaktiviert, Review-Dialog öffnet, Fehler blockieren Import).
 - 4 API-vor-Automation-Check: dokumentierte Quellen/Strategie in Abschnitt `API-vor-Automation Bewertung`.
-- 5 Browser-Automation mit Nutzer-Login-Flow: Runtime/Guardrails in [src/services/hrworksAutomationRuntime.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/services/hrworksAutomationRuntime.js), [e2e/helpers/hrworksAutomation.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/e2e/helpers/hrworksAutomation.js), Tests vorhanden; echter Live-Run offen.
+- 5 Browser-Automation mit Nutzer-Login-Flow: Runtime/Guardrails in [src/services/hrworksAutomationRuntime.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/services/hrworksAutomationRuntime.js), [e2e/helpers/hrworksAutomation.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/e2e/helpers/hrworksAutomation.js), Tests vorhanden; echter Live-Run bleibt für Tenant-Selectoren erforderlich.
 - 6 Selector-Mapping + Setupmodus: `config/hrworks.selectors.json`, [src/services/hrworksSelectorMapping.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/services/hrworksSelectorMapping.js), UI-Aktion `HRworks Mapping bearbeiten`.
 - 7 Excel-/Arbeitszeitdaten: Parser in [src/services/hrworksExcelParser.js](/Users/playboiiboggos/.openclaw/workspace/ScoutX/src/services/hrworksExcelParser.js), Dateiimport in `PlanPage`, Tests in `src/services/hrworksExcelParser.test.js`.
 - 8 Duplikatschutz + Audit-Log: `read/appendHrworksImportLog` in `src/services/hrworksImport.js`, Historie-UI in `PlanPage`.
@@ -87,7 +91,7 @@ Quellen:
 - 10 Datenschutz/Sicherheit: keine Credential-/Token-Persistenz im aktuellen Code; Logs enthalten technische Minimalinfos.
 - 11 Tests: `hrworksImport`, `hrworksExcelParser`, `hrworksCsvExport`, `hrworksSelectorMapping`, `hrworksAutomationRuntime`, `HrworksImportReviewModal`, `hrworksAutomation.unit` vorhanden.
 - 12 Entwicklungsweise (iterativ + Fortschrittsupdate): umgesetzt; diese Datei wurde fortlaufend aktualisiert.
-- 13 Akzeptanzkriterien: teilweise erfüllt. Vollständig offen bis Real-E2E gegen echte HRworks-Session erfolgreich dokumentiert ist.
+- 13 Akzeptanzkriterien: teilweise erfüllt. Vollständig offen bis Real-E2E gegen echte HRworks-Session erfolgreich dokumentiert ist; finaler HRworks-Berichtabschluss bleibt bewusst manuell.
 
 ## Offene Risiken
 - Reale HRworks-DOM kann vom Mock abweichen; Mapping muss im Setup-Modus pro Tenant verifiziert werden.

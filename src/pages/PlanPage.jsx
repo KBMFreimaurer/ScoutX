@@ -13,6 +13,7 @@ import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { checkPlanConsistency, isAdapterSyncContext } from "../services/liveConsistency";
 import {
   appendHrworksImportLog,
+  buildHrworksDailyImportPayloads,
   buildHrworksImportPayload,
   readHrworksImportLog,
   validateHrworksImportPayload,
@@ -200,6 +201,8 @@ export function PlanPage() {
   const [consistencyResult, setConsistencyResult] = useState(null);
   const [hrworksReviewOpen, setHrworksReviewOpen] = useState(false);
   const [hrworksPayload, setHrworksPayload] = useState(null);
+  const [hrworksPayloadQueue, setHrworksPayloadQueue] = useState([]);
+  const [hrworksPayloadIndex, setHrworksPayloadIndex] = useState(0);
   const [hrworksValidation, setHrworksValidation] = useState({ errors: [], warnings: [] });
   const [hrworksRuntimeSession, setHrworksRuntimeSession] = useState(null);
   const [hrworksImportLog, setHrworksImportLog] = useState(() => readHrworksImportLog());
@@ -372,7 +375,15 @@ export function PlanPage() {
           .filter(Boolean)
       : [];
     const routeLabels = routeLegs.map((leg) => `${leg.from} -> ${leg.to}`);
-    const payload = buildHrworksImportPayload({
+    const payloads = buildHrworksDailyImportPayloads({
+      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
+      employeeName: effectiveScoutName,
+      games: activeGames,
+      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      routeLegs,
+    });
+    const payload = payloads[0] || buildHrworksImportPayload({
       planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName: effectiveScoutName,
       games: activeGames,
@@ -383,21 +394,23 @@ export function PlanPage() {
       intermediateStops: routeLabels,
       routeLegs,
     });
-    payload.importSource = "plan";
-    payload.destinationLocation = "";
-    payload.note = String(payload.purpose || routePurpose).trim();
-    if (!String(payload.purpose || "").trim()) {
-      payload.purpose = routePurpose;
+    if (!payload.importSource) {
+      payload.importSource = "plan";
     }
     const validation = validateHrworksImportPayload(payload, importLog, {
       requiredFields: hrworksPolicy.requiredFields,
     });
     const warnings = [];
+    if (payloads.length > 1) {
+      warnings.push(`Mehrtagiger Plan: ${payloads.length} HRworks-Abrechnungen werden nacheinander vorbereitet.`);
+    }
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
     }
 
     setHrworksPayload(payload);
+    setHrworksPayloadQueue(payloads.length > 0 ? payloads : [payload]);
+    setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
     setHrworksLoginConfirmed(false);
     setHrworksReviewOpen(true);
@@ -490,7 +503,7 @@ export function PlanPage() {
 
     setHrworksReviewOpen(false);
     setHrworksLoginConfirmed(false);
-    setErr("HRworks-Runtime gestartet. Bitte Login und finale Bestätigung im Browser durchführen.");
+    setErr(`HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet. Bitte Login und finale Bestätigung im Browser durchführen.`);
   };
 
   const handleHrworksExportOnly = async () => {
@@ -607,6 +620,27 @@ export function PlanPage() {
         },
       };
       writeHrworksSmartDefaults(nextDefaults);
+    }
+    const nextIndex = hrworksPayloadIndex + 1;
+    const nextPayload = Array.isArray(hrworksPayloadQueue) ? hrworksPayloadQueue[nextIndex] : null;
+    if (nextPayload) {
+      const nextSession = advanceAutomationStep(createAutomationRuntimeSession(nextPayload), "save_without_destination");
+      setHrworksPayloadIndex(nextIndex);
+      setHrworksPayload(nextPayload);
+      setHrworksRuntimeSession(nextSession);
+      appendHrworksImportLog({
+        planId: nextPayload.planId,
+        date: nextPayload.date,
+        startTime: nextPayload.startTime,
+        endTime: nextPayload.endTime,
+        purpose: nextPayload.purpose,
+        hrworksStatus: "ready",
+        sourceType: String(nextPayload.importSource || "plan"),
+        executedBy: nextPayload.employeeName,
+        technicalResult: `Folgetag ${nextIndex + 1}/${hrworksPayloadQueue.length} vorbereitet; Runtime gestartet.`,
+      });
+      setHrworksImportLog(readHrworksImportLog());
+      setErr(`HRworks-Folgetag ${nextIndex + 1}/${hrworksPayloadQueue.length} vorbereitet. Bitte nächste Abrechnung in HRworks anlegen.`);
     }
   };
 
@@ -767,6 +801,8 @@ export function PlanPage() {
     }
 
     setHrworksPayload(payload);
+    setHrworksPayloadQueue([payload]);
+    setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
     setHrworksReviewOpen(true);
     setErr("");
@@ -1269,6 +1305,8 @@ export function PlanPage() {
       <HrworksImportReviewModal
         open={hrworksReviewOpen}
         payload={hrworksPayload}
+        payloads={hrworksPayloadQueue}
+        payloadIndex={hrworksPayloadIndex}
         warnings={hrworksValidation.warnings}
         errors={hrworksValidation.errors}
         loginConfirmed={hrworksLoginConfirmed}

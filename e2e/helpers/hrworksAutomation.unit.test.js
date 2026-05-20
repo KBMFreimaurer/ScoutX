@@ -31,6 +31,7 @@ class MockLocator {
   async click() {
     if (this.node) {
       this.node.clicked = true;
+      this.node.clickCount = Number(this.node.clickCount || 0) + 1;
     }
   }
 }
@@ -46,6 +47,12 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     destinationLocationSelect: { value: "", forcedValue: forcedValues.destinationLocationSelect },
     costCenterSelect: { value: "", forcedValue: forcedValues.costCenterSelect },
     kilometersInput: { value: "" },
+    mileageFromInput: { value: "" },
+    mileageToInput: { value: "" },
+    mileageDateInput: { value: "" },
+    mileageKilometersInput: { value: "" },
+    newKilometerEntryButton: { clicked: false, clickCount: 0 },
+    saveKilometerEntryButton: { clicked: false, clickCount: 0 },
     saveKilometersButton: { clicked: false },
     processRouteButton: { clicked: false },
     reportsButton: { clicked: false },
@@ -70,6 +77,12 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     "input[name='destinationLocation']": "destinationLocationSelect",
     "input[name='costCenter']": "costCenterSelect",
     "input[name='kilometers']": "kilometersInput",
+    "input[name='mileageFrom']": "mileageFromInput",
+    "input[name='mileageTo']": "mileageToInput",
+    "input[name='mileageDate']": "mileageDateInput",
+    "input[name='mileageKilometers']": "mileageKilometersInput",
+    "button:has-text('Neue Kilometerangabe')": "newKilometerEntryButton",
+    "button:has-text('Kilometerangabe speichern')": "saveKilometerEntryButton",
     "button:has-text('Speichern')": "saveButton",
     "button:has-text('Kilometer speichern')": "saveKilometersButton",
     "button:has-text('Route abarbeiten')": "processRouteButton",
@@ -106,6 +119,10 @@ const payload = {
   costCenter: "Junioren allgemein (321000)",
   kilometers: "143",
   intermediateStops: ["Home -> Platz A", "Platz A -> Home"],
+  routeLegs: [
+    { from: "Home", to: "Platz A", distanceKm: 10 },
+    { from: "Platz A", to: "Home", distanceKm: 12 },
+  ],
 };
 
 describe("hrworksAutomation", () => {
@@ -140,15 +157,18 @@ describe("hrworksAutomation", () => {
     expect(page.fields.destinationLocationSelect.value).toBe("");
   });
 
-  it("runs kilometer, route and reports flow after save", async () => {
+  it("creates a separate kilometer entry for each route leg and does not complete reports", async () => {
     const page = createMockPage();
     const result = await fillHrworksTravelExpenseForm(page, payload, { confirmBeforeSave: true, runRouteFlow: true });
     expect(result.routeFlowCompleted).toBe(true);
-    expect(page.fields.kilometersInput.value).toBe("143");
-    expect(page.fields.saveKilometersButton.clicked).toBe(true);
-    expect(page.fields.processRouteButton.clicked).toBe(true);
+    expect(result.kilometerEntriesCreated).toBe(2);
+    expect(page.fields.newKilometerEntryButton.clickCount).toBe(2);
+    expect(page.fields.saveKilometerEntryButton.clickCount).toBe(2);
+    expect(page.fields.mileageFromInput.value).toBe("Platz A");
+    expect(page.fields.mileageToInput.value).toBe("Home");
+    expect(page.fields.mileageKilometersInput.value).toBe("12");
     expect(page.fields.reportsButton.clicked).toBe(true);
-    expect(page.fields.completeReportsButton.clicked).toBe(true);
+    expect(page.fields.completeReportsButton.clicked).toBe(false);
     expect(page.fields.routeTextarea.value).toBe("Home -> Platz A | Platz A -> Home");
   });
 

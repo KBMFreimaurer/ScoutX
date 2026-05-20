@@ -16,7 +16,14 @@ const REQUIRED_KEYS = [
   "nextToReceiptsButton",
 ];
 const OPTIONAL_KEYS = [
+  "confirmMissingIntermediateStopsButton",
   "kilometersInput",
+  "newKilometerEntryButton",
+  "mileageFromInput",
+  "mileageToInput",
+  "mileageDateInput",
+  "mileageKilometersInput",
+  "saveKilometerEntryButton",
   "saveKilometersButton",
   "processRouteButton",
   "reportsButton",

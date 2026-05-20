@@ -225,8 +225,8 @@ describe("PlanPage", () => {
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
 
-    expect(screen.getAllByText("Sichtung / Route des Arbeitstages").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/Sternbuschweg 326 -> Sportplatz A \| Sportplatz A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Sichtung / (Team A vs Team B)").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Sternbuschweg 326 -> Sportplatz A \| Sportplatz A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Zielort fehlt/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));

@@ -71,6 +71,52 @@ function normalizeTime(timeValue) {
   return TIME_RE.test(text) ? text : "";
 }
 
+function normalizeLocationLabel(value) {
+  return String(value || "").trim();
+}
+
+function buildGameLabel(game) {
+  const home = String(game?.home || "").trim();
+  const away = String(game?.away || "").trim();
+  if (home && away) {
+    return `${home} vs ${away}`;
+  }
+  return home || away || String(game?.venue || game?.id || "Spiel").trim();
+}
+
+function buildGameStopLabel(game) {
+  return normalizeLocationLabel(game?.venue) || buildGameLabel(game);
+}
+
+function findMatchingRouteLeg(routeLegs, from, to) {
+  const normalizedFrom = normalizeLocationLabel(from);
+  const normalizedTo = normalizeLocationLabel(to);
+  return (Array.isArray(routeLegs) ? routeLegs : []).find((leg) => (
+    normalizeLocationLabel(leg?.from) === normalizedFrom && normalizeLocationLabel(leg?.to) === normalizedTo
+  )) || null;
+}
+
+function buildDailyRouteLegs({ date, games, startLocation, routeLegs }) {
+  const start = normalizeLocationLabel(startLocation);
+  const stops = (Array.isArray(games) ? games : []).map(buildGameStopLabel).filter(Boolean);
+  if (!start || stops.length === 0) {
+    return [];
+  }
+
+  const points = [start, ...stops, start];
+  return points.slice(0, -1).map((from, index) => {
+    const to = points[index + 1];
+    const existing = findMatchingRouteLeg(routeLegs, from, to);
+    return {
+      id: `${date || "day"}-leg-${index}`,
+      from,
+      to,
+      distanceKm: Number.isFinite(Number(existing?.distanceKm)) ? Number(existing.distanceKm) : null,
+      durationMinutes: Number.isFinite(Number(existing?.durationMinutes)) ? Number(existing.durationMinutes) : null,
+    };
+  });
+}
+
 function calcRange(games) {
   const sorted = [...games].sort((a, b) => {
     const da = new Date(a.date).getTime();
@@ -188,8 +234,8 @@ export function buildHrworksImportPayload({
               id: String(leg?.id || `leg-${index}`),
               from,
               to,
-              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
-              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
+              distanceKm: leg?.distanceKm != null && Number.isFinite(Number(leg.distanceKm)) ? Number(leg.distanceKm) : null,
+              durationMinutes: leg?.durationMinutes != null && Number.isFinite(Number(leg.durationMinutes)) ? Number(leg.durationMinutes) : null,
             };
           })
           .filter(Boolean)
@@ -202,6 +248,71 @@ export function buildHrworksImportPayload({
     createdAt: nowIso,
     updatedAt: nowIso,
   };
+}
+
+export function buildHrworksDailyImportPayloads({
+  planId,
+  employeeName,
+  games,
+  startLocation,
+  costCenter,
+  breakStart,
+  breakEnd,
+  routeLegs,
+}) {
+  const sourceGames = buildSourceGames(games);
+  const byDate = new Map();
+
+  for (const game of sourceGames) {
+    const date = toDateOnly(game.date);
+    if (!date) {
+      continue;
+    }
+    byDate.set(date, [...(byDate.get(date) || []), game]);
+  }
+
+  return [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, dayGames]) => {
+      const sortedGames = [...dayGames].sort((left, right) => {
+        const timeDelta = (toMinutes(left.startTime) ?? Number.MAX_SAFE_INTEGER) - (toMinutes(right.startTime) ?? Number.MAX_SAFE_INTEGER);
+        if (timeDelta !== 0) {
+          return timeDelta;
+        }
+        return buildGameLabel(left).localeCompare(buildGameLabel(right), "de");
+      });
+      const purpose = `Sichtung / (${sortedGames.map(buildGameLabel).join(" - ")})`;
+      const dailyRouteLegs = buildDailyRouteLegs({
+        date,
+        games: sortedGames,
+        startLocation,
+        routeLegs,
+      });
+      const gamesForPayload = sortedGames.map((game) => ({
+        ...game,
+        time: game.startTime,
+        endTime: game.endTime,
+      }));
+      const payload = buildHrworksImportPayload({
+        planId: `${String(planId || "plan").trim() || "plan"}-${date}`,
+        employeeName,
+        games: gamesForPayload,
+        startLocation,
+        costCenter,
+        note: purpose,
+        purpose,
+        breakStart,
+        breakEnd,
+        intermediateStops: [],
+        routeLegs: dailyRouteLegs,
+      });
+      payload.destinationLocation = "";
+      payload.intermediateStops = [];
+      payload.note = purpose;
+      payload.purpose = purpose;
+      payload.importSource = "plan";
+      return payload;
+    });
 }
 
 export function validateHrworksImportPayload(payload, existingImports = [], options = {}) {

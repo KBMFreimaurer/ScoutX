@@ -21,6 +21,8 @@ export function HrworksImportReviewModal({
   onDryRun,
   loginConfirmed,
   onLoginConfirmedChange,
+  payloads,
+  payloadIndex = 0,
 }) {
   if (!open) {
     return null;
@@ -28,6 +30,7 @@ export function HrworksImportReviewModal({
 
   const games = Array.isArray(payload?.sourceGames) ? payload.sourceGames : [];
   const routeLegs = Array.isArray(payload?.routeLegs) ? payload.routeLegs : [];
+  const totalPayloads = Array.isArray(payloads) && payloads.length > 0 ? payloads.length : 1;
 
   return (
     <div
@@ -58,6 +61,11 @@ export function HrworksImportReviewModal({
         }}
       >
         <h2 style={{ margin: 0, marginBottom: 10, fontSize: 18, color: C.white }}>HRworks-Import prüfen</h2>
+        {totalPayloads > 1 ? (
+          <div style={{ marginBottom: 10, fontSize: 12, color: C.grayLight }}>
+            Tag {Number(payloadIndex) + 1} von {totalPayloads}: Mehrtägiger Plan wird als einzelne HRworks-Abrechnungen vorbereitet.
+          </div>
+        ) : null}
 
         <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
           {fieldRow("Datum", payload?.date)}

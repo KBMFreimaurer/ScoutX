@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   HRWORKS_IMPORT_STATUSES,
   appendHrworksImportLog,
+  buildHrworksDailyImportPayloads,
   buildHrworksImportPayload,
   readHrworksImportLog,
   validateHrworksImportPayload,
@@ -79,6 +80,52 @@ describe("hrworksImport", () => {
     expect(payload.note).toBe(payload.purpose);
     expect(payload.routeLegs).toHaveLength(3);
     expect(payload.routeLegs[2].to).toBe("Start");
+  });
+
+  it("splits ScoutX plan into one HRworks payload per date", () => {
+    const payloads = buildHrworksDailyImportPayloads({
+      planId: "plan-1",
+      employeeName: "Max Scout",
+      games: [
+        { id: "g1", date: "2026-05-23", time: "10:00", venue: "Platz A", home: "Spiel1", away: "Gegner1" },
+        { id: "g2", date: "2026-05-23", time: "13:00", venue: "Platz B", home: "Spiel2", away: "Gegner2" },
+        { id: "g3", date: "2026-05-24", time: "11:00", venue: "Platz C", home: "Spiel3", away: "Gegner3" },
+      ],
+      startLocation: "Sternbuschweg 326",
+      costCenter: "Junioren allgemein (321000)",
+    });
+
+    expect(payloads).toHaveLength(2);
+    expect(payloads[0].planId).toBe("plan-1-2026-05-23");
+    expect(payloads[0].date).toBe("2026-05-23");
+    expect(payloads[0].startTime).toBe("10:00");
+    expect(payloads[0].endTime).toBe("15:00");
+    expect(payloads[0].purpose).toBe("Sichtung / (Spiel1 vs Gegner1 - Spiel2 vs Gegner2)");
+    expect(payloads[0].note).toBe(payloads[0].purpose);
+    expect(payloads[1].planId).toBe("plan-1-2026-05-24");
+    expect(payloads[1].purpose).toBe("Sichtung / (Spiel3 vs Gegner3)");
+  });
+
+  it("creates one kilometer entry per daily route leg", () => {
+    const [payload] = buildHrworksDailyImportPayloads({
+      planId: "plan-1",
+      employeeName: "Max Scout",
+      games: [
+        { id: "g1", date: "2026-05-23", time: "10:00", venue: "Duisburger FV 08", home: "Spiel1", away: "Gegner1" },
+        { id: "g2", date: "2026-05-23", time: "13:00", venue: "Hamborn 07", home: "Spiel2", away: "Gegner2" },
+        { id: "g3", date: "2026-05-23", time: "16:00", venue: "Dümptener TV", home: "Spiel3", away: "Gegner3" },
+      ],
+      startLocation: "Sternbuschweg 326",
+      costCenter: "Junioren allgemein (321000)",
+    });
+
+    expect(payload.routeLegs).toEqual([
+      { id: "2026-05-23-leg-0", from: "Sternbuschweg 326", to: "Duisburger FV 08", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-1", from: "Duisburger FV 08", to: "Hamborn 07", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-2", from: "Hamborn 07", to: "Dümptener TV", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-3", from: "Dümptener TV", to: "Sternbuschweg 326", distanceKm: null, durationMinutes: null },
+    ]);
+    expect(payload.intermediateStops).toEqual([]);
   });
 
   it("detects missing fields", () => {
