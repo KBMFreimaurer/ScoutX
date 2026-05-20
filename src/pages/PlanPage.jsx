@@ -347,6 +347,10 @@ export function PlanPage() {
   };
 
   const handleOpenHrworksReview = () => {
+    if (!Array.isArray(activeGames) || activeGames.length === 0) {
+      setErr("Keine Spiele im Plan. Importiere zuerst eine Arbeitszeitdatei oder füge Spiele zum Plan hinzu.");
+      return;
+    }
     const importLog = readHrworksImportLog();
     const routePurpose = "Sichtung / Route des Arbeitstages";
     const routeLegs = Array.isArray(routeOverview?.legs)
@@ -616,6 +620,7 @@ export function PlanPage() {
   };
 
   const handlePickHrworksFile = () => {
+    setErr("");
     hrworksFileInputRef.current?.click();
   };
 
@@ -1033,7 +1038,7 @@ export function PlanPage() {
           <input
             ref={hrworksFileInputRef}
             type="file"
-            accept=".csv,text/csv,.txt"
+            accept=".csv,text/csv,.txt,.xlsx,.xls"
             style={{ display: "none" }}
             onChange={(event) => {
               void handleHrworksFileChange(event);
@@ -1236,7 +1241,6 @@ export function PlanPage() {
             type="button"
             onClick={handleOpenHrworksReview}
             aria-label="In HRworks importieren"
-            disabled={activeGames.length === 0}
             style={{
               fontSize: 12,
               padding: "9px 14px",
@@ -1252,8 +1256,8 @@ export function PlanPage() {
               alignItems: "center",
               justifyContent: "center",
               gap: 6,
-              opacity: activeGames.length === 0 ? 0.5 : 1,
-              cursor: activeGames.length === 0 ? "not-allowed" : "pointer",
+              opacity: 1,
+              cursor: "pointer",
               width: useStackedTopActions ? "100%" : "auto",
               minWidth: useStackedTopActions ? 0 : undefined,
             }}

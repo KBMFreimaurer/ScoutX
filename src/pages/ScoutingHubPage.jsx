@@ -504,6 +504,7 @@ export function ScoutingHubPage() {
   );
   const canWrite = canRole(activeUser.role, "create");
   const canManageTeam = activeUser.role === "admin" || activeUser.role === "coordinator";
+  const authRequired = teamBackendState.status !== "connected";
   const selectedWatchlistId = watchlistEntry.watchlistId || visibleWatchlists[0]?.id || "";
   const latestGames = allTeamGames.slice(0, 8);
 
@@ -872,72 +873,7 @@ export function ScoutingHubPage() {
                 </div>
               ) : null}
             </div>
-          ) : (
-            <div style={{ display: "flex", gap: 6 }}>
-              <GhostButton type="button" onClick={() => setTeamAuthMode("login")} style={{ minHeight: 34, opacity: teamAuthMode === "login" ? 1 : 0.7 }}>
-                Login
-              </GhostButton>
-              <GhostButton type="button" onClick={() => setTeamAuthMode("register")} style={{ minHeight: 34, opacity: teamAuthMode === "register" ? 1 : 0.7 }}>
-                Registrieren
-              </GhostButton>
-            </div>
-          )}
-          {teamBackendState.status === "connected" ? null : (
-          <form onSubmit={submitTeamBackendLogin} style={{ display: "grid", gap: 6, gridTemplateColumns: "minmax(0,1fr) auto" }}>
-            <input
-              type="text"
-              value={teamLoginUserId}
-              onChange={(event) => setTeamLoginUserId(event.target.value)}
-              placeholder={`User-ID (default: ${activeUser.id})`}
-              autoComplete="username"
-              style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
-            />
-            {teamAuthMode === "register" ? (
-              <>
-                <input
-                  type="text"
-                  value={teamRegisterName}
-                  onChange={(event) => setTeamRegisterName(event.target.value)}
-                  placeholder="Anzeigename"
-                  autoComplete="name"
-                  style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
-                />
-                <select value={teamRegisterKey} onChange={(event) => setTeamRegisterKey(event.target.value)} style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}>
-                  {REGISTRATION_TEAMS.map((team) => (
-                    <option key={team.key} value={team.key}>
-                      Teambeitritt: {team.label}
-                    </option>
-                  ))}
-                </select>
-                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, color: C.grayLight, fontSize: 12 }}>
-                  <img
-                    src="/api/clubs/logo/borussia-monchengladbach.png"
-                    alt="Borussia Mönchengladbach"
-                    width={24}
-                    height={24}
-                    style={{ objectFit: "contain", borderRadius: 4, background: "rgba(255,255,255,0.06)" }}
-                  />
-                  <span>Borussia Mönchengladbach</span>
-                </div>
-              </>
-            ) : null}
-            <input
-              type="password"
-              value={teamLoginPassword}
-              onChange={(event) => setTeamLoginPassword(event.target.value)}
-              placeholder={teamAuthMode === "register" ? "Neues Passwort (mind. 8 Zeichen)" : "Team-Passwort"}
-              autoComplete="current-password"
-              style={FIELD_STYLE}
-            />
-            <GhostButton
-              type="submit"
-              disabled={!teamLoginPassword.trim() || teamLoginBusy || (teamAuthMode === "register" && !teamRegisterName.trim())}
-              style={{ minHeight: 40 }}
-            >
-              {teamLoginBusy ? "..." : teamAuthMode === "register" ? "Account erstellen" : "Anmelden"}
-            </GhostButton>
-          </form>
-          )}
+          ) : null}
           <Chip tone={teamBackendState.status === "connected" ? "green" : "warn"}>
             {teamBackendState.status === "connected" ? "Backend verbunden" : "Backend lokal"}
           </Chip>
@@ -961,6 +897,82 @@ export function ScoutingHubPage() {
           }}
         >
           {productError}
+        </div>
+      ) : null}
+      {authRequired ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="ScoutX Anmeldung"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.62)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1200,
+            padding: 16,
+          }}
+        >
+          <div style={{ width: "min(560px, 96vw)", border: `1px solid ${C.border}`, borderRadius: 12, background: C.bg, padding: 16 }}>
+            <h2 style={{ margin: 0, color: C.white, fontSize: 20 }}>ScoutX Anmeldung</h2>
+            <p style={{ marginTop: 8, color: C.grayLight, fontSize: 13 }}>
+              Bitte einmal anmelden und Teambeitritt durchführen. Danach bleibt die Session aktiv, bis du dich ausloggst.
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <GhostButton type="button" onClick={() => setTeamAuthMode("login")} style={{ minHeight: 34, opacity: teamAuthMode === "login" ? 1 : 0.7 }}>
+                Login
+              </GhostButton>
+              <GhostButton type="button" onClick={() => setTeamAuthMode("register")} style={{ minHeight: 34, opacity: teamAuthMode === "register" ? 1 : 0.7 }}>
+                Registrieren
+              </GhostButton>
+            </div>
+            <form onSubmit={submitTeamBackendLogin} style={{ display: "grid", gap: 6, gridTemplateColumns: "minmax(0,1fr) auto", marginTop: 8 }}>
+              <input
+                type="text"
+                value={teamLoginUserId}
+                onChange={(event) => setTeamLoginUserId(event.target.value)}
+                placeholder={`User-ID (default: ${activeUser.id})`}
+                autoComplete="username"
+                style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
+              />
+              {teamAuthMode === "register" ? (
+                <>
+                  <input
+                    type="text"
+                    value={teamRegisterName}
+                    onChange={(event) => setTeamRegisterName(event.target.value)}
+                    placeholder="Anzeigename"
+                    autoComplete="name"
+                    style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}
+                  />
+                  <select value={teamRegisterKey} onChange={(event) => setTeamRegisterKey(event.target.value)} style={{ ...FIELD_STYLE, gridColumn: "1 / -1" }}>
+                    {REGISTRATION_TEAMS.map((team) => (
+                      <option key={team.key} value={team.key}>
+                        Teambeitritt: {team.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+              <input
+                type="password"
+                value={teamLoginPassword}
+                onChange={(event) => setTeamLoginPassword(event.target.value)}
+                placeholder={teamAuthMode === "register" ? "Neues Passwort (mind. 8 Zeichen)" : "Team-Passwort"}
+                autoComplete="current-password"
+                style={FIELD_STYLE}
+              />
+              <GhostButton
+                type="submit"
+                disabled={!teamLoginPassword.trim() || teamLoginBusy || (teamAuthMode === "register" && !teamRegisterName.trim())}
+                style={{ minHeight: 40 }}
+              >
+                {teamLoginBusy ? "..." : teamAuthMode === "register" ? "Account erstellen" : "Anmelden"}
+              </GhostButton>
+            </form>
+          </div>
         </div>
       ) : null}
 

@@ -153,14 +153,16 @@ describe("PlanPage", () => {
     expect(screen.getByText(/Arbeitszeiterfassung \(manuell\)/i)).toBeInTheDocument();
   });
 
-  it("zeigt HRworks-Button und deaktiviert ihn ohne Spiele", () => {
-    mockedUseScoutX.mockReturnValue(createBaseContext({ games: [], plannedGames: [] }));
+  it("zeigt HRworks-Button und lässt Klick mit Hinweis zu, auch ohne Spiele", () => {
+    const setErr = vi.fn();
+    mockedUseScoutX.mockReturnValue(createBaseContext({ games: [], plannedGames: [], setErr }));
 
     render(<PlanPage />);
 
     const button = screen.getByRole("button", { name: /In HRworks importieren/i });
     expect(button).toBeInTheDocument();
-    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/Keine Spiele im Plan/i));
   });
 
   it("öffnet HRworks-Review und blockiert Import bei fehlenden Pflichtdaten", () => {
@@ -189,7 +191,7 @@ describe("PlanPage", () => {
 
     expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
     expect(screen.getByText(/Abfahrtsort fehlt/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Import starten/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).toBeDisabled();
   });
 
   it("setzt Zweck und Bemerkung auf Route-Text und erlaubt leeren Zielort", () => {
@@ -226,9 +228,9 @@ describe("PlanPage", () => {
     expect(screen.getAllByText("Sichtung / Route des Arbeitstages").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/Sternbuschweg 326 -> Sportplatz A \| Sportplatz A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/Zielort fehlt/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Import starten/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    expect(screen.getByRole("button", { name: /Import starten/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).not.toBeDisabled();
   });
 
   it("blockiert Importstart wenn Betriebsentscheidungen fehlen", () => {
@@ -256,7 +258,7 @@ describe("PlanPage", () => {
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
     fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Import starten/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i }));
 
     expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));
   });

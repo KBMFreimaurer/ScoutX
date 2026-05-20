@@ -49,3 +49,18 @@ describe("GamesContext applyVenueFallbackHeuristics", () => {
     expect(unknown?.venueIsEstimated).toBe(true);
   });
 });
+
+describe("GamesContext filterGamesByLeagueQueries", () => {
+  it("keeps only exact league-like matches and excludes similar class names", () => {
+    const { filterGamesByLeagueQueries } = __gamesContextTestables;
+    const result = filterGamesByLeagueQueries(
+      [
+        { id: "g1", home: "A", away: "B", league: "Kreisleistungsklasse" },
+        { id: "g2", home: "C", away: "D", league: "Kreisklasse" },
+      ],
+      ["Kreisleistungsklasse"],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("g1");
+  });
+});

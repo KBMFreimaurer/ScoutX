@@ -34,6 +34,8 @@ const GENERIC_TEAM_TOKENS = new Set([
   "bv",
   "u",
 ]);
+const LEAGUE_KEYWORDS = ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"];
+const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19"];
 
 function toLookupKey(value) {
   return String(value || "")
@@ -105,6 +107,36 @@ function isLikelyTeamMatch(left, right) {
   }
 
   return overlap >= minTokenCount - 1;
+}
+
+function isLeagueLikeQuery(value) {
+  const lookup = toLookupKey(value);
+  return LEAGUE_KEYWORDS.some((keyword) => lookup.includes(keyword));
+}
+
+function normalizeLeagueKey(value) {
+  return toLookupKey(value).replace(/[^a-z0-9]+/g, "");
+}
+
+function isLeagueMatch(query, game) {
+  const queryKey = normalizeLeagueKey(query);
+  if (!queryKey) {
+    return false;
+  }
+  const candidates = [
+    game?.league,
+    game?.liga,
+    game?.competition,
+    game?.competitionName,
+    game?.division,
+    game?.staffel,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return candidates.some((candidate) => {
+    const normalized = normalizeLeagueKey(candidate);
+    return normalized === queryKey || normalized.includes(queryKey);
+  });
 }
 
 function createTimeoutController(timeoutMs) {
@@ -538,6 +570,7 @@ function normalizeUploadedGame(rawGame, index, context) {
   const jugendId =
     rawGame.jugendId ?? rawGame.jugend ?? rawGame.altersklasse ?? rawGame.ageGroup ?? context.jugendId ?? "";
   const kreisId = rawGame.kreisId ?? rawGame.kreis ?? rawGame.district ?? context.kreisId ?? "";
+  const league = rawGame.league ?? rawGame.liga ?? rawGame.competition ?? rawGame.wettbewerb ?? rawGame.division ?? "";
 
   return {
     issues,
@@ -555,6 +588,8 @@ function normalizeUploadedGame(rawGame, index, context) {
       turnier: toBoolean(rawGame.turnier) || context.turnier,
       jugendId,
       kreisId,
+      league: String(league || "").trim(),
+      competitionName: String(rawGame.competitionName ?? rawGame.wettbewerbName ?? "").trim(),
     },
   };
 }
@@ -711,8 +746,10 @@ function markSelectedTeamGames(games, teams) {
   }
 
   return games.map((game) => {
-    const selectedTeamMatch = selectedTeams.some(
-      (team) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away),
+    const selectedTeamMatch = selectedTeams.some((team) =>
+      isLeagueLikeQuery(team)
+        ? isLeagueMatch(team, game)
+        : isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away),
     );
 
     if (!selectedTeamMatch) {
@@ -747,7 +784,11 @@ function createTeamFilterMeta(games, teams) {
   const missingTeams = [];
 
   for (const team of requestedTeams) {
-    const found = games.some((game) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away));
+    const found = games.some((game) =>
+      isLeagueLikeQuery(team)
+        ? isLeagueMatch(team, game)
+        : isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away),
+    );
     if (found) {
       matchedTeams.push(team);
     } else {
@@ -756,7 +797,11 @@ function createTeamFilterMeta(games, teams) {
   }
 
   const matchedCount = games.filter((game) =>
-    requestedTeams.some((team) => isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away)),
+    requestedTeams.some((team) =>
+      isLeagueLikeQuery(team)
+        ? isLeagueMatch(team, game)
+        : isLikelyTeamMatch(team, game.home) || isLikelyTeamMatch(team, game.away),
+    ),
   ).length;
 
   return {
@@ -1082,10 +1127,33 @@ function tournamentToGame(item, index, params) {
     turnier: true,
     source: "tournament",
     provider: "meinturnierplan.de",
+    competitionName: tournamentName,
     tournamentId: String(item?.externalId || item?.id || ""),
     jugendId: String(params?.jugendId || ""),
     kreisId: String(params?.kreisId || ""),
   };
+}
+
+function extractNationalAgeGroup(item) {
+  const candidates = [
+    item?.ageGroup,
+    item?.jugend,
+    item?.competition,
+    item?.name,
+    item?.home,
+    item?.away,
+    item?.homeTeam,
+    item?.awayTeam,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  for (const value of candidates) {
+    const match = value.match(/\bU(15|16|17|18|19)\b/i);
+    if (match) {
+      return `U${match[1]}`;
+    }
+  }
+  return "";
 }
 
 async function fetchGamesTournament(params) {
@@ -1136,6 +1204,8 @@ function nationalGameToGame(item, index, params) {
     turnier: false,
     source: "national",
     provider: "dfb.de",
+    competitionName: "Länderspiel",
+    ageGroup: extractNationalAgeGroup(item),
     jugendId: String(params?.jugendId || ""),
     kreisId: String(params?.kreisId || ""),
   };
@@ -1148,8 +1218,13 @@ async function fetchGamesNational(params) {
     teams: Array.isArray(params.teams) ? params.teams : [],
     jugendId: params.jugendId,
     kreisId: params.kreisId,
+    ageGroups: NATIONAL_AGE_GROUPS,
   });
-  const nationalGames = Array.isArray(payload?.games) ? payload.games : [];
+  const nationalGamesRaw = Array.isArray(payload?.games) ? payload.games : [];
+  const nationalGames = nationalGamesRaw.filter((item) => {
+    const ageGroup = extractNationalAgeGroup(item);
+    return NATIONAL_AGE_GROUPS.includes(ageGroup);
+  });
   if (!nationalGames.length) {
     throw new Error("Keine passenden Länderspiele gefunden.");
   }
@@ -1228,6 +1303,54 @@ export async function fetchGamesWithProviders({
     adapter: fetchGamesAdapter,
     mock: fetchGamesMock,
   };
+
+  const shouldAggregateProviders =
+    (mode === "adapter" || mode === "auto") && (context.includeNationalGames || context.turnier);
+
+  if (shouldAggregateProviders) {
+    const aggregatedGames = [];
+    const aggregatedMeta = { providers: [] };
+    let baseError = null;
+
+    for (const providerName of providerOrder) {
+      try {
+        const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
+        const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
+        const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
+        if (!games.length) {
+          continue;
+        }
+        aggregatedGames.push(...games);
+        aggregatedMeta.providers.push(providerName);
+      } catch (error) {
+        if (providerName === "adapter" || providerName === "csv" || providerName === "mock") {
+          baseError = error;
+        }
+      }
+    }
+
+    if (aggregatedGames.length > 0) {
+      const deduped = new Map();
+      for (const game of aggregatedGames) {
+        const key = [
+          toLookupKey(game?.home),
+          toLookupKey(game?.away),
+          String(game?.date || ""),
+          String(game?.time || ""),
+          toLookupKey(game?.venue),
+          String(game?.source || ""),
+        ].join("|");
+        if (!deduped.has(key)) {
+          deduped.set(key, game);
+        }
+      }
+      return { games: Array.from(deduped.values()).sort(compareGamesByDateTime), source: "combined", meta: aggregatedMeta };
+    }
+
+    if (baseError) {
+      throw baseError;
+    }
+  }
 
   let lastError = null;
 

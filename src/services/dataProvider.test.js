@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchGamesWithProviders, parseUploadedGames, parseUploadedGamesReport } from "./dataProvider";
-import { importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
+import { importTeamNationalGames, importTeamTournamentsFromMeinturnierplan } from "./teamBackendClient";
 
 vi.mock("./teamBackendClient", () => ({
   importTeamTournamentsFromMeinturnierplan: vi.fn(),
+  importTeamNationalGames: vi.fn(),
 }));
 
 describe("data provider", () => {
@@ -11,6 +12,7 @@ describe("data provider", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.mocked(importTeamTournamentsFromMeinturnierplan).mockReset();
+    vi.mocked(importTeamNationalGames).mockReset();
   });
 
   it("parses csv uploads", () => {
@@ -177,7 +179,7 @@ describe("data provider", () => {
       turnier: true,
     });
 
-    expect(result.source).toBe("tournament");
+    expect(result.source).toBe("combined");
     expect(result.games).toHaveLength(1);
     expect(result.games[0]).toMatchObject({
       home: "Pfingstcup U12",
@@ -234,7 +236,7 @@ describe("data provider", () => {
       turnier: true,
     });
 
-    expect(result.source).toBe("adapter");
+    expect(result.source).toBe("combined");
     expect(result.games).toHaveLength(1);
     expect(result.games[0].home).toBe("Fallback Team A");
     expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledTimes(1);

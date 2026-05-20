@@ -91,7 +91,7 @@ export function HrworksImportReviewModal({
         ) : null}
 
         <div style={{ marginTop: 12, color: C.gray, fontSize: 12 }}>
-          Hinweis: HRworks wird im Browser geöffnet. Keine Zugangsdaten werden in ScoutX gespeichert.
+          Hinweis: Produktivimport schreibt Daten in HRworks. Testlauf speichert nichts.
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.grayLight }}>
           <input
@@ -106,8 +106,8 @@ export function HrworksImportReviewModal({
           <button type="button" onClick={onCancel}>Abbrechen</button>
           <button type="button" onClick={onEdit}>Daten bearbeiten</button>
           <button type="button" onClick={onExportOnly}>Nur Exportdatei erstellen</button>
-          <button type="button" onClick={onDryRun}>HRworks-Testlauf ohne Speichern</button>
-          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Import starten</button>
+          <button type="button" onClick={onDryRun}>Testlauf (kein Speichern)</button>
+          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Produktiv in HRworks speichern</button>
         </div>
       </div>
     </div>

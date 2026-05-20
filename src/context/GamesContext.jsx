@@ -62,6 +62,29 @@ function normalizeLookup(value) {
     .replace(/\s+/g, " ");
 }
 
+function isLeagueLikeQuery(value) {
+  const key = normalizeLookup(value);
+  return ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"].some((token) => key.includes(token));
+}
+
+function normalizeLeagueKey(value) {
+  return normalizeLookup(value).replace(/[^a-z0-9]+/g, "");
+}
+
+function isLeagueMatch(query, game) {
+  const queryKey = normalizeLeagueKey(query);
+  if (!queryKey) {
+    return false;
+  }
+  const candidates = [game?.league, game?.competition, game?.competitionName, game?.liga, game?.division]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return candidates.some((candidate) => {
+    const key = normalizeLeagueKey(candidate);
+    return key === queryKey || key.includes(queryKey);
+  });
+}
+
 function resolveRegionByLooseId(value) {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -367,6 +390,7 @@ function mergeGamesAcrossKreise(gamesByKreis) {
 export const __gamesContextTestables = {
   mergeGamesAcrossKreise,
   applyVenueFallbackHeuristics,
+  filterGamesByLeagueQueries,
 };
 
 function buildTeamFilterMetaFromGames(games, teams) {
@@ -394,6 +418,9 @@ function buildTeamFilterMetaFromGames(games, teams) {
   for (const team of requestedTeams) {
     const teamLookup = normalizeLookup(team);
     const hasMatch = (Array.isArray(games) ? games : []).some((game) => {
+      if (isLeagueLikeQuery(team)) {
+        return isLeagueMatch(team, game);
+      }
       const home = normalizeLookup(game?.home);
       const away = normalizeLookup(game?.away);
       return Boolean(teamLookup) && (home.includes(teamLookup) || away.includes(teamLookup));
@@ -410,6 +437,9 @@ function buildTeamFilterMetaFromGames(games, teams) {
     const home = normalizeLookup(game?.home);
     const away = normalizeLookup(game?.away);
     const hasRequestedMatch = requestedTeams.some((team) => {
+      if (isLeagueLikeQuery(team)) {
+        return isLeagueMatch(team, game);
+      }
       const teamLookup = normalizeLookup(team);
       return Boolean(teamLookup) && (home.includes(teamLookup) || away.includes(teamLookup));
     });
@@ -428,6 +458,14 @@ function buildTeamFilterMetaFromGames(games, teams) {
     binding: false,
     fallbackToUnfiltered: false,
   };
+}
+
+function filterGamesByLeagueQueries(games, teams) {
+  const leagueQueries = (Array.isArray(teams) ? teams : []).filter((team) => isLeagueLikeQuery(team));
+  if (leagueQueries.length === 0) {
+    return Array.isArray(games) ? games : [];
+  }
+  return (Array.isArray(games) ? games : []).filter((game) => leagueQueries.some((query) => isLeagueMatch(query, game)));
 }
 
 async function applyExactStartRoute(games, startLocation) {
@@ -863,7 +901,8 @@ export function GamesProvider({ children }) {
       }
 
       const source = successfulRuns[0]?.source || "adapter";
-      const fetchedGames = mergeGamesAcrossKreise(successfulRuns.map((run) => run?.games || []));
+      const fetchedGamesRaw = mergeGamesAcrossKreise(successfulRuns.map((run) => run?.games || []));
+      const fetchedGames = filterGamesByLeagueQueries(fetchedGamesRaw, activeTeams);
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;

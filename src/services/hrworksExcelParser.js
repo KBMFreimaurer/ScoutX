@@ -291,6 +291,6 @@ export function validateHrworksTimesheetFile(file) {
 
   return {
     ok: false,
-    message: "Nicht unterstütztes Dateiformat. Bitte CSV oder TXT verwenden.",
+    message: "Nicht unterstütztes Dateiformat. Bitte CSV, TXT oder XLSX verwenden.",
   };
 }
