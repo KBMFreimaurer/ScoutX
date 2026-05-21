@@ -41,15 +41,18 @@ describe("HrworksImportReviewModal", () => {
     );
 
     expect(screen.getByRole("dialog", { name: "HRworks-Import prüfen" })).toBeInTheDocument();
+    expect(screen.getByText(/Kompletter HRworks-Workflow/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kilometer-Bemerkung bleibt leer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Berichte werden abgeschlossen/i)).toBeInTheDocument();
     expect(screen.getByText(/Fehler/)).toBeInTheDocument();
     expect(screen.getByText(/Zuhause -> Spiel \| Spiel -> Zuhause/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Produktiv in HRworks speichern" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Produktiv in HRworks speichern und abschließen" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
     fireEvent.click(screen.getByRole("button", { name: "Daten bearbeiten" }));
     fireEvent.click(screen.getByRole("button", { name: "Nur Exportdatei erstellen" }));
     fireEvent.click(screen.getByRole("button", { name: "Testlauf (kein Speichern)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Produktiv in HRworks speichern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Produktiv in HRworks speichern und abschließen" }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledTimes(1);

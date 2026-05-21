@@ -31,6 +31,14 @@ export function HrworksImportReviewModal({
   const games = Array.isArray(payload?.sourceGames) ? payload.sourceGames : [];
   const routeLegs = Array.isArray(payload?.routeLegs) ? payload.routeLegs : [];
   const totalPayloads = Array.isArray(payloads) && payloads.length > 0 ? payloads.length : 1;
+  const workflowFacts = [
+    "XLSX-Datum und XLSX-Uhrzeiten sind bindend.",
+    "Zweck/Bemerkung enthalten nur Heimmannschaften.",
+    "Zielort und Zwischenorte bleiben in den Reisedaten leer.",
+    "Jeder Streckenabschnitt wird als eigene Kilometerangabe angelegt.",
+    "Kilometer-Bemerkung bleibt leer.",
+    "Berichte werden abgeschlossen und erwartete HRworks-Warnungen mit Ja bestätigt.",
+  ];
 
   return (
     <div
@@ -82,6 +90,23 @@ export function HrworksImportReviewModal({
           {fieldRow("Zugehörige Spiele", games.map((game) => `${game.home} vs ${game.away}`).join(" | "))}
         </div>
 
+        <div
+          style={{
+            marginTop: 12,
+            border: `1px solid ${C.greenBorder}`,
+            background: C.greenDim,
+            borderRadius: 10,
+            padding: 10,
+          }}
+        >
+          <div style={{ color: C.green, fontSize: 12, fontWeight: 800 }}>Kompletter HRworks-Workflow</div>
+          <div style={{ marginTop: 6, display: "grid", gap: 4, color: C.grayLight, fontSize: 12 }}>
+            {workflowFacts.map((item) => (
+              <div key={item}>• {item}</div>
+            ))}
+          </div>
+        </div>
+
         {(warnings?.length || 0) > 0 ? (
           <div style={{ marginTop: 12, color: "#fde68a", fontSize: 12 }}>
             {warnings.map((warning) => (
@@ -99,7 +124,7 @@ export function HrworksImportReviewModal({
         ) : null}
 
         <div style={{ marginTop: 12, color: C.gray, fontSize: 12 }}>
-          Hinweis: Produktivimport schreibt Daten in HRworks. Testlauf speichert nichts.
+          Hinweis: Produktivimport schreibt und schließt die Reisekostenabrechnung in HRworks ab. Testlauf speichert nichts.
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.grayLight }}>
           <input
@@ -107,7 +132,7 @@ export function HrworksImportReviewModal({
             checked={loginConfirmed === true}
             onChange={(event) => onLoginConfirmedChange?.(Boolean(event?.target?.checked))}
           />
-          Ich bin in HRworks eingeloggt und kann den Import jetzt durchführen
+          Ich bin in HRworks eingeloggt und möchte diesen Workflow jetzt vollständig ausführen
         </label>
 
         <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
@@ -115,7 +140,7 @@ export function HrworksImportReviewModal({
           <button type="button" onClick={onEdit}>Daten bearbeiten</button>
           <button type="button" onClick={onExportOnly}>Nur Exportdatei erstellen</button>
           <button type="button" onClick={onDryRun}>Testlauf (kein Speichern)</button>
-          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Produktiv in HRworks speichern</button>
+          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Produktiv in HRworks speichern und abschließen</button>
         </div>
       </div>
     </div>

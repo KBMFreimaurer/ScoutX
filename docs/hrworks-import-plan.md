@@ -16,7 +16,7 @@
 - Felder: `planId`, `employeeName`, `date`, `startTime`, `endTime`, `breakStart`, `breakEnd`, `workHours`, `purpose`, `note`, `departureLocation`, `destinationLocation`, `intermediateStops`, `routeLegs`, `costCenter`, `travelExpenseRequired`, `receiptsRequired`, `sourceGames`, `status`, `createdAt`, `updatedAt`.
 - Validierung: Pflichtfelder, Zeitlogik, Arbeitsstunden, negatives Stundenverbot, Duplikatwarnung.
 - Mehrtägige ScoutX-Pläne werden mit `buildHrworksDailyImportPayloads` pro Datum in einzelne HRworks-Payloads getrennt.
-- Für Planimporte gilt: `purpose` und `note` sind identisch und folgen `Sichtung / (Spiel1 - Spiel2 - ...)`; die Spielreihenfolge kommt aus dem ScoutX-Plan des jeweiligen Tages.
+- Für Planimporte gilt: `purpose` und `note` sind identisch und folgen `Sichtung / (Heimmannschaft1 - Heimmannschaft2 - ...)`; Gegnernamen werden in HRworks-Zweck/Bemerkung nicht übernommen.
 - Kilometerroute wird pro Tag als einzelne Legs modelliert: `Startort -> Spiel1 -> Spiel2 -> ... -> Startort`; Zwischenorte bleiben in den Reisedaten bewusst leer, weil HRworks danach eine Warnung anzeigt, die bestätigt wird.
 
 ## Geplante/umgesetzte UI-Änderungen
@@ -56,8 +56,8 @@ Quellen:
   - Betriebsentscheidungs-Blocker aktiv: `aggregationMode` und `finalSaveMode` müssen gesetzt sein, sonst wird `Import starten` mit klarer Meldung abgebrochen.
   - Erlaubte Werte werden validiert: `aggregationMode` = `per_day|combined`, `finalSaveMode` = `prefill_only|auto_save`.
   - Zusätzlich sichtbare Warnkarte in `PlanPage`, solange diese Entscheidungen fehlen.
-  - Schnellhilfe in UI: `HRworks Setup (Empfohlen)` setzt `per_day` + `prefill_only`.
-- Live-Workflow-Regel aus echter HRworks-Session: Nach dem Speichern der Reisedaten muss die Warnung zu fehlenden Zwischenorten mit `Ja` bestätigt werden. Anschließend wird unter `Kilometerangaben` für jedes Leg über `+ Neu` / `Neue Kilometerangabe` ein separater Kilometerdatensatz angelegt. Die Berichtseite wird nur erreicht/vorbereitet; `Abschließen` bleibt beim User.
+  - Schnellhilfe in UI: `HRworks Setup (Empfohlen)` setzt `per_day` + `auto_save`.
+- Live-Workflow-Regel aus echter HRworks-Session: Nach dem Speichern der Reisedaten muss die Warnung zu fehlenden Zwischenorten mit `Ja` bestätigt werden. Anschließend wird unter `Kilometerangaben` für jedes Leg über `+ Neu` / `Neue Kilometerangabe` ein separater Kilometerdatensatz angelegt; die Kilometer-Bemerkung bleibt leer. Danach wird `Berichte -> Abschließen` ausgeführt, ein ggf. zweiter Abschlussbutton auf der Detailseite geklickt und die finale Warnung zu leerem Zielort mit `Ja` bestätigt.
 
 ## Fortschritt gegen Prompt-Schritte (Stand)
 - 1 Analyse/Notiz: erledigt.

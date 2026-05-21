@@ -100,10 +100,11 @@ describe("hrworksImport", () => {
     expect(payloads[0].date).toBe("2026-05-23");
     expect(payloads[0].startTime).toBe("10:00");
     expect(payloads[0].endTime).toBe("15:00");
-    expect(payloads[0].purpose).toBe("Sichtung / (Spiel1 vs Gegner1 - Spiel2 vs Gegner2)");
+    expect(payloads[0].purpose).toBe("Sichtung / (Spiel1 - Spiel2)");
+    expect(payloads[0].purpose).not.toMatch(/Gegner/);
     expect(payloads[0].note).toBe(payloads[0].purpose);
     expect(payloads[1].planId).toBe("plan-1-2026-05-24");
-    expect(payloads[1].purpose).toBe("Sichtung / (Spiel3 vs Gegner3)");
+    expect(payloads[1].purpose).toBe("Sichtung / (Spiel3)");
   });
 
   it("creates one kilometer entry per daily route leg", () => {

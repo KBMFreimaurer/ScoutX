@@ -84,6 +84,10 @@ function buildGameLabel(game) {
   return home || away || String(game?.venue || game?.id || "Spiel").trim();
 }
 
+function buildHrworksPurposeGameLabel(game) {
+  return String(game?.home || "").trim() || buildGameLabel(game);
+}
+
 function buildGameStopLabel(game) {
   return normalizeLocationLabel(game?.venue) || buildGameLabel(game);
 }
@@ -195,7 +199,7 @@ export function buildHrworksImportPayload({
     })),
   );
 
-  const gameLabels = withEnd.map((game) => `${game.home} - ${game.away}`).filter(Boolean);
+  const gameLabels = withEnd.map(buildHrworksPurposeGameLabel).filter(Boolean);
   const nowIso = new Date().toISOString();
   const fallbackPurpose = gameLabels.length > 0
     ? `Sichtung / Route des Arbeitstages (${gameLabels.join(" - ")})`
@@ -281,7 +285,7 @@ export function buildHrworksDailyImportPayloads({
         }
         return buildGameLabel(left).localeCompare(buildGameLabel(right), "de");
       });
-      const purpose = `Sichtung / (${sortedGames.map(buildGameLabel).join(" - ")})`;
+      const purpose = `Sichtung / (${sortedGames.map(buildHrworksPurposeGameLabel).join(" - ")})`;
       const dailyRouteLegs = buildDailyRouteLegs({
         date,
         games: sortedGames,

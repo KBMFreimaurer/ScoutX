@@ -11,9 +11,20 @@ function excelSerialToDate(serial) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function dateOnlyToIsoDate(value) {
+  const utcHour = value.getUTCHours();
+  const utcMinute = value.getUTCMinutes();
+  const utcSecond = value.getUTCSeconds();
+  const date = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  if (utcHour >= 12 && utcMinute === 0 && utcSecond === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 function toIsoDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
+    return dateOnlyToIsoDate(value);
   }
 
   if (typeof value === "number") {
@@ -45,8 +56,8 @@ function toIsoDate(value) {
 
 export function toTimeHHmm(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const hours = String(value.getHours()).padStart(2, "0");
-    const minutes = String(value.getMinutes()).padStart(2, "0");
+    const hours = String(value.getUTCHours()).padStart(2, "0");
+    const minutes = String(value.getUTCMinutes()).padStart(2, "0");
     return `${hours}:${minutes}`;
   }
 

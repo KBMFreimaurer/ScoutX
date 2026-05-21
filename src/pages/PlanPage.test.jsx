@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanPage } from "./PlanPage";
 import { useScoutX } from "../context/ScoutXContext";
@@ -191,10 +191,10 @@ describe("PlanPage", () => {
 
     expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
     expect(screen.getByText(/Abfahrtsort fehlt/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).toBeDisabled();
   });
 
-  it("setzt Zweck und Bemerkung auf Route-Text und erlaubt leeren Zielort", () => {
+  it("setzt Zweck und Bemerkung auf Heimmannschaften und erlaubt leeren Zielort", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
@@ -225,12 +225,64 @@ describe("PlanPage", () => {
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
 
-    expect(screen.getAllByText("Sichtung / (Team A vs Team B)").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Sichtung / (Team A)").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/Sichtung \/ \(Team A vs Team B\)/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Sternbuschweg 326 -> Sportplatz A \| Sportplatz A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Zielort fehlt/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).not.toBeDisabled();
+  });
+
+  it("verwendet Datum und Uhrzeit aus der Arbeitszeitdatei als bindende HRworks-Zeitdaten", async () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        routeOverview: {
+          legs: [
+            { from: "Sternbuschweg 326", to: "Sportplatz A", distanceKm: 10.2 },
+            { from: "Sportplatz A", to: "Sternbuschweg 326", distanceKm: 10.1 },
+          ],
+        },
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            dateObj: new Date("2026-05-23T00:00:00"),
+            date: "2026-05-23",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+
+    const { container } = render(<PlanPage />);
+    const fileInput = container.querySelector("input[type='file']");
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;11.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
+    const file = {
+      name: "AEB April Onay.csv",
+      async text() {
+        return csv;
+      },
+    };
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText("2026-04-11")).toBeInTheDocument();
+    expect(screen.getByText("08:00")).toBeInTheDocument();
+    expect(screen.getByText("13:00")).toBeInTheDocument();
+    expect(screen.getByText(/XLSX-Datum ist bindend: 2026-04-11/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Sichtung / (Team A)").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/Sichtung \/ \(Team A vs Team B\)/)).not.toBeInTheDocument();
   });
 
   it("blockiert Importstart wenn Betriebsentscheidungen fehlen", () => {
@@ -258,7 +310,7 @@ describe("PlanPage", () => {
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
     fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i }));
 
     expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));
   });

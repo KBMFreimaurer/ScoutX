@@ -53,13 +53,34 @@ const HRWORKS_STEP_LABELS = {
   save_without_destination: "Daten vorbereiten",
   save_kilometers: "Kilometer erfassen",
   process_route: "Route verarbeiten",
-  complete_reports: "Prüfungen abschließen",
+  complete_reports: "Berichte abschließen",
   review_prefill: "Vorbefüllung prüfen",
   confirm_save: "Speicherung bestätigen",
   save: "Speichern",
   done: "Abgeschlossen",
 };
 const HRWORKS_SMART_DEFAULTS_KEY = "scoutx.hrworksSmartDefaults.v1";
+
+function toPlanDateOnly(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const date = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    if (value.getUTCHours() >= 12 && value.getUTCMinutes() === 0 && value.getUTCSeconds() === 0) {
+      date.setUTCDate(date.getUTCDate() + 1);
+    }
+    return date.toISOString().slice(0, 10);
+  }
+
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
+    const [dd, mm, yyyy] = text.split(".");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
 
 function normalizePresenceMap(rawValue) {
   const source = rawValue && typeof rawValue === "object" ? rawValue : {};
@@ -497,13 +518,13 @@ export function PlanPage() {
       hrworksStatus: "ready",
       sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
-      technicalResult: "Review bestätigt; Runtime gestartet.",
+      technicalResult: "Review bestätigt; vollständiger HRworks-Workflow gestartet.",
     });
     setHrworksImportLog(readHrworksImportLog());
 
     setHrworksReviewOpen(false);
     setHrworksLoginConfirmed(false);
-    setErr(`HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet. Bitte Login und finale Bestätigung im Browser durchführen.`);
+    setErr(`HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet. ScoutX befüllt Reisedaten, legt Kilometerangaben einzeln an und schließt die Berichte ab.`);
   };
 
   const handleHrworksExportOnly = async () => {
@@ -693,15 +714,12 @@ export function PlanPage() {
     const gameDates = Array.from(
       new Set(
         activeGames
-          .map((game) => {
-            const raw = game?.dateObj || game?.date;
-            const date = raw instanceof Date ? raw : new Date(raw);
-            return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
-          })
+          .map((game) => toPlanDateOnly(game?.dateObj || game?.date))
           .filter(Boolean),
       ),
     );
-    const autoSelectedDate = gameDates.find((date) => availableDates.includes(date)) || "";
+    const matchedPlanDates = gameDates.filter((date) => availableDates.includes(date));
+    const autoSelectedDate = matchedPlanDates.length === 1 ? matchedPlanDates[0] : "";
     let selectedDate = autoSelectedDate || "";
     const hasMultipleDates = availableDates.length > 1;
     if (!selectedDate) {
@@ -711,8 +729,6 @@ export function PlanPage() {
     const totalHours = Number(sameDateEntries.reduce((acc, entry) => acc + Number(entry.workHours || 0), 0).toFixed(2));
     const startTime = sameDateEntries.map((entry) => String(entry.startTime || "")).sort()[0] || "";
     const endTime = sameDateEntries.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "";
-    const purpose = "Sichtung / Route des Arbeitstages";
-    const note = purpose;
     const employeeName = sameDateEntries[0]?.employeeName || effectiveScoutName;
     const routeLegs = Array.isArray(routeOverview?.legs)
       ? routeOverview.legs
@@ -732,9 +748,28 @@ export function PlanPage() {
           })
           .filter(Boolean)
       : [];
-    const payload = {
-      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}-${selectedDate}`,
+    const dailyPayloads = buildHrworksDailyImportPayloads({
+      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName,
+      games: activeGames,
+      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      routeLegs,
+    });
+    const planPayload = dailyPayloads.find((item) => item.date === selectedDate);
+    const gameLabels = activeGames
+      .map((game) => {
+        const home = String(game?.home || "").trim();
+        return home || String(game?.venue || game?.id || "").trim();
+      })
+      .filter(Boolean);
+    const purpose = planPayload?.purpose || (gameLabels.length > 0
+      ? `Sichtung / (${gameLabels.join(" - ")})`
+      : "Sichtung / Route des Arbeitstages");
+    const payload = {
+      ...(planPayload || {}),
+      planId: `${String(activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`).trim() || "plan"}-${selectedDate}`,
+      employeeName: planPayload?.employeeName || employeeName,
       date: selectedDate,
       startTime,
       endTime,
@@ -742,15 +777,15 @@ export function PlanPage() {
       breakEnd: sameDateEntries[0]?.breakEnd || "",
       workHours: totalHours,
       purpose,
-      note,
-      departureLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
-      destinationLocation: "",
-      intermediateStops: routeLegs.map((leg) => `${leg.from} -> ${leg.to}`),
-      routeLegs,
-      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      note: purpose,
+      departureLocation: planPayload?.departureLocation || String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      destinationLocation: planPayload?.destinationLocation || "",
+      intermediateStops: [],
+      routeLegs: planPayload?.routeLegs || routeLegs,
+      costCenter: planPayload?.costCenter || String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       travelExpenseRequired: true,
       receiptsRequired: false,
-      sourceGames: activeGames,
+      sourceGames: planPayload?.sourceGames || activeGames,
       status: "draft",
       importSource: "timesheet",
       createdAt: new Date().toISOString(),
@@ -762,6 +797,9 @@ export function PlanPage() {
       requiredFields: hrworksPolicy.requiredFields,
     });
     const warnings = [...(parsed.warnings || [])];
+    if (gameDates.length > 0 && !gameDates.includes(selectedDate)) {
+      warnings.push(`XLSX-Datum ist bindend: ${selectedDate}; Plan/PDF enthält ${gameDates.join(", ")}.`);
+    }
     if (!String(payload.purpose || "").trim()) {
       payload.purpose = purpose;
       warnings.push("Zweck wurde automatisch ergänzt.");
@@ -771,7 +809,7 @@ export function PlanPage() {
       warnings.push("Bemerkung wurde automatisch ergänzt.");
     }
     if (parsed.entries.some((entry) => entry.date !== selectedDate)) {
-      warnings.push(`Datei enthält mehrere Tage; für den Import wurde ${selectedDate} verwendet.`);
+      warnings.push(`Datei enthält mehrere Tage; verwendet wurde nur der passende Sichtungstag ${selectedDate}.`);
     }
     if (hasMultipleDates) {
       const runBatch = typeof window !== "undefined" && typeof window.confirm === "function"
@@ -871,7 +909,7 @@ export function PlanPage() {
     const nextPolicy = writeHrworksPolicy({
       ...hrworksPolicy,
       aggregationMode: "per_day",
-      finalSaveMode: "prefill_only",
+      finalSaveMode: "auto_save",
     });
     setHrworksPolicy(nextPolicy);
     setErr("");
@@ -1395,7 +1433,7 @@ export function PlanPage() {
                 cursor: "pointer",
               }}
             >
-              Import abschließen
+              HRworks-Erfolg bestätigen
             </button>
           </div>
         </div>

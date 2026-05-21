@@ -50,6 +50,7 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     mileageFromInput: { value: "" },
     mileageToInput: { value: "" },
     mileageDateInput: { value: "" },
+    mileageNoteInput: { value: "Alttext" },
     mileageKilometersInput: { value: "" },
     newKilometerEntryButton: { clicked: false, clickCount: 0 },
     saveKilometerEntryButton: { clicked: false, clickCount: 0 },
@@ -57,6 +58,8 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     processRouteButton: { clicked: false },
     reportsButton: { clicked: false },
     completeReportsButton: { clicked: false },
+    finalCompleteReportsButton: { clicked: false },
+    confirmFinalReportSubmitButton: { clicked: false },
     routeTextarea: { value: "" },
     saveButton: { clicked: false },
     travelExpenseButton: { clicked: false },
@@ -69,17 +72,26 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
 
   const selectorMap = {
     "input[name='purpose']": "purposeInput",
+    "xpath=(//*[normalize-space(.)='Zweck']/following::input[not(@type='hidden') and not(@aria-hidden='true') and not(contains(@class,'tt-hint'))])[1]": "purposeInput",
     "textarea[name='note']": "noteTextarea",
+    "xpath=(//*[normalize-space(.)='Bemerkung']/following::textarea)[1]": "noteTextarea",
     "input[name='dateRange']": "dateRangeInput",
+    "xpath=(//*[normalize-space(.)='Zeitraum']/following::input[not(@type='hidden')])[1]": "dateRangeInput",
     "input[name='startTime']": "startTimeInput",
+    "xpath=(//*[normalize-space(.)='Beginn Uhrzeit']/following::input[not(@type='hidden')])[1]": "startTimeInput",
     "input[name='endTime']": "endTimeInput",
+    "xpath=(//*[normalize-space(.)='Ende Uhrzeit']/following::input[not(@type='hidden')])[1]": "endTimeInput",
     "input[name='departureLocation']": "departureLocationSelect",
+    "xpath=(//*[normalize-space(.)='Abfahrtsort']/following::input[not(@type='hidden') and not(@aria-hidden='true') and not(contains(@class,'tt-hint'))])[1]": "departureLocationSelect",
     "input[name='destinationLocation']": "destinationLocationSelect",
+    "xpath=(//*[normalize-space(.)='Zielort']/following::input[not(@type='hidden') and not(@aria-hidden='true') and not(contains(@class,'tt-hint'))])[1]": "destinationLocationSelect",
     "input[name='costCenter']": "costCenterSelect",
+    "xpath=(//*[normalize-space(.)='Kostenstelle']/following::select)[1]": "costCenterSelect",
     "input[name='kilometers']": "kilometersInput",
     "input[name='mileageFrom']": "mileageFromInput",
     "input[name='mileageTo']": "mileageToInput",
     "input[name='mileageDate']": "mileageDateInput",
+    "input[name='mileageNote']": "mileageNoteInput",
     "input[name='mileageKilometers']": "mileageKilometersInput",
     "button:has-text('Neue Kilometerangabe')": "newKilometerEntryButton",
     "button:has-text('Kilometerangabe speichern')": "saveKilometerEntryButton",
@@ -88,7 +100,10 @@ function createMockPage({ missing = [], forcedValues = {} } = {}) {
     "button:has-text('Route abarbeiten')": "processRouteButton",
     "button:has-text('Berichte')": "reportsButton",
     "button:has-text('Abschließen')": "completeReportsButton",
+    "button:has-text('Final abschließen')": "finalCompleteReportsButton",
+    "button:has-text('Ja, abschließen')": "confirmFinalReportSubmitButton",
     "textarea[name='route']": "routeTextarea",
+    "xpath=(//*[normalize-space(.)='Zwischenorte']/following::input[not(@type='hidden')])[1]": "routeTextarea",
   };
 
   return {
@@ -166,10 +181,26 @@ describe("hrworksAutomation", () => {
     expect(page.fields.saveKilometerEntryButton.clickCount).toBe(2);
     expect(page.fields.mileageFromInput.value).toBe("Platz A");
     expect(page.fields.mileageToInput.value).toBe("Home");
+    expect(page.fields.mileageNoteInput.value).toBe("");
     expect(page.fields.mileageKilometersInput.value).toBe("12");
     expect(page.fields.reportsButton.clicked).toBe(true);
     expect(page.fields.completeReportsButton.clicked).toBe(false);
     expect(page.fields.routeTextarea.value).toBe("Home -> Platz A | Platz A -> Home");
+  });
+
+  it("completes reports only in explicit complete workflow mode", async () => {
+    const page = createMockPage();
+    const result = await fillHrworksTravelExpenseForm(page, payload, {
+      confirmBeforeSave: true,
+      runRouteFlow: true,
+      completeWorkflow: true,
+    });
+    expect(result.routeFlowCompleted).toBe(true);
+    expect(result.reportsCompleted).toBe(true);
+    expect(page.fields.reportsButton.clicked).toBe(true);
+    expect(page.fields.completeReportsButton.clicked).toBe(true);
+    expect(page.fields.finalCompleteReportsButton.clicked).toBe(true);
+    expect(page.fields.confirmFinalReportSubmitButton.clicked).toBe(true);
   });
 
   it("aborts when save selector is missing despite save confirmation", async () => {

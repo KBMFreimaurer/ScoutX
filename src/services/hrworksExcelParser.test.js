@@ -23,6 +23,25 @@ describe("hrworksExcelParser", () => {
     expect(entries[0].note).toBe("Sichtung");
   });
 
+  it("normalizes date-only and time-only Excel Date cells from AZE exports", () => {
+    const { entries } = parseHrworksTimesheetRows([
+      {
+        Name: "Scout",
+        Datum: new Date(Date.UTC(2026, 3, 10, 22, 0, 0)),
+        Beginn: new Date(Date.UTC(1899, 11, 30, 8, 0, 0)),
+        Ende: new Date(Date.UTC(1899, 11, 30, 13, 0, 0)),
+        Vermerk: "Sichtung",
+      },
+    ]);
+
+    expect(entries[0]).toMatchObject({
+      date: "2026-04-11",
+      startTime: "08:00",
+      endTime: "13:00",
+      workHours: 5,
+    });
+  });
+
   it("warns for total mismatch", () => {
     const { warnings } = parseHrworksTimesheetRows([
       { Name: "Scout", Datum: "20.04.2026", Beginn: "08:00", Ende: "10:00", Gesamtstunden: "5" },
@@ -58,8 +77,8 @@ describe("hrworksExcelParser", () => {
       ["", "", "", "", "Ruhezeit", "", "Arbeits-"],
       ["Tag", "Datum", "Beginn", "Ende", "von", "bis", "Stunden", "Vermerk"],
       ["Fr", new Date("2026-04-10"), "", "", "", "", "", ""],
-      ["Sa", new Date("2026-04-11"), new Date("2026-04-11T09:00:00"), new Date("2026-04-11T14:00:00"), "", "", 5, "Sichtung"],
-      ["So", new Date("2026-04-12"), new Date("2026-04-12T08:00:00"), new Date("2026-04-12T10:00:00"), "", "", 2, "Sichtung"],
+      ["Sa", "11.04.2026", "09:00", "14:00", "", "", 5, "Sichtung"],
+      ["So", "12.04.2026", "08:00", "10:00", "", "", 2, "Sichtung"],
     ];
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetRows);
     const workbook = XLSX.utils.book_new();

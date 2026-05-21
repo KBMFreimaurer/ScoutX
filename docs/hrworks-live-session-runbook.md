@@ -19,20 +19,21 @@ Manueller End-to-End-Test des ScoutX-HRworks-Imports mit aktivem Nutzer-Login, o
 3. HRworks im Browser öffnen.
 4. Nutzer loggt sich manuell ein.
 5. Runtime-Status in ScoutX prüfen (`HRworks Runtime aktiv`).
-6. In HRworks `Reisedaten` anlegen: Zweck und Bemerkung müssen `Sichtung / (Spiel1 - Spiel2 - ...)` aus den ScoutX-Spielen des Tages enthalten.
+6. In HRworks `Reisedaten` anlegen: Zweck und Bemerkung müssen `Sichtung / (Heimmannschaft1 - Heimmannschaft2 - ...)` aus den ScoutX-Spielen des Tages enthalten; Gegnernamen werden nicht übernommen.
 7. Datum, Beginn und Ende aus dem ScoutX-Tag übernehmen und speichern.
 8. HRworks-Warnung zu fehlenden Zwischenorten bewusst mit `Ja` bestätigen.
-9. In `Kilometerangaben` für jedes Leg `+ Neu` / `Neue Kilometerangabe` öffnen und genau einen Streckenabschnitt speichern: `Startort -> Spiel1`, `Spiel1 -> Spiel2`, ..., `letztes Spiel -> Startort`.
+9. In `Kilometerangaben` für jedes Leg `+ Neu` / `Neue Kilometerangabe` öffnen und genau einen Streckenabschnitt speichern: `Startort -> Spiel1`, `Spiel1 -> Spiel2`, ..., `letztes Spiel -> Startort`; die Kilometer-Bemerkung bleibt leer.
 10. Zur Berichtseite wechseln. HRworks generiert die Berichte aus Reisedaten und Kilometerangaben.
-11. `Abschließen` bleibt eine manuelle User-Aktion und wird nicht automatisiert.
-12. In ScoutX `Import abschließen` erst nach User-Prüfung markieren; bei Fehler Runtime als fehlgeschlagen markieren.
+11. `Abschließen` klicken. Falls HRworks auf die Detail-/Übersichtsseite zurückleitet und erneut `Abschließen` zeigt, diesen finalen Abschluss ebenfalls ausführen.
+12. Die Abschlusswarnung wegen leerem Zielort mit `Ja` bestätigen.
+13. ScoutX darf den Lauf erst als erfolgreich markieren, wenn HRworks den Abschluss bestätigt hat.
 
 ## Abbruchkriterien
 - Feld oder Dropdown in HRworks nicht gefunden.
 - Kostenstelle in HRworks nicht auflösbar.
 - HRworks-Validierungsfehler beim Speichern.
 - Unklare UI-Änderungen in HRworks.
-- Unklarer Berichtabschluss: nicht automatisiert fortfahren, User muss selbst abschließen.
+- Unklarer Berichtabschluss: nicht blind fortfahren; Status in HRworks prüfen und bei fehlender Abschlussbestätigung als Fehler markieren.
 
 ## Nachweise
 - Eintrag in `HRworks-Importhistorie` mit Status `imported` oder `failed`.

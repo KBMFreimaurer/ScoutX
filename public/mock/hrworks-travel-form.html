@@ -5,14 +5,29 @@
   <button>Reisekostenabrechnung</button>
   <button>Neue Reisekostenabrechnung</button>
   <form>
+    <label>Zweck</label>
     <input name="purpose" />
+    <label>Bemerkung</label>
     <textarea name="note"></textarea>
+    <label>Zeitraum</label>
     <input name="dateRange" />
+    <label>Beginn Uhrzeit</label>
     <input name="startTime" />
+    <label>Ende Uhrzeit</label>
     <input name="endTime" />
+    <label>Abfahrtsort</label>
+    <input aria-hidden="true" />
     <input name="departureLocation" />
+    <label>Zielort</label>
+    <input aria-hidden="true" />
     <input name="destinationLocation" />
-    <input name="costCenter" />
+    <label>Zwischenorte</label>
+    <input name="route" />
+    <label>Kostenstelle</label>
+    <select name="costCenter">
+      <option>Keine</option>
+      <option>Junioren allgemein (321000)</option>
+    </select>
     <button type="button">Speichern</button>
     <button type="button">Ja</button>
     <button type="button">Weiter zu den digitalen Belegen</button>
@@ -20,10 +35,15 @@
     <input name="mileageFrom" />
     <input name="mileageTo" />
     <input name="mileageDate" />
+    <input name="mileageNote" value="Alttext" />
     <input name="mileageKilometers" />
     <button type="button">Kilometerangabe speichern</button>
-    <button type="button">Berichte</button>
-    <button type="button">Abschließen</button>
-  </form>
+    <button type="button" onclick="document.getElementById('workflow-status').textContent='route-only'">Berichte</button>
+    <button type="button" onclick="document.getElementById('workflow-status').textContent='reports-page'">Abschließen</button>
+    <button type="button" onclick="document.getElementById('workflow-status').textContent='confirm-open'">Final abschließen</button>
+    <button type="button" onclick="document.getElementById('workflow-status').textContent='completed';document.getElementById('warning-confirmed').textContent='yes'">Ja, abschließen</button>
+    <div id="workflow-status">draft</div>
+    <div id="warning-confirmed">no</div>
+ </form>
 </body>
 </html>
