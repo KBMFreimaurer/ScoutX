@@ -53,6 +53,7 @@ describe("PlanPage", () => {
   beforeEach(() => {
     mockedUseScoutX.mockReset();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -358,6 +359,64 @@ describe("PlanPage", () => {
     expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
     expect(screen.getByText(/Testlauf abgeschlossen/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).not.toBeDisabled();
+  });
+
+  it("startet beim produktiven HRworks-Klick die lokale Automation-Bridge", async () => {
+    const setErr = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      async json() {
+        return { ok: true, status: "completed", url: "https://ssl4.hrworks.de/k/travel-management/trips" };
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        setErr,
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+    window.localStorage.setItem("scoutx.hrworksPolicy.v1", JSON.stringify({
+      defaultCostCenter: "Junioren allgemein (321000)",
+      requireSaveConfirmation: true,
+      aggregationMode: "per_day",
+      finalSaveMode: "auto_save",
+      requiredFields: {
+        purpose: true,
+        note: true,
+        departureLocation: true,
+        destinationLocation: false,
+        costCenter: true,
+      },
+    }));
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
+    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/api/hrworks/import", expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("\"completeWorkflow\":true"),
+      }));
+    });
+    await waitFor(() => {
+      expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Import.*abgeschlossen/i));
+    });
   });
 
   it("zeigt sichtbare HRworks-Setup-Warnkarte bei fehlenden Entscheidungen", () => {

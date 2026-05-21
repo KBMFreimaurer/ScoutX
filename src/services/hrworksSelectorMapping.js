@@ -22,12 +22,15 @@ const OPTIONAL_KEYS = [
   "mileageFromInput",
   "mileageToInput",
   "mileageDateInput",
+  "mileageNoteInput",
   "mileageKilometersInput",
   "saveKilometerEntryButton",
   "saveKilometersButton",
   "processRouteButton",
   "reportsButton",
   "completeReportsButton",
+  "finalCompleteReportsButton",
+  "confirmFinalReportSubmitButton",
   "routeTextarea",
 ];
 

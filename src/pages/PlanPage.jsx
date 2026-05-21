@@ -21,6 +21,7 @@ import {
 import { exportHrworksImportCsv } from "../services/hrworksCsvExport";
 import { parseHrworksTimesheetFile, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
 import { exportHrworksAuditLog } from "../services/hrworksAuditExport";
+import { startHrworksAutomation } from "../services/hrworksAutomationClient";
 import {
   advanceAutomationStep,
   canCaptureDebugScreenshot,
@@ -439,7 +440,7 @@ export function PlanPage() {
     setHrworksReviewOpen(true);
   };
 
-  const handleConfirmHrworksImport = () => {
+  const handleConfirmHrworksImport = async () => {
     if (!hrworksPayload) {
       return;
     }
@@ -512,22 +513,53 @@ export function PlanPage() {
     setHrworksRuntimeSession(sessionRunning);
     setHrworksDryRunNotice("");
 
+    let bridgeResult = null;
+    try {
+      bridgeResult = await startHrworksAutomation(hrworksPayload);
+    } catch (error) {
+      const message = String(error?.message || error || "HRworks-Automation konnte nicht gestartet werden.");
+      const failed = failAutomationSession(sessionRunning, "NAVIGATION_FAILED", message);
+      setHrworksRuntimeSession(failed);
+      appendHrworksImportLog({
+        planId: hrworksPayload.planId,
+        date: hrworksPayload.date,
+        startTime: hrworksPayload.startTime,
+        endTime: hrworksPayload.endTime,
+        purpose: hrworksPayload.purpose,
+        hrworksStatus: "failed",
+        sourceType: String(hrworksPayload.importSource || "plan"),
+        executedBy: hrworksPayload.employeeName,
+        technicalResult: "Lokale HRworks-Automation konnte nicht gestartet werden.",
+        errorMessage: message,
+      });
+      setHrworksImportLog(readHrworksImportLog());
+      setErr(message);
+      return;
+    }
+
+    const doneSession = advanceAutomationStep(sessionRunning, bridgeResult?.status === "completed" ? "done" : "complete_reports");
+    setHrworksRuntimeSession(doneSession);
     appendHrworksImportLog({
       planId: hrworksPayload.planId,
       date: hrworksPayload.date,
       startTime: hrworksPayload.startTime,
       endTime: hrworksPayload.endTime,
       purpose: hrworksPayload.purpose,
-      hrworksStatus: "ready",
+      hrworksStatus: bridgeResult?.status === "completed" ? "imported" : "ready",
       sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
-      technicalResult: "Review bestätigt; vollständiger HRworks-Workflow gestartet.",
+      technicalResult: bridgeResult?.status === "completed"
+        ? "Lokale HRworks-Automation hat den vollständigen Workflow abgeschlossen."
+        : "Lokale HRworks-Automation wurde gestartet.",
+      hrworksReference: String(bridgeResult?.url || ""),
     });
     setHrworksImportLog(readHrworksImportLog());
 
     setHrworksReviewOpen(false);
     setHrworksLoginConfirmed(false);
-    setErr(`HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet. ScoutX befüllt Reisedaten, legt Kilometerangaben einzeln an und schließt die Berichte ab.`);
+    setErr(bridgeResult?.status === "completed"
+      ? `HRworks-Import für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} abgeschlossen.`
+      : `HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet.`);
   };
 
   const handleHrworksExportOnly = async () => {
