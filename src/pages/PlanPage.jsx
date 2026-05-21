@@ -233,6 +233,7 @@ export function PlanPage() {
   const [hrworksDebugScreenshotConsent, setHrworksDebugScreenshotConsent] = useState(false);
   const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
   const [hrworksDryRunNotice, setHrworksDryRunNotice] = useState("");
+  const [hrworksAutomationStarting, setHrworksAutomationStarting] = useState(false);
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
@@ -508,6 +509,8 @@ export function PlanPage() {
       return;
     }
 
+    setHrworksAutomationStarting(true);
+    setErr("HRworks Connector wird kontaktiert. Prüfe das HRworks-Bridge-Terminal, dort muss gleich ein POST /api/hrworks/import erscheinen.");
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
     const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
@@ -534,11 +537,13 @@ export function PlanPage() {
       });
       setHrworksImportLog(readHrworksImportLog());
       setErr(message);
+      setHrworksAutomationStarting(false);
       return;
     }
 
     const doneSession = advanceAutomationStep(sessionRunning, bridgeResult?.status === "completed" ? "done" : "complete_reports");
     setHrworksRuntimeSession(doneSession);
+    setHrworksAutomationStarting(false);
     appendHrworksImportLog({
       planId: hrworksPayload.planId,
       date: hrworksPayload.date,
@@ -1384,6 +1389,7 @@ export function PlanPage() {
         errors={hrworksValidation.errors}
         loginConfirmed={hrworksLoginConfirmed}
         dryRunNotice={hrworksDryRunNotice}
+        automationStarting={hrworksAutomationStarting}
         onLoginConfirmedChange={setHrworksLoginConfirmed}
         onCancel={() => {
           setHrworksReviewOpen(false);

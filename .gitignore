@@ -14,3 +14,4 @@ adapter-service/data/games.store.db
 ios/build/
 ios/build-device/
 ios/build-iphone/
+.hrworks-automation-profile/

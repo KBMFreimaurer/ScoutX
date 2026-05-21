@@ -1,4 +1,5 @@
 const DEFAULT_HRWORKS_AUTOMATION_ENDPOINT = "http://127.0.0.1:8791/api/hrworks/import";
+const DEFAULT_TIMEOUT_MS = 120000;
 
 export function resolveHrworksAutomationEndpoint(explicitEndpoint = "") {
   const explicit = String(explicitEndpoint || "").trim();
@@ -18,10 +19,14 @@ export async function startHrworksAutomation(payload, options = {}) {
   }
 
   let response;
+  const timeoutMs = Math.max(5000, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         payload,
         options: {
@@ -33,7 +38,12 @@ export async function startHrworksAutomation(payload, options = {}) {
     });
   } catch (error) {
     const message = String(error?.message || error || "unbekannter Netzwerkfehler");
+    if (error?.name === "AbortError") {
+      throw new Error(`Lokale HRworks-Automation antwortet nicht innerhalb von ${Math.round(timeoutMs / 1000)} Sekunden. Prüfe das Terminalfenster von npm run hrworks:bridge.`);
+    }
     throw new Error(`Lokale HRworks-Automation ist nicht erreichbar. Starte zuerst: npm run hrworks:bridge (${message})`);
+  } finally {
+    clearTimeout(timeout);
   }
 
   const body = await response.json().catch(() => ({}));

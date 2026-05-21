@@ -61,4 +61,25 @@ describe("HrworksImportReviewModal", () => {
     expect(onConfirm).toHaveBeenCalledTimes(0);
     expect(onLoginConfirmedChange).toHaveBeenCalledTimes(0);
   });
+
+  it("shows progress while contacting the connector", () => {
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={{ date: "2026-04-20", routeLegs: [], sourceGames: [] }}
+        warnings={[]}
+        errors={[]}
+        loginConfirmed
+        automationStarting
+        onLoginConfirmedChange={vi.fn()}
+        onCancel={vi.fn()}
+        onEdit={vi.fn()}
+        onConfirm={vi.fn()}
+        onExportOnly={vi.fn()}
+        onDryRun={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /HRworks Connector wird kontaktiert/i })).toBeDisabled();
+  });
 });

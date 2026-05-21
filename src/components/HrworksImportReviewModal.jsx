@@ -24,6 +24,7 @@ export function HrworksImportReviewModal({
   payloads,
   payloadIndex = 0,
   dryRunNotice = "",
+  automationStarting = false,
 }) {
   if (!open) {
     return null;
@@ -158,7 +159,9 @@ export function HrworksImportReviewModal({
           <button type="button" onClick={onEdit}>Daten bearbeiten</button>
           <button type="button" onClick={onExportOnly}>Nur Exportdatei erstellen</button>
           <button type="button" onClick={onDryRun}>Testlauf (kein Speichern)</button>
-          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true}>Produktiv in HRworks speichern und abschließen</button>
+          <button type="button" onClick={onConfirm} disabled={(errors?.length || 0) > 0 || loginConfirmed !== true || automationStarting}>
+            {automationStarting ? "HRworks Connector wird kontaktiert..." : "Produktiv in HRworks speichern und abschließen"}
+          </button>
         </div>
       </div>
     </div>

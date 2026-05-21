@@ -33,4 +33,21 @@ describe("hrworksAutomationClient", () => {
 
     await expect(startHrworksAutomation({ planId: "p1" })).rejects.toThrow(/npm run hrworks:bridge/);
   });
+
+  it("times out with a bridge-terminal hint", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      });
+    })));
+
+    const promise = startHrworksAutomation({ planId: "p1" }, { timeoutMs: 5000 });
+    promise.catch(() => {});
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(promise).rejects.toThrow(/Terminalfenster/);
+    vi.useRealTimers();
+  });
 });

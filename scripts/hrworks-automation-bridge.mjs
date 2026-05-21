@@ -18,8 +18,9 @@ function sendJson(response, status, body) {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "content-type",
+    "access-control-allow-private-network": "true",
   });
-  response.end(JSON.stringify(body));
+  response.end(status === 204 ? "" : JSON.stringify(body));
 }
 
 function readBody(request) {
@@ -75,6 +76,7 @@ async function runImport(payload, options) {
 }
 
 const server = http.createServer(async (request, response) => {
+  console.log(`[${new Date().toISOString()}] ${request.method} ${request.url}`);
   if (request.method === "OPTIONS") {
     sendJson(response, 204, {});
     return;
@@ -96,9 +98,12 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 400, { ok: false, error: "Payload fehlt." });
       return;
     }
+    console.log(`Starting HRworks import for ${payload.date || "unknown date"}: ${payload.purpose || "no purpose"}`);
     const result = await runImport(payload, body?.options);
+    console.log(`HRworks import finished with status ${result.status}`);
     sendJson(response, 200, result);
   } catch (error) {
+    console.error(`HRworks import failed: ${String(error?.message || error)}`);
     sendJson(response, 500, {
       ok: false,
       error: String(error?.message || error || "HRworks-Automation fehlgeschlagen."),
@@ -109,4 +114,15 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, "127.0.0.1", () => {
   console.log(`HRworks automation bridge listening on http://127.0.0.1:${port}`);
   console.log(`Browser profile: ${profileDir}`);
+  getContext()
+    .then(async (context) => {
+      const page = await selectedPage(context);
+      if (!String(page.url() || "").startsWith("https://ssl4.hrworks.de/")) {
+        await page.goto(startUrl, { waitUntil: "domcontentloaded" });
+      }
+      console.log(`HRworks browser opened: ${page.url()}`);
+    })
+    .catch((error) => {
+      console.error(`HRworks browser could not be opened: ${String(error?.message || error)}`);
+    });
 });
