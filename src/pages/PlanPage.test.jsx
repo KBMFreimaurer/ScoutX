@@ -315,6 +315,51 @@ describe("PlanPage", () => {
     expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));
   });
 
+  it("lässt nach einem Testlauf den produktiven HRworks-Start im Review aktiv", () => {
+    const setErr = vi.fn();
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        setErr,
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+    window.localStorage.setItem("scoutx.hrworksPolicy.v1", JSON.stringify({
+      defaultCostCenter: "Junioren allgemein (321000)",
+      requireSaveConfirmation: true,
+      aggregationMode: "per_day",
+      finalSaveMode: "auto_save",
+      requiredFields: {
+        purpose: true,
+        note: true,
+        departureLocation: true,
+        destinationLocation: false,
+        costCenter: true,
+      },
+    }));
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
+    fireEvent.click(screen.getByRole("button", { name: /Testlauf \(kein Speichern\)/i }));
+
+    expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
+    expect(screen.getByText(/Testlauf abgeschlossen/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).not.toBeDisabled();
+  });
+
   it("zeigt sichtbare HRworks-Setup-Warnkarte bei fehlenden Entscheidungen", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({

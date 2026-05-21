@@ -231,6 +231,7 @@ export function PlanPage() {
   const [hrworksPolicy, setHrworksPolicy] = useState(() => readHrworksPolicy());
   const [hrworksDebugScreenshotConsent, setHrworksDebugScreenshotConsent] = useState(false);
   const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
+  const [hrworksDryRunNotice, setHrworksDryRunNotice] = useState("");
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
@@ -434,6 +435,7 @@ export function PlanPage() {
     setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
     setHrworksLoginConfirmed(false);
+    setHrworksDryRunNotice("");
     setHrworksReviewOpen(true);
   };
 
@@ -508,6 +510,7 @@ export function PlanPage() {
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
     const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
+    setHrworksDryRunNotice("");
 
     appendHrworksImportLog({
       planId: hrworksPayload.planId,
@@ -582,9 +585,8 @@ export function PlanPage() {
       technicalResult: "Testlauf ohne Speichern bestätigt.",
     });
     setHrworksImportLog(readHrworksImportLog());
-    setHrworksReviewOpen(false);
-    setHrworksLoginConfirmed(false);
-    setErr("HRworks-Testlauf markiert. Produktives Speichern wurde nicht ausgelöst.");
+    setHrworksDryRunNotice("Testlauf abgeschlossen. Es wurde nichts in HRworks gespeichert; du kannst jetzt produktiv speichern und abschließen.");
+    setErr("HRworks-Testlauf abgeschlossen. Produktives Speichern wurde noch nicht ausgelöst.");
   };
 
   const handleFailRuntimeSession = (message) => {
@@ -842,6 +844,7 @@ export function PlanPage() {
     setHrworksPayloadQueue([payload]);
     setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
+    setHrworksDryRunNotice("");
     setHrworksReviewOpen(true);
     setErr("");
   };
@@ -1348,14 +1351,17 @@ export function PlanPage() {
         warnings={hrworksValidation.warnings}
         errors={hrworksValidation.errors}
         loginConfirmed={hrworksLoginConfirmed}
+        dryRunNotice={hrworksDryRunNotice}
         onLoginConfirmedChange={setHrworksLoginConfirmed}
         onCancel={() => {
           setHrworksReviewOpen(false);
           setHrworksLoginConfirmed(false);
+          setHrworksDryRunNotice("");
         }}
         onEdit={() => {
           setHrworksReviewOpen(false);
           setHrworksLoginConfirmed(false);
+          setHrworksDryRunNotice("");
           setErr("Bitte Plan-/Abrechnungsdaten prüfen und anschließend erneut importieren.");
         }}
         onExportOnly={handleHrworksExportOnly}

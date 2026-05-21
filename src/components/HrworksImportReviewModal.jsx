@@ -23,6 +23,7 @@ export function HrworksImportReviewModal({
   onLoginConfirmedChange,
   payloads,
   payloadIndex = 0,
+  dryRunNotice = "",
 }) {
   if (!open) {
     return null;
@@ -112,6 +113,23 @@ export function HrworksImportReviewModal({
             {warnings.map((warning) => (
               <div key={warning}>• {warning}</div>
             ))}
+          </div>
+        ) : null}
+
+        {dryRunNotice ? (
+          <div
+            role="status"
+            style={{
+              marginTop: 12,
+              color: C.green,
+              background: "rgba(0,200,83,0.08)",
+              border: `1px solid ${C.greenBorder}`,
+              borderRadius: 10,
+              padding: 10,
+              fontSize: 12,
+            }}
+          >
+            {dryRunNotice}
           </div>
         ) : null}
 
