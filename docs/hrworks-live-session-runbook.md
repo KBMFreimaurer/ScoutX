@@ -28,6 +28,25 @@ Manueller End-to-End-Test des ScoutX-HRworks-Imports mit aktivem Nutzer-Login, o
 12. Die Abschlusswarnung wegen leerem Zielort mit `Ja` bestätigen.
 13. ScoutX darf den Lauf erst als erfolgreich markieren, wenn HRworks den Abschluss bestätigt hat.
 
+## Timing-Nachweis
+- Während des Live-Laufs schreibt die Bridge im Terminal strukturierte Timing-Zeilen im Format:
+  - `[HRworks][ISO-Zeit][+1234ms] step_name: detail`
+- Erwartete Messpunkte:
+  - `workflow_start`
+  - `travel_entry_open_dashboard` / `travel_entry_open_trips` / `travel_entry_clicked_new`
+  - `base_data_filled`
+  - `base_data_save_attempt`
+  - `base_data_persisted`
+  - pro Leg: `leg_open`, `leg_filled`, `leg_save_attempt`, `leg_persisted`
+  - `reports_opened`, `reports_complete_attempt`, `reports_completed`
+- Zusätzlich speichert ScoutX nach erfolgreichem Lauf in der `HRworks-Importhistorie`:
+  - Gesamtlaufzeit (`Laufzeit: ...`)
+  - die ersten Timing-Schritte mit Millisekundenwerten
+- Für die Live-Evidenz sollten mindestens diese drei Aussagen explizit festgehalten werden:
+  - erster Klick startet den Lauf direkt
+  - Reisedatum ist beim ersten Save korrekt persistiert
+  - alle Legs wurden ohne unnötige Zusatznavigation in richtiger Reihenfolge gespeichert
+
 ## Abbruchkriterien
 - Feld oder Dropdown in HRworks nicht gefunden.
 - Kostenstelle in HRworks nicht auflösbar.
@@ -42,6 +61,7 @@ Manueller End-to-End-Test des ScoutX-HRworks-Imports mit aktivem Nutzer-Login, o
 - Optional: `./ops/create-hrworks-live-evidence.sh` erzeugt automatisch eine datierte Evidenzdatei im `docs/`-Ordner.
 - Optional (empfohlen): `./ops/create-hrworks-live-evidence-prefilled.sh` erzeugt eine datierte Evidenzdatei mit vorausgefülltem UTC-Zeitpunkt, Commit und Verify-Status.
 - Optional: `./ops/prefill-hrworks-evidence-from-local.sh [evidence-file]` ergänzt Verify-/Audit-Basisfelder in einer bestehenden Evidenzdatei.
+  - Wenn ein `ScoutX-HRworks-Audit-*.json` vorliegt, werden auch Status, Referenznummer, Laufzeit und die ersten gemessenen Schritte automatisch übernommen.
 - Optional: `npm run update:hrworks:evidence-metadata -- <evidence-file> --user="ECHTER NAME" --tenant="ECHTER HRWORKS-MANDANT"` korrigiert nur Nutzer/Mandant in einer bestehenden Evidence-Datei.
 - Hinweis zur Dateiauswahl in Scripts: Als „latest evidence“ werden nur timestamp-Dateien `docs/hrworks-live-session-evidence-20*.md` verwendet (nicht die Template-Datei).
 - Formeller Readiness-Check: `npm run check:hrworks:live-readiness` (muss `OK` melden).

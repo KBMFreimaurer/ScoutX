@@ -144,6 +144,92 @@ function pickDateFromOptions(options) {
   return values.includes(normalized) ? normalized : values[0];
 }
 
+function toUtcDayStamp(dateText) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateText || "").trim());
+  if (!match) {
+    return Number.NaN;
+  }
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function pickClosestDateFromPlanDates(availableDates, gameDates) {
+  const available = Array.isArray(availableDates) ? availableDates.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const plans = Array.isArray(gameDates) ? gameDates.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (available.length === 0 || plans.length === 0) {
+    return "";
+  }
+
+  const exactMatches = plans.filter((date) => available.includes(date));
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+  if (exactMatches.length > 1) {
+    return "";
+  }
+
+  let bestDate = "";
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidate of available) {
+    const candidateStamp = toUtcDayStamp(candidate);
+    if (!Number.isFinite(candidateStamp)) {
+      continue;
+    }
+    for (const planDate of plans) {
+      const planStamp = toUtcDayStamp(planDate);
+      if (!Number.isFinite(planStamp)) {
+        continue;
+      }
+      const distance = Math.abs(candidateStamp - planStamp);
+      if (distance < bestDistance || (distance === bestDistance && candidate.localeCompare(bestDate) > 0)) {
+        bestDistance = distance;
+        bestDate = candidate;
+      }
+    }
+  }
+
+  return bestDate;
+}
+
+function formatHrworksDuration(durationMs) {
+  const parsed = Number(durationMs);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return "";
+  }
+  if (parsed < 1000) {
+    return `${Math.round(parsed)} ms`;
+  }
+  return `${(parsed / 1000).toLocaleString("de-DE", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} s`;
+}
+
+function summarizeHrworksPerformanceSteps(steps, limit = 8) {
+  if (!Array.isArray(steps)) {
+    return [];
+  }
+  return steps
+    .slice(0, Math.max(1, Number(limit || 0)))
+    .map((step) => {
+      const label = String(step?.step || "").trim();
+      const detail = String(step?.detail || "").trim();
+      const elapsedMs = Number(step?.elapsedMs);
+      if (!label) {
+        return "";
+      }
+      const parts = [label];
+      if (detail) {
+        parts.push(detail);
+      }
+      if (Number.isFinite(elapsedMs) && elapsedMs >= 0) {
+        parts.push(`+${Math.round(elapsedMs)}ms`);
+      }
+      return parts.join(" · ");
+    })
+    .filter(Boolean);
+}
+
 function readHrworksSmartDefaults() {
   if (typeof window === "undefined") {
     return {};
@@ -163,6 +249,114 @@ function writeHrworksSmartDefaults(nextValue) {
   }
   const safeValue = nextValue && typeof nextValue === "object" ? nextValue : {};
   window.localStorage.setItem(HRWORKS_SMART_DEFAULTS_KEY, JSON.stringify(safeValue));
+}
+
+function normalizeHrworksLocationCandidate(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  const commaParts = text.split(",").map((part) => part.trim()).filter(Boolean);
+  if (commaParts.length >= 4 && /^\d+[a-z]?$/i.test(commaParts[0]) && commaParts[1]) {
+    return `${commaParts[1]} ${commaParts[0]}`.trim();
+  }
+  return text;
+}
+
+function pickHrworksStartLocation({ scoutDefaults, activeHistoryMeta, cfg, hrworksPolicy, startLocation }) {
+  const candidates = [
+    scoutDefaults?.startLocation,
+    hrworksPolicy?.defaultStartLocation,
+    cfg?.hrworksDefaultStartLocation,
+    activeHistoryMeta?.hrworksStartLocationLabel,
+    activeHistoryMeta?.startLocationLabel,
+    cfg?.hrworksStartLocationLabel,
+    cfg?.startLocationLabel,
+    startLocation?.label,
+  ];
+
+  return normalizeHrworksLocationCandidate(candidates.find((candidate) => String(candidate || "").trim()));
+}
+
+function buildHrworksStopLabel(game) {
+  return String(game?.home || "").trim() || String(game?.venue || "").trim() || String(game?.id || "").trim();
+}
+
+function toRouteSortTimestamp(game) {
+  const dateKey = toPlanDateOnly(game?.dateObj || game?.date);
+  const timeValue = String(game?.time || "").trim();
+  const iso = dateKey && timeValue ? `${dateKey}T${timeValue}:00` : dateKey ? `${dateKey}T23:59:00` : "";
+  const parsed = iso ? new Date(iso).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+function sortGamesForHrworksRoute(games) {
+  return [...(Array.isArray(games) ? games : [])].sort((left, right) => {
+    const timeDelta = toRouteSortTimestamp(left) - toRouteSortTimestamp(right);
+    if (timeDelta !== 0) {
+      return timeDelta;
+    }
+    return buildHrworksStopLabel(left).localeCompare(buildHrworksStopLabel(right), "de");
+  });
+}
+
+function buildHrworksRouteLegs(routeOverview, games, hrworksStartLocation) {
+  const hrworksStart = String(hrworksStartLocation || "").trim();
+  if (!hrworksStart) {
+    return [];
+  }
+
+  const sortedGames = sortGamesForHrworksRoute(games);
+  const sourceLegs = Array.isArray(routeOverview?.legs) ? routeOverview.legs : [];
+  const result = [];
+  let routeCursor = 0;
+  let previousStop = hrworksStart;
+  let previousDateKey = "";
+
+  for (let gameIndex = 0; gameIndex < sortedGames.length; gameIndex += 1) {
+    const game = sortedGames[gameIndex];
+    const stopLabel = buildHrworksStopLabel(game);
+    if (!stopLabel) {
+      continue;
+    }
+
+    const dateKey = toPlanDateOnly(game?.dateObj || game?.date);
+    const sameDayAsPrevious = Boolean(previousDateKey) && Boolean(dateKey) && previousDateKey === dateKey;
+    const from = sameDayAsPrevious ? previousStop : hrworksStart;
+    const outbound = sourceLegs[routeCursor] || null;
+    routeCursor += 1;
+    result.push({
+      id: `leg-${result.length}`,
+      from,
+      to: stopLabel,
+      distanceKm: Number.isFinite(Number(outbound?.distanceKm)) ? Number(outbound.distanceKm) : null,
+      durationMinutes: Number.isFinite(Number(outbound?.durationMinutes)) ? Number(outbound.durationMinutes) : null,
+    });
+
+    previousStop = stopLabel;
+    previousDateKey = dateKey;
+
+    const nextGame = sortedGames[gameIndex + 1];
+    const nextDateKey = toPlanDateOnly(nextGame?.dateObj || nextGame?.date);
+    const closeDay = !nextGame || !dateKey || dateKey !== nextDateKey;
+    if (!closeDay) {
+      continue;
+    }
+
+    const inbound = sourceLegs[routeCursor] || null;
+    routeCursor += 1;
+    result.push({
+      id: `leg-${result.length}`,
+      from: previousStop,
+      to: hrworksStart,
+      distanceKm: Number.isFinite(Number(inbound?.distanceKm)) ? Number(inbound.distanceKm) : null,
+      durationMinutes: Number.isFinite(Number(inbound?.durationMinutes)) ? Number(inbound.durationMinutes) : null,
+    });
+    previousStop = hrworksStart;
+    previousDateKey = "";
+  }
+
+  return result.filter((leg) => String(leg?.from || "").trim() && String(leg?.to || "").trim());
 }
 
 export function PlanPage() {
@@ -234,6 +428,7 @@ export function PlanPage() {
   const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
   const [hrworksDryRunNotice, setHrworksDryRunNotice] = useState("");
   const [hrworksAutomationStarting, setHrworksAutomationStarting] = useState(false);
+  const [historyDeleteRequest, setHistoryDeleteRequest] = useState(null);
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
@@ -262,19 +457,28 @@ export function PlanPage() {
   const activeHistoryMeta = activeHistoryEntry?.meta && typeof activeHistoryEntry.meta === "object" ? activeHistoryEntry.meta : null;
 
   const handleClearPlanHistory = () => {
-    const shouldClear = confirmAction("Plan-Historie wirklich vollständig löschen?");
-    if (!shouldClear) {
-      return;
-    }
-    onClearPlanHistory();
+    setHistoryDeleteRequest({ type: "clear" });
   };
 
-  const handleDeletePlanHistory = (entryId) => {
-    const shouldDelete = confirmAction("Diesen historischen Plan wirklich entfernen?");
-    if (!shouldDelete) {
+  const handleDeletePlanHistory = (entry) => {
+    const id = String(entry?.id || "").trim();
+    if (!id) {
       return;
     }
-    onDeletePlanHistory(entryId);
+    setHistoryDeleteRequest({ type: "single", id, entry });
+  };
+
+  const cancelHistoryDelete = () => {
+    setHistoryDeleteRequest(null);
+  };
+
+  const confirmHistoryDelete = () => {
+    if (historyDeleteRequest?.type === "clear") {
+      onClearPlanHistory();
+    } else if (historyDeleteRequest?.type === "single" && historyDeleteRequest.id) {
+      onDeletePlanHistory(historyDeleteRequest.id);
+    }
+    setHistoryDeleteRequest(null);
   };
   const displayJugendLabel = String(activeHistoryMeta?.jugendLabel || jugend?.label || "").trim();
   const displayKreisLabel = String(activeHistoryMeta?.kreisLabel || kreisLabel || kreis?.label || "").trim();
@@ -283,6 +487,13 @@ export function PlanPage() {
   const scoutDefaults = hrworksSmartDefaults[effectiveScoutName] && typeof hrworksSmartDefaults[effectiveScoutName] === "object"
     ? hrworksSmartDefaults[effectiveScoutName]
     : {};
+  const effectiveHrworksStartLocationLabel = pickHrworksStartLocation({
+    scoutDefaults,
+    activeHistoryMeta,
+    cfg,
+    hrworksPolicy,
+    startLocation,
+  });
   const effectiveKmPauschale = Number(activeHistoryMeta?.kmPauschale);
   const scopedHrworksLog = useMemo(() => {
     const activePlanId = String(activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`).trim();
@@ -380,30 +591,13 @@ export function PlanPage() {
     }
     const importLog = readHrworksImportLog();
     const routePurpose = "Sichtung / Route des Arbeitstages";
-    const routeLegs = Array.isArray(routeOverview?.legs)
-      ? routeOverview.legs
-          .map((leg, index) => {
-            const from = String(leg?.from || "").trim();
-            const to = String(leg?.to || "").trim();
-            if (!from || !to) {
-              return null;
-            }
-            return {
-              id: `leg-${index}`,
-              from,
-              to,
-              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
-              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
-            };
-          })
-          .filter(Boolean)
-      : [];
+    const routeLegs = buildHrworksRouteLegs(routeOverview, activeGames, effectiveHrworksStartLocationLabel);
     const routeLabels = routeLegs.map((leg) => `${leg.from} -> ${leg.to}`);
     const payloads = buildHrworksDailyImportPayloads({
       planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName: effectiveScoutName,
       games: activeGames,
-      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      startLocation: effectiveHrworksStartLocationLabel,
       costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       routeLegs,
     });
@@ -411,7 +605,7 @@ export function PlanPage() {
       planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName: effectiveScoutName,
       games: activeGames,
-      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      startLocation: effectiveHrworksStartLocationLabel,
       costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       purpose: routePurpose,
       note: routePurpose,
@@ -428,9 +622,13 @@ export function PlanPage() {
     if (payloads.length > 1) {
       warnings.push(`Mehrtagiger Plan: ${payloads.length} HRworks-Abrechnungen werden nacheinander vorbereitet.`);
     }
+    if (String(payload.importSource || "plan") !== "timesheet") {
+      warnings.push("Arbeitszeitdatei noch nicht importiert: Für HRworks sind XLSX-Datum und XLSX-Uhrzeiten bindend. Bitte zuerst 'Arbeitszeitdatei importieren' nutzen.");
+    }
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
     }
+    warnings.push(...(validation.warnings || []));
 
     setHrworksPayload(payload);
     setHrworksPayloadQueue(payloads.length > 0 ? payloads : [payload]);
@@ -465,25 +663,6 @@ export function PlanPage() {
       setErr(`HRworks-Setup unvollständig: ${missingHrworksDecisions.join(" ")}`);
       return;
     }
-    const hasDuplicateWarning = (hrworksValidation?.warnings || []).some((warning) => /bereits importiert/i.test(String(warning)));
-    if (hasDuplicateWarning) {
-      const confirmed = confirmAction("Für diesen Plan/Tag existiert bereits ein Import. Re-Import wirklich starten?");
-      if (!confirmed) {
-        appendHrworksImportLog({
-          planId: hrworksPayload.planId,
-          date: hrworksPayload.date,
-          startTime: hrworksPayload.startTime,
-          endTime: hrworksPayload.endTime,
-          purpose: hrworksPayload.purpose,
-          hrworksStatus: "skipped",
-          sourceType: String(hrworksPayload.importSource || "plan"),
-          executedBy: hrworksPayload.employeeName,
-          technicalResult: "Re-Import vom Nutzer abgebrochen.",
-        });
-        return;
-      }
-    }
-
     const mappingValidation = validateHrworksSelectorMapping(hrworksSelectorMapping);
     const preflight = canProceedAutomation({
       isReachable: true,
@@ -544,6 +723,8 @@ export function PlanPage() {
     const doneSession = advanceAutomationStep(sessionRunning, bridgeResult?.status === "completed" ? "done" : "complete_reports");
     setHrworksRuntimeSession(doneSession);
     setHrworksAutomationStarting(false);
+    const bridgeDurationText = formatHrworksDuration(bridgeResult?.durationMs || bridgeResult?.metrics?.durationMs);
+    const performanceSteps = Array.isArray(bridgeResult?.metrics?.steps) ? bridgeResult.metrics.steps : [];
     appendHrworksImportLog({
       planId: hrworksPayload.planId,
       date: hrworksPayload.date,
@@ -554,17 +735,19 @@ export function PlanPage() {
       sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
       technicalResult: bridgeResult?.status === "completed"
-        ? "Lokale HRworks-Automation hat den vollständigen Workflow abgeschlossen."
-        : "Lokale HRworks-Automation wurde gestartet.",
+        ? `Lokale HRworks-Automation hat den vollständigen Workflow abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
+        : `Lokale HRworks-Automation wurde gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`,
       hrworksReference: String(bridgeResult?.url || ""),
+      durationMs: bridgeResult?.durationMs || bridgeResult?.metrics?.durationMs,
+      performanceSteps,
     });
     setHrworksImportLog(readHrworksImportLog());
 
     setHrworksReviewOpen(false);
     setHrworksLoginConfirmed(false);
     setErr(bridgeResult?.status === "completed"
-      ? `HRworks-Import für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} abgeschlossen.`
-      : `HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet.`);
+      ? `HRworks-Import für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
+      : `HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`);
   };
 
   const handleHrworksExportOnly = async () => {
@@ -757,8 +940,7 @@ export function PlanPage() {
           .filter(Boolean),
       ),
     );
-    const matchedPlanDates = gameDates.filter((date) => availableDates.includes(date));
-    const autoSelectedDate = matchedPlanDates.length === 1 ? matchedPlanDates[0] : "";
+    const autoSelectedDate = pickClosestDateFromPlanDates(availableDates, gameDates);
     let selectedDate = autoSelectedDate || "";
     const hasMultipleDates = availableDates.length > 1;
     if (!selectedDate) {
@@ -769,29 +951,12 @@ export function PlanPage() {
     const startTime = sameDateEntries.map((entry) => String(entry.startTime || "")).sort()[0] || "";
     const endTime = sameDateEntries.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "";
     const employeeName = sameDateEntries[0]?.employeeName || effectiveScoutName;
-    const routeLegs = Array.isArray(routeOverview?.legs)
-      ? routeOverview.legs
-          .map((leg, index) => {
-            const from = String(leg?.from || "").trim();
-            const to = String(leg?.to || "").trim();
-            if (!from || !to) {
-              return null;
-            }
-            return {
-              id: `leg-${index}`,
-              from,
-              to,
-              distanceKm: Number.isFinite(Number(leg?.distanceKm)) ? Number(leg.distanceKm) : null,
-              durationMinutes: Number.isFinite(Number(leg?.durationMinutes)) ? Number(leg.durationMinutes) : null,
-            };
-          })
-          .filter(Boolean)
-      : [];
+    const routeLegs = buildHrworksRouteLegs(routeOverview, activeGames, effectiveHrworksStartLocationLabel);
     const dailyPayloads = buildHrworksDailyImportPayloads({
       planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
       employeeName,
       games: activeGames,
-      startLocation: String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      startLocation: effectiveHrworksStartLocationLabel,
       costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       routeLegs,
     });
@@ -817,7 +982,7 @@ export function PlanPage() {
       workHours: totalHours,
       purpose,
       note: purpose,
-      departureLocation: planPayload?.departureLocation || String(startLocation?.label || scoutDefaults.startLocation || cfg?.startLocationLabel || ""),
+      departureLocation: planPayload?.departureLocation || effectiveHrworksStartLocationLabel,
       destinationLocation: planPayload?.destinationLocation || "",
       intermediateStops: [],
       routeLegs: planPayload?.routeLegs || routeLegs,
@@ -836,6 +1001,9 @@ export function PlanPage() {
       requiredFields: hrworksPolicy.requiredFields,
     });
     const warnings = [...(parsed.warnings || [])];
+    if (selectedDate && gameDates.length > 0 && !gameDates.includes(selectedDate) && autoSelectedDate === selectedDate) {
+      warnings.push(`Kein exaktes XLSX-Datum zum Plan gefunden; nächstliegender Sichtungstag ${selectedDate} aus der XLSX wurde verwendet.`);
+    }
     if (gameDates.length > 0 && !gameDates.includes(selectedDate)) {
       warnings.push(`XLSX-Datum ist bindend: ${selectedDate}; Plan/PDF enthält ${gameDates.join(", ")}.`);
     }
@@ -876,6 +1044,7 @@ export function PlanPage() {
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
     }
+    warnings.push(...(validation.warnings || []));
 
     setHrworksPayload(payload);
     setHrworksPayloadQueue([payload]);
@@ -924,6 +1093,7 @@ export function PlanPage() {
     const initialJson = JSON.stringify(hrworksPolicy, null, 2);
     const helpText = [
       "HRworks Pflichtfelder/Defaults bearbeiten (JSON).",
+      "defaultStartLocation ist der HRworks-Abfahrtsort, z. B. Sternbuschweg 326.",
       `aggregationMode erlaubt: ${allowed.aggregationMode.join(", ")}`,
       `finalSaveMode erlaubt: ${allowed.finalSaveMode.join(", ")}`,
     ].join("\n");
@@ -1518,7 +1688,10 @@ export function PlanPage() {
             </button>
           </div>
           <div style={{ display: "grid", gap: 8 }}>
-            {scopedHrworksLog.map((entry) => (
+            {scopedHrworksLog.map((entry) => {
+              const durationText = formatHrworksDuration(entry.durationMs);
+              const performanceLines = summarizeHrworksPerformanceSteps(entry.performanceSteps, 10);
+              return (
               <div
                 key={entry.id}
                 style={{
@@ -1548,6 +1721,23 @@ export function PlanPage() {
                 <div style={{ marginTop: 2, fontSize: 11, color: C.gray }}>
                   Quelle: {entry.sourceType === "timesheet" ? "Arbeitszeitdatei" : "Spielplan"}
                 </div>
+                {durationText ? (
+                  <div style={{ marginTop: 2, fontSize: 11, color: C.gray }}>
+                    Laufzeit: {durationText}
+                  </div>
+                ) : null}
+                {performanceLines.length > 0 ? (
+                  <div style={{ marginTop: 4, display: "grid", gap: 2 }}>
+                    {performanceLines.map((line, index) => (
+                      <div
+                        key={`${entry.id}-perf-${index}`}
+                        style={{ fontSize: 11, color: C.gray, fontFamily: "monospace" }}
+                      >
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {entry.hrworksReference ? (
                   <div style={{ marginTop: 4, fontSize: 11, color: C.gray }}>
                     HRworks-Referenz: {String(entry.hrworksReference)}
@@ -1557,7 +1747,8 @@ export function PlanPage() {
                   <div style={{ marginTop: 4, fontSize: 11, color: "#fca5a5" }}>{String(entry.errorMessage)}</div>
                 ) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -1593,6 +1784,65 @@ export function PlanPage() {
             </button>
           </div>
           <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+            {historyDeleteRequest ? (
+              <div
+                role="alertdialog"
+                aria-label="Plan-Historie löschen bestätigen"
+                style={{
+                  border: "1px solid rgba(252,165,165,0.45)",
+                  borderRadius: 12,
+                  background: "rgba(127,29,29,0.22)",
+                  padding: 12,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div style={{ color: "#fecaca", fontSize: 12, fontWeight: 800 }}>
+                  {historyDeleteRequest.type === "clear" ? "Komplette Plan-Historie löschen?" : "Diesen Plan löschen?"}
+                </div>
+                <div style={{ color: C.grayLight, fontSize: 11 }}>
+                  {historyDeleteRequest.type === "clear"
+                    ? "Alle lokal gespeicherten historischen Pläne werden entfernt. Diese Aktion kann nicht rückgängig gemacht werden."
+                    : "Dieser historische Plan wird aus der lokalen Historie entfernt. Diese Aktion kann nicht rückgängig gemacht werden."}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={confirmHistoryDelete}
+                    style={{
+                      border: "1px solid rgba(252,165,165,0.7)",
+                      borderRadius: 999,
+                      background: "rgba(153,27,27,0.65)",
+                      color: "#fee2e2",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      minHeight: 32,
+                      padding: "6px 12px",
+                    }}
+                  >
+                    Endgültig löschen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelHistoryDelete}
+                    style={{
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.04)",
+                      color: C.grayLight,
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      minHeight: 32,
+                      padding: "6px 12px",
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {historyEntries.slice(0, 8).map((entry) => {
               const meta = entry?.meta && typeof entry.meta === "object" ? entry.meta : {};
               const labelJugend = String(meta.jugendLabel || "").trim();
@@ -1641,20 +1891,21 @@ export function PlanPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDeletePlanHistory(entry.id)}
-                    aria-label={`Historischen Plan ${createdAtLabel} entfernen`}
+                    onClick={() => handleDeletePlanHistory(entry)}
+                    aria-label={`Historischen Plan ${createdAtLabel} löschen`}
                     style={{
-                      border: "none",
-                      background: "transparent",
+                      border: `1px solid rgba(252,165,165,0.45)`,
+                      background: "rgba(127,29,29,0.18)",
+                      borderRadius: 999,
                       color: "#fca5a5",
                       cursor: "pointer",
                       fontSize: 11,
-                      textDecoration: "underline",
-                      minHeight: 0,
-                      padding: 0,
+                      fontWeight: 800,
+                      minHeight: 30,
+                      padding: "5px 10px",
                     }}
                   >
-                    Entfernen
+                    Plan löschen
                   </button>
                 </div>
               );

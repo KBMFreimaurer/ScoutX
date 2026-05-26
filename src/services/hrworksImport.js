@@ -38,6 +38,36 @@ function anonymizeActor(value) {
   return `${parts[0][0]}*** ${parts[parts.length - 1][0]}***`;
 }
 
+function normalizeDurationMs(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
+}
+
+function normalizePerformanceSteps(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, 40)
+    .map((step) => {
+      const label = truncateText(step?.step, 60);
+      const detail = truncateText(redactSensitiveText(step?.detail), 120);
+      const at = String(step?.at || "").trim();
+      const elapsedMs = normalizeDurationMs(step?.elapsedMs);
+      if (!label && !detail && !at && elapsedMs == null) {
+        return null;
+      }
+      return {
+        step: label,
+        detail,
+        at,
+        elapsedMs,
+      };
+    })
+    .filter(Boolean);
+}
+
 function toDateOnly(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
@@ -89,7 +119,7 @@ function buildHrworksPurposeGameLabel(game) {
 }
 
 function buildGameStopLabel(game) {
-  return normalizeLocationLabel(game?.venue) || buildGameLabel(game);
+  return String(game?.home || "").trim() || normalizeLocationLabel(game?.venue) || buildGameLabel(game);
 }
 
 function findMatchingRouteLeg(routeLegs, from, to) {
@@ -366,13 +396,14 @@ export function validateHrworksImportPayload(payload, existingImports = [], opti
   }
 
   const duplicate = findDuplicateImport(normalized, existingImports);
-  if (duplicate) {
-    errors.push(`Möglicher Duplikat-Import gefunden (${duplicate.importedAt || duplicate.createdAt || "unbekannt"}).`);
-  }
+  const warnings = duplicate
+    ? [`Möglicher Duplikat-Import gefunden (${duplicate.importedAt || duplicate.createdAt || "unbekannt"}).`]
+    : [];
 
   return {
     isValid: errors.length === 0,
     errors,
+    warnings,
     duplicate,
   };
 }
@@ -438,6 +469,8 @@ export function appendHrworksImportLog(entry) {
       errorMessage: truncateText(redactSensitiveText(entry?.errorMessage), 240),
       hrworksReference: truncateText(entry?.hrworksReference, 120),
       sourceType: String(entry?.sourceType || "").trim().toLowerCase(),
+      durationMs: normalizeDurationMs(entry?.durationMs),
+      performanceSteps: normalizePerformanceSteps(entry?.performanceSteps),
     },
     ...current,
   ].slice(0, 200);

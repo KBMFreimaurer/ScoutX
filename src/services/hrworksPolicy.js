@@ -2,6 +2,7 @@ import { STORAGE_KEYS } from "../config/storage";
 
 const DEFAULT_POLICY = {
   defaultCostCenter: "Junioren allgemein (321000)",
+  defaultStartLocation: "",
   requireSaveConfirmation: true,
   allowDebugScreenshots: false,
   aggregationMode: "",
@@ -25,6 +26,7 @@ function normalizePolicy(input) {
   const rawFinalSaveMode = String(source.finalSaveMode || "").trim();
   return {
     defaultCostCenter: String(source.defaultCostCenter || DEFAULT_POLICY.defaultCostCenter).trim(),
+    defaultStartLocation: String(source.defaultStartLocation || "").trim(),
     requireSaveConfirmation: source.requireSaveConfirmation !== false,
     allowDebugScreenshots: source.allowDebugScreenshots === true,
     aggregationMode: ALLOWED_AGGREGATION_MODES.includes(rawAggregationMode) ? rawAggregationMode : "",

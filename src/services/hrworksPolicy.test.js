@@ -10,6 +10,7 @@ describe("hrworksPolicy", () => {
   it("returns default policy", () => {
     const policy = getDefaultHrworksPolicy();
     expect(policy.defaultCostCenter).toMatch(/321000/);
+    expect(policy.defaultStartLocation).toBe("");
     expect(policy.requiredFields.purpose).toBe(true);
     expect(policy.requiredFields.destinationLocation).toBe(false);
     expect(policy.requireSaveConfirmation).toBe(true);
@@ -23,9 +24,11 @@ describe("hrworksPolicy", () => {
 
   it("normalizes invalid operational decision values to empty", () => {
     const policy = writeHrworksPolicy({
+      defaultStartLocation: "Sternbuschweg 326",
       aggregationMode: "invalid",
       finalSaveMode: "invalid",
     });
+    expect(policy.defaultStartLocation).toBe("Sternbuschweg 326");
     expect(policy.aggregationMode).toBe("");
     expect(policy.finalSaveMode).toBe("");
   });

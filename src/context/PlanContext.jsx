@@ -11,6 +11,7 @@ const KNOWN_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const ROUTE_TIMEOUT_MS = Number(import.meta.env?.VITE_ROUTE_TIMEOUT_MS || 60000);
 const PLAN_HISTORY_LIMIT = 20;
 const TEAM_PLAN_PUBLISHED_EVENT = "scoutx:team-plan-published";
+const TEAM_PLAN_HISTORY_PRUNED_EVENT = "scoutx:team-plan-history-pruned";
 
 function withTimeout(promise, timeoutMs, fallbackValue) {
   const safeTimeout = Number(timeoutMs);
@@ -135,6 +136,16 @@ function normalizePlanHistoryEntry(entry) {
     syncContext: entry.syncContext && typeof entry.syncContext === "object" ? entry.syncContext : {},
     presenceByGame: entry.presenceByGame && typeof entry.presenceByGame === "object" ? entry.presenceByGame : {},
   };
+}
+
+function buildRestoredStartLocation(meta) {
+  const source = meta && typeof meta === "object" ? meta : {};
+  const storedLocation = source.startLocation && typeof source.startLocation === "object" ? source.startLocation : null;
+  if (storedLocation && String(storedLocation.label || "").trim()) {
+    return storedLocation;
+  }
+  const fallbackLabel = String(source.startLocationLabel || "").trim();
+  return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
 function readPlanHistory() {
@@ -302,10 +313,12 @@ export function PlanProvider({ children }) {
       }
 
       const restoredGames = (Array.isArray(entry.games) ? entry.games : []).map(deserializeGameFromHistory);
+      const restoredStartLocation = buildRestoredStartLocation(entry.meta);
       suspendNextPlanResetRef.current = true;
       gamesCtx.setGames(restoredGames);
       gamesCtx.setDataSourceUsed("history");
       gamesCtx.onRestorePlannedGames(entry.selectedGameIds);
+      setup.onRestoreLocation(restoredStartLocation);
       setup.setErr("");
       setPlan(String(entry.planText || ""));
       setActiveHistoryId(entry.id);
@@ -322,11 +335,25 @@ export function PlanProvider({ children }) {
 
     setPlanHistory((prev) => prev.filter((entry) => entry.id !== id));
     setActiveHistoryId((prev) => (prev === id ? "" : prev));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(TEAM_PLAN_HISTORY_PRUNED_EVENT, {
+          detail: { mode: "single", planHistoryId: id },
+        }),
+      );
+    }
   }, []);
 
   const onClearPlanHistory = useCallback(() => {
     setPlanHistory([]);
     setActiveHistoryId("");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(TEAM_PLAN_HISTORY_PRUNED_EVENT, {
+          detail: { mode: "all" },
+        }),
+      );
+    }
   }, []);
 
   const onUpdatePlanHistoryPresence = useCallback((entryId, presenceByGame) => {
@@ -412,6 +439,7 @@ export function PlanProvider({ children }) {
           jugendLabel: setup.jugend?.label || "",
           fromDate: setup.fromDate || "",
           toDate: setup.toDate || "",
+          startLocation: setup.startLocation || null,
           startLocationLabel: setup.startLocation?.label || "",
           scoutName: setup.scoutName || "",
           kmPauschale: setup.kmPauschale,

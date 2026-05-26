@@ -13,7 +13,7 @@ test("fills mock HRworks form via selector mapping", async ({ page }) => {
     departureLocation: "Sternbuschweg 326",
     destinationLocation: "",
     costCenter: "Junioren allgemein (321000)",
-  });
+  }, { skipOpenNewTravelExpense: true });
 
   await expect(page.locator("input[name='purpose']")).toHaveValue("Sichtung / Route des Arbeitstages");
   await expect(page.locator("select[name='costCenter']")).toHaveValue("Junioren allgemein (321000)");
@@ -35,13 +35,13 @@ test("creates kilometer entries without completing reports", async ({ page }) =>
       { from: "Sternbuschweg 326", to: "Spiel1", distanceKm: 1.09 },
       { from: "Spiel1", to: "Spiel2", distanceKm: 11.89 },
     ],
-  }, { confirmBeforeSave: true, runRouteFlow: true });
+  }, { confirmBeforeSave: true, runRouteFlow: true, skipOpenNewTravelExpense: true });
 
   expect(result.kilometerEntriesCreated).toBe(2);
   await expect(page.locator("input[name='mileageFrom']")).toHaveValue("Spiel1");
   await expect(page.locator("input[name='mileageTo']")).toHaveValue("Spiel2");
   await expect(page.locator("input[name='mileageNote']")).toHaveValue("");
-  await expect(page.locator("input[name='mileageKilometers']")).toHaveValue("11.89");
+  await expect(page.locator("input[name='mileageKilometers']")).toHaveValue("11,89");
   await expect(page.locator("#workflow-status")).toHaveText("route-only");
 });
 
@@ -62,7 +62,7 @@ test("creates kilometer entries and completes the full HRworks workflow", async 
       { from: "GSG Duisburg II", to: "DSC Preussen Duisburg III", distanceKm: 9.3 },
       { from: "DSC Preussen Duisburg III", to: "Sternbuschweg 326", distanceKm: 4.1 },
     ],
-  }, { confirmBeforeSave: true, runRouteFlow: true, completeWorkflow: true });
+  }, { confirmBeforeSave: true, runRouteFlow: true, completeWorkflow: true, skipOpenNewTravelExpense: true });
 
   expect(result.kilometerEntriesCreated).toBe(3);
   expect(result.reportsCompleted).toBe(true);

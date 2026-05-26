@@ -498,6 +498,23 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setLocationError("");
   }, []);
 
+  const onRestoreLocation = useCallback((locationInput) => {
+    const location = locationInput && typeof locationInput === "object" ? locationInput : null;
+    const label = String(location?.label || "").trim();
+    if (!location && !label) {
+      setStartLocation(null);
+      setLocationDraft("");
+      setLocationError("");
+      setResolvingLocation(false);
+      return;
+    }
+
+    setStartLocation(location || { label });
+    setLocationDraft(label);
+    setLocationError("");
+    setResolvingLocation(false);
+  }, []);
+
   const onAddFavoriteTeam = useCallback(
     (value = favoriteDraft) => {
       const team = String(value || "").trim();
@@ -607,6 +624,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,
+      onRestoreLocation,
       onSetScoutName: (val) => setAbrechnungMeta({ scoutName: String(val || "") }),
       onSetKmPauschale: (val) => {
         const n = Number(val);
@@ -674,6 +692,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
       onResolveLocation,
       onUseCurrentLocation,
       onClearLocation,
+      onRestoreLocation,
       setAbrechnungMeta,
       onAddFavoriteTeam,
       onRemoveFavoriteTeam,

@@ -24,11 +24,19 @@ describe("hrworksImport", () => {
       sourceType: "timesheet",
       executedBy: "Max Mustermann",
       technicalResult: "Review bestätigt und Übergabe vorbereitet",
+      durationMs: 2592.4,
+      performanceSteps: [
+        { step: "workflow_start", detail: "2026-04-20", elapsedMs: 0, at: "2026-04-20T08:00:00.000Z" },
+        { step: "leg_persisted", detail: "bearer token abcdefghijklmnopqrstuvwxyz", elapsedMs: 1137, at: "2026-04-20T08:00:01.137Z" },
+      ],
     });
     const logs = readHrworksImportLog();
     expect(logs[0].executedBy).toMatch(/M\*\*\* M\*\*\*/);
     expect(logs[0].purpose.length).toBeLessThanOrEqual(121);
     expect(logs[0].sourceType).toBe("timesheet");
+    expect(logs[0].durationMs).toBe(2592);
+    expect(logs[0].performanceSteps).toHaveLength(2);
+    expect(logs[0].performanceSteps[1].detail).not.toMatch(/abcdefghijklmnopqrstuvwxyz/);
   });
 
   it("does not persist raw credential-like content in technical log fields", () => {
@@ -121,12 +129,31 @@ describe("hrworksImport", () => {
     });
 
     expect(payload.routeLegs).toEqual([
-      { id: "2026-05-23-leg-0", from: "Sternbuschweg 326", to: "Duisburger FV 08", distanceKm: null, durationMinutes: null },
-      { id: "2026-05-23-leg-1", from: "Duisburger FV 08", to: "Hamborn 07", distanceKm: null, durationMinutes: null },
-      { id: "2026-05-23-leg-2", from: "Hamborn 07", to: "Dümptener TV", distanceKm: null, durationMinutes: null },
-      { id: "2026-05-23-leg-3", from: "Dümptener TV", to: "Sternbuschweg 326", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-0", from: "Sternbuschweg 326", to: "Spiel1", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-1", from: "Spiel1", to: "Spiel2", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-2", from: "Spiel2", to: "Spiel3", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-3", from: "Spiel3", to: "Sternbuschweg 326", distanceKm: null, durationMinutes: null },
     ]);
     expect(payload.intermediateStops).toEqual([]);
+  });
+
+  it("prefers Heimmannschaften over venue labels for HRworks route stops", () => {
+    const [payload] = buildHrworksDailyImportPayloads({
+      planId: "plan-1",
+      employeeName: "Max Scout",
+      games: [
+        { id: "g1", date: "2026-05-23", time: "10:00", venue: "Hartplatz, SV Hamborn 1890, Iltisstr. 41", home: "SV Hamborn 90", away: "Gegner1" },
+        { id: "g2", date: "2026-05-23", time: "13:00", venue: "Kunstrasen, Düsseldorfer Str. 590", home: "Duisburger SV 1900", away: "Gegner2" },
+      ],
+      startLocation: "Sternbuschweg 326",
+      costCenter: "Junioren allgemein (321000)",
+    });
+
+    expect(payload.routeLegs).toEqual([
+      { id: "2026-05-23-leg-0", from: "Sternbuschweg 326", to: "SV Hamborn 90", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-1", from: "SV Hamborn 90", to: "Duisburger SV 1900", distanceKm: null, durationMinutes: null },
+      { id: "2026-05-23-leg-2", from: "Duisburger SV 1900", to: "Sternbuschweg 326", distanceKm: null, durationMinutes: null },
+    ]);
   });
 
   it("detects missing fields", () => {
@@ -165,7 +192,7 @@ describe("hrworksImport", () => {
     expect(result.errors.join(" ")).toMatch(/Beginn muss vor Ende/);
   });
 
-  it("detects duplicates", () => {
+  it("detects duplicates as non-blocking warnings", () => {
     const payload = {
       planId: "p1",
       date: "2026-04-20",
@@ -180,11 +207,13 @@ describe("hrworksImport", () => {
     };
 
     const result = validateHrworksImportPayload(payload, [{ ...payload, importedAt: "2026-04-20T10:00:00Z" }]);
-    expect(result.isValid).toBe(false);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.join(" ")).toMatch(/Duplikat-Import/i);
     expect(result.duplicate).toBeTruthy();
   });
 
-  it("detects duplicate on same plan/day with changed times", () => {
+  it("detects duplicate on same plan/day with changed times as a warning", () => {
     const payload = {
       planId: "p1",
       date: "2026-04-20",
@@ -204,7 +233,9 @@ describe("hrworksImport", () => {
       endTime: "10:00",
       importedAt: "2026-04-20T10:00:00Z",
     }]);
-    expect(result.isValid).toBe(false);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings.join(" ")).toMatch(/Duplikat-Import/i);
     expect(result.duplicate).toBeTruthy();
   });
 

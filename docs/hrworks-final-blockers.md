@@ -1,6 +1,6 @@
 # HRworks Final Blockers (External Only)
 
-Stand: 2026-05-17
+Stand: 2026-05-26
 
 ## Restziel
 Für die vollständige Erreichung von `src/prompt.md` sind nur noch zwei Nachweise offen:
@@ -13,6 +13,7 @@ Für die vollständige Erreichung von `src/prompt.md` sind nur noch zwei Nachwei
 - Lokal technische Gates grün:
   - `npm run verify:hrworks`
   - `npm run test:sandbox`
+  - `npx playwright test e2e/hrworks-import-mock.spec.js`
 - Prompt-Checklist wird im Go/No-Go-Lauf automatisch synchronisiert und geprüft:
   - `npm run update:hrworks:prompt-checklist`
   - `npm run check:hrworks:prompt-checklist`
@@ -54,4 +55,4 @@ Für die vollständige Erreichung von `src/prompt.md` sind nur noch zwei Nachwei
 Die Arbeit ist abgeschlossen, wenn:
 - `npm run check:hrworks:go-no-go` => `GO`
 - `docs/hrworks-acceptance-status.json` => `global_status=complete`
-- Neuester konsolidierter Statusreport: `docs/hrworks-status-report-20260517T153448Z.txt`
+- Neuester konsolidierter Statusreport: `docs/hrworks-status-report-20260526T070754Z.txt`

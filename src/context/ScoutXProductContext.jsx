@@ -34,6 +34,7 @@ import { useTeamReportActions } from "./useTeamReportActions";
 const ScoutXProductContext = createContext(null);
 const TEAM_PLAN_PUBLISHED_EVENT = "scoutx:team-plan-published";
 const TEAM_SYNC_BROADCAST_KEY = "scoutx.team.sync.v1";
+const TEAM_PLAN_HISTORY_PRUNED_EVENT = "scoutx:team-plan-history-pruned";
 
 function readProductState() {
   if (typeof window === "undefined") {
@@ -242,6 +243,40 @@ export function ScoutXProductProvider({ children }) {
     window.addEventListener(TEAM_PLAN_PUBLISHED_EVENT, onTeamPlanPublished);
     return () => window.removeEventListener(TEAM_PLAN_PUBLISHED_EVENT, onTeamPlanPublished);
   }, [applyTeamBackendPayload, teamBackendState.status]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const onPlanHistoryPruned = (event) => {
+      const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const mode = String(detail.mode || "").trim();
+      const targetPlanHistoryId = String(detail.planHistoryId || "").trim();
+      setState((prev) => {
+        const current = Array.isArray(prev?.observations) ? prev.observations : [];
+        const nextObservations =
+          mode === "all"
+            ? current.filter((observation) => observation?.status !== "planned")
+            : mode === "single" && targetPlanHistoryId
+              ? current.filter(
+                  (observation) =>
+                    !(observation?.status === "planned" && String(observation?.planHistoryId || "").trim() === targetPlanHistoryId),
+                )
+              : current;
+        if (nextObservations.length === current.length) {
+          return prev;
+        }
+        return {
+          ...prev,
+          observations: nextObservations,
+        };
+      });
+    };
+
+    window.addEventListener(TEAM_PLAN_HISTORY_PRUNED_EVENT, onPlanHistoryPruned);
+    return () => window.removeEventListener(TEAM_PLAN_HISTORY_PRUNED_EVENT, onPlanHistoryPruned);
+  }, []);
 
   const resetProductState = useCallback(() => {
     setState(createInitialProductState());

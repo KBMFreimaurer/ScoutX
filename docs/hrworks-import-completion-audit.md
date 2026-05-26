@@ -59,7 +59,7 @@ ScoutX soll einen kontrollierten, nachvollziehbaren HRworks-Import bereitstellen
 |---|---|---|
 | Zwingende offene Fachfragen adressieren, wenn für Korrektheit nötig | `docs/hrworks-open-questions.md`, `docs/hrworks-live-session-runbook.md`, Evidence-Template | Teilweise |
 
-## Verifikationsbelege (aktueller Stand am 2026-05-17)
+## Verifikationsbelege (aktueller Stand am 2026-05-26)
 - `npm run check:hrworks:go-no-go` ausgeführt am 2026-05-17:
   - `verify:hrworks`: PASS (`9` Dateien, `46` Tests).
   - `test:sandbox`: PASS (`54 passed | 2 skipped` Dateien, `325 passed | 5 skipped` Tests).
@@ -78,17 +78,22 @@ ScoutX soll einen kontrollierten, nachvollziehbaren HRworks-Import bereitstellen
 - Neuer sicherer One-Command-Flow verfügbar:
   - `ops/prepare-hrworks-final-closeout.sh` (npm alias: `npm run prepare:hrworks:final-closeout`) setzt Metadaten, erzeugt Closeout-Command-Datei und gibt den exakten Execute-Befehl aus (optional direkte Ausführung via `--execute`).
 - `npm run report:hrworks:status` erzeugt (zuletzt):
-  - `docs/hrworks-status-report-20260517T153448Z.txt`
+  - `docs/hrworks-status-report-20260526T070754Z.txt`
 
 ## Test-/Verifikationsstand (lokal, zusammengefasst)
 - Mehrere zielgerichtete Vitest-Suites erfolgreich (u. a. `hrworksImport`, `hrworksExcelParser`, `hrworksCsvExport`, `hrworksSelectorMapping`, `hrworksAutomationRuntime`, `PlanPage`, `HrworksImportReviewModal`).
 - ESLint auf geänderten HRworks-Dateien erfolgreich.
+- Bridge-/Automation-Metriken lokal verifiziert:
+  - Cold-Start-Pfad `Dashboard -> Trips -> Neue Reisekostenabrechnung`
+  - Reload-basierter Nachweis für `base_data_persisted`
+  - Schrittmetriken pro Leg (`leg_open`, `leg_filled`, `leg_save_attempt`, `leg_persisted`)
 - Echter Browser-E2E gegen reales HRworks in dieser Umgebung nicht durchgeführt (Sandbox-/Umgebungsgrenzen).
 - Letzter konsolidierter Nachweislauf:
-  - `npm run test:hrworks` → `9 passed, 46 passed`.
+  - `npm run test:hrworks` → `10 passed, 68 passed`.
   - `npm run lint:hrworks` → ohne Befunde.
   - `npm run verify:hrworks` als kombinierter Gate-Befehl verfügbar.
-  - Letzte vollständige Ausführung bestätigt am `2026-05-17T13:06:08Z` (UTC).
+  - `npx playwright test e2e/hrworks-import-mock.spec.js` → `3 passed`.
+  - Letzte vollständige lokale Verifikation bestätigt am `2026-05-26T07:07:54Z` (UTC).
 - Zusätzlicher Volltestlauf (`npm test`) durchgeführt:
   - Ergebnis: `54 passed`, `2 failed`, `2 skipped`, `321 passed` Tests.
   - Ausfallgrund der 2 Fehlsuites: Sandbox-Beschränkung `listen EPERM 127.0.0.1` in adapter-service Integrationssuiten (kein fachlicher HRworks-Fehler).
@@ -139,7 +144,7 @@ ScoutX soll einen kontrollierten, nachvollziehbaren HRworks-Import bereitstellen
 - Handover-Bundle: `ops/run-hrworks-handover.sh` (npm alias: `npm run report:hrworks:handover`)
 - Offene Fachentscheidungen: `docs/hrworks-open-questions.md`
 - Externe Abschluss-Blocker: `docs/hrworks-final-blockers.md`
-- Aktueller/neuester Statusreport: `docs/hrworks-status-report-20260517T153448Z.txt`
+- Aktueller/neuester Statusreport: `docs/hrworks-status-report-20260526T070754Z.txt`
 - Prompt-zu-Artefakt-Checklist (maschinenlesbar): `docs/hrworks-prompt-checklist.json`
 - Prompt-zu-Artefakt-Checklist-Gate: `ops/check-hrworks-prompt-checklist.sh` (npm alias: `npm run check:hrworks:prompt-checklist`)
 - Prompt-zu-Artefakt-Checklist-Sync aus Acceptance-Status: `ops/update-hrworks-prompt-checklist-status.sh` (npm alias: `npm run update:hrworks:prompt-checklist`)

@@ -37,6 +37,8 @@
 - Status (`imported/failed/...`):
 - Audit-Log exportiert (`JSON`): ja/nein
 - Referenznummer (optional):
+- Laufzeit laut Audit-Log (optional):
+- Schrittfolge laut Audit-Log (optional):
 
 ## Ergebnis
 - Akzeptanzkriterien im Realbetrieb erfüllt: ja/nein

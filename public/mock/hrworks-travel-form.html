@@ -43,7 +43,8 @@
     <input name="mileageNote" value="Alttext" />
     <label>Kilometer</label>
     <input name="mileageKilometers" />
-    <button type="button">Kilometerangabe speichern</button>
+    <button type="button" onclick="saveMockKilometerEntry()">Kilometerangabe speichern</button>
+    <div id="saved-kilometer-entries" aria-label="Gespeicherte Kilometerangaben"></div>
     <button type="button" onclick="document.getElementById('workflow-status').textContent='route-only'">Berichte</button>
     <button type="button" onclick="document.getElementById('workflow-status').textContent='reports-page'">Abschließen</button>
     <button type="button" onclick="document.getElementById('workflow-status').textContent='confirm-open'">Final abschließen</button>
@@ -51,5 +52,28 @@
     <div id="workflow-status">draft</div>
     <div id="warning-confirmed">no</div>
  </form>
+  <script>
+    function saveMockKilometerEntry() {
+      const from = document.querySelector("input[name='mileageFrom']")?.value?.trim() || "";
+      const to = document.querySelector("input[name='mileageTo']")?.value?.trim() || "";
+      if (!from || !to) {
+        return;
+      }
+      const container = document.getElementById("saved-kilometer-entries");
+      if (!container) {
+        return;
+      }
+      const summary = `${from} - ${to}`;
+      const existing = Array.from(container.querySelectorAll("[data-leg-summary]"))
+        .some((node) => node.textContent.trim() === summary);
+      if (existing) {
+        return;
+      }
+      const entry = document.createElement("div");
+      entry.setAttribute("data-leg-summary", summary);
+      entry.textContent = summary;
+      container.appendChild(entry);
+    }
+  </script>
 </body>
 </html>
