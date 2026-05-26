@@ -145,6 +145,7 @@ API-Spezifikation (OpenAPI-ähnlich): [openapi.team.v1.yaml](/Users/playboiibogg
   - `node adapter-service/scripts/backfill-team-state.mjs --input /abs/pfad/team-state.json --backup`
 
 Hinweis: Das Skript nutzt standardmäßig `ADAPTER_TEAM_STATE_FILE`. Falls nicht gesetzt, muss `--input` angegeben werden.
+
 - `GET /api/team/audit-log?actorId=<id>&action=<type>&limit=50`
 - `GET /api/team/conflicts`
 - `POST /api/team/tournaments`
@@ -160,6 +161,11 @@ Hinweis: Das Skript nutzt standardmäßig `ADAPTER_TEAM_STATE_FILE`. Falls nicht
 - `POST /api/team/observations/seen`
 - `POST /api/team/observations/report`
 - `POST /api/team/observations/note`
+
+Wizard-Import Hinweise:
+
+- `POST /api/team/tournaments/import/meinturnierplan` akzeptiert neben Datum/Jugend optional `stateCode`, `regionName`, `regionShortCode` und `regionKeywords`, damit nur Turniere aus der im Setup gewählten Region zurückkommen.
+- `POST /api/team/import/dfb-national-games` unterstützt DFB-U-Nationalspiele von `U15` bis `U21`.
 
 ### Vereinskatalog Import
 

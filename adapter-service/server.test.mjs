@@ -150,12 +150,54 @@ describe("adapter-service server integration", () => {
             id: "team-scoutx",
             name: "ScoutX Team",
             accounts: [
-              { id: "user-admin", name: "Leitung", role: "admin", teamId: "team-scoutx", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
-              { id: "user-coordinator", name: "Koordination", role: "coordinator", teamId: "team-scoutx", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
-              { id: "user-scout", name: "Scout", role: "scout", teamId: "team-scoutx", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
-              { id: "user-scout-b", name: "Scout B", role: "scout", teamId: "team-scoutx", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
-              { id: "user-readonly", name: "Gast", role: "readonly", teamId: "team-scoutx", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
-              { id: "user-outsider", name: "Extern", role: "admin", teamId: "team-other", active: true, passwordHash: hashPassword(TEAM_TEST_PASSWORD) },
+              {
+                id: "user-admin",
+                name: "Leitung",
+                role: "admin",
+                teamId: "team-scoutx",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
+              {
+                id: "user-coordinator",
+                name: "Koordination",
+                role: "coordinator",
+                teamId: "team-scoutx",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
+              {
+                id: "user-scout",
+                name: "Scout",
+                role: "scout",
+                teamId: "team-scoutx",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
+              {
+                id: "user-scout-b",
+                name: "Scout B",
+                role: "scout",
+                teamId: "team-scoutx",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
+              {
+                id: "user-readonly",
+                name: "Gast",
+                role: "readonly",
+                teamId: "team-scoutx",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
+              {
+                id: "user-outsider",
+                name: "Extern",
+                role: "admin",
+                teamId: "team-other",
+                active: true,
+                passwordHash: hashPassword(TEAM_TEST_PASSWORD),
+              },
             ],
           },
           manualGames: [],
@@ -201,14 +243,18 @@ describe("adapter-service server integration", () => {
               url: "/showit.php?id=abc123",
               startDate: "03.06.2026",
               endDate: "04.06.2026",
+              venue: "Sportschule Wedau",
+              address: "Duisburg",
             },
           },
           {
             properties: {
-              name: "Neutrales Sommertunier",
+              name: "MSV Duisburg U12 Cup Nord",
               url: "/showit.php?id=xyz999",
-              startDate: "10.06.2026",
-              endDate: "10.06.2026",
+              startDate: "03.06.2026",
+              endDate: "04.06.2026",
+              venue: "Sportplatz Altona",
+              address: "Hamburg",
             },
           },
         ],
@@ -736,7 +782,9 @@ describe("adapter-service server integration", () => {
     });
     expect(clubsSearchResponse.status).toBe(200);
     const clubsSearchPayload = await parseJsonSafe(clubsSearchResponse);
-    const names = (Array.isArray(clubsSearchPayload.clubs) ? clubsSearchPayload.clubs : []).map((item) => String(item?.name || ""));
+    const names = (Array.isArray(clubsSearchPayload.clubs) ? clubsSearchPayload.clubs : []).map((item) =>
+      String(item?.name || ""),
+    );
     expect(names).toContain(clubA.name);
     expect(names).toContain(clubB.name);
   });
@@ -967,7 +1015,9 @@ describe("adapter-service server integration", () => {
     expect(loginPayload.user).toMatchObject({ id: "user-scout", role: "scout" });
     expect(loginPayload.team).toMatchObject({ id: "team-scoutx" });
     expect(loginPayload.team.accounts.every((account) => account.active === true)).toBe(true);
-    expect(loginPayload.team.accounts.every((account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash"))).toBe(true);
+    expect(
+      loginPayload.team.accounts.every((account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash")),
+    ).toBe(true);
     expect(typeof loginPayload.csrfToken).toBe("string");
     expect(loginPayload.csrfToken.length).toBeGreaterThan(10);
 
@@ -984,7 +1034,9 @@ describe("adapter-service server integration", () => {
     expect(Array.isArray(statePayload.team.accounts)).toBe(true);
     expect(statePayload.team.accounts.every((account) => account.active === true)).toBe(true);
     expect(statePayload.csrfToken).toBeUndefined();
-    expect(statePayload.team.accounts.every((account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash"))).toBe(true);
+    expect(
+      statePayload.team.accounts.every((account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash")),
+    ).toBe(true);
     expect(statePayload.observations).toEqual([]);
     expect(statePayload.feedItems).toEqual([]);
   });
@@ -1555,7 +1607,11 @@ describe("adapter-service server integration", () => {
         cookie: coordinatorCookie,
         "x-csrf-token": coordinatorPayload.csrfToken,
       },
-      body: JSON.stringify({ userId: `invite-idem-conflict-${Date.now()}`, name: "Invite Idem Conflict", role: "scout" }),
+      body: JSON.stringify({
+        userId: `invite-idem-conflict-${Date.now()}`,
+        name: "Invite Idem Conflict",
+        role: "scout",
+      }),
     });
     expect(createInviteResponse.status).toBe(201);
     const createdInvitePayload = await parseJsonSafe(createInviteResponse);
@@ -2245,7 +2301,10 @@ describe("adapter-service server integration", () => {
 
     const payload = await readSseUntil(
       streamResponse,
-      (item) => item?.type === "team_push_events" && Array.isArray(item.events) && item.events.some((entry) => entry?.type === "absage"),
+      (item) =>
+        item?.type === "team_push_events" &&
+        Array.isArray(item.events) &&
+        item.events.some((entry) => entry?.type === "absage"),
       10000,
     );
     const cancelled = payload.events.find((item) => item?.type === "absage");
@@ -2322,7 +2381,9 @@ describe("adapter-service server integration", () => {
     });
     expect(unreadAgainResponse.status).toBe(200);
     const unreadAgainPayload = await parseJsonSafe(unreadAgainResponse);
-    expect(unreadAgainPayload.notifications.some((item) => item.eventId === inboxPayload.notifications[0].eventId)).toBe(false);
+    expect(
+      unreadAgainPayload.notifications.some((item) => item.eventId === inboxPayload.notifications[0].eventId),
+    ).toBe(false);
   });
 
   it("detects planning conflicts for overlaps and low travel feasibility", async () => {
@@ -2597,8 +2658,16 @@ describe("adapter-service server integration", () => {
     };
     const reassignBody = JSON.stringify({ observationId, targetScoutId: "user-scout-b" });
     const [firstReassign, secondReassign] = await Promise.all([
-      fetch(`${baseUrl}/api/team/observations/reassign`, { method: "POST", headers: reassignHeaders, body: reassignBody }),
-      fetch(`${baseUrl}/api/team/observations/reassign`, { method: "POST", headers: reassignHeaders, body: reassignBody }),
+      fetch(`${baseUrl}/api/team/observations/reassign`, {
+        method: "POST",
+        headers: reassignHeaders,
+        body: reassignBody,
+      }),
+      fetch(`${baseUrl}/api/team/observations/reassign`, {
+        method: "POST",
+        headers: reassignHeaders,
+        body: reassignBody,
+      }),
     ]);
     expect(firstReassign.status).toBe(200);
     expect(secondReassign.status).toBe(200);
@@ -2616,7 +2685,11 @@ describe("adapter-service server integration", () => {
       "x-csrf-token": loginPayload.csrfToken,
       "idempotency-key": `obs-report-idem-${Date.now()}`,
     };
-    const reportBody = JSON.stringify({ observationId: reassignedObservationId, reportId: `idem-report-${Date.now()}`, reportUrl: "#idem-report" });
+    const reportBody = JSON.stringify({
+      observationId: reassignedObservationId,
+      reportId: `idem-report-${Date.now()}`,
+      reportUrl: "#idem-report",
+    });
     const [firstReport, secondReport] = await Promise.all([
       fetch(`${baseUrl}/api/team/observations/report`, { method: "POST", headers: reportHeaders, body: reportBody }),
       fetch(`${baseUrl}/api/team/observations/report`, { method: "POST", headers: reportHeaders, body: reportBody }),
@@ -2825,9 +2898,12 @@ describe("adapter-service server integration", () => {
     });
     expect(planResponse.status).toBe(200);
 
-    const auditResponse = await fetch(`${baseUrl}/api/team/audit-log?actorId=user-scout&action=plan_published&limit=10`, {
-      headers: { cookie },
-    });
+    const auditResponse = await fetch(
+      `${baseUrl}/api/team/audit-log?actorId=user-scout&action=plan_published&limit=10`,
+      {
+        headers: { cookie },
+      },
+    );
     expect(auditResponse.status).toBe(200);
     const payload = await parseJsonSafe(auditResponse);
     expect(payload.ok).toBe(true);
@@ -3031,15 +3107,29 @@ describe("adapter-service server integration", () => {
       { path: "/api/team/invitations/create", body: { email: "readonly-test@example.com", role: "scout" } },
       {
         path: "/api/team/notifications/push/subscribe",
-        body: { subscription: { endpoint: "https://push.example.test/subscription/readonly", keys: { p256dh: "a", auth: "b" } } },
+        body: {
+          subscription: {
+            endpoint: "https://push.example.test/subscription/readonly",
+            keys: { p256dh: "a", auth: "b" },
+          },
+        },
       },
-      { path: "/api/team/tournaments/import/meinturnierplan", body: { fromDate: "2026-06-01", toDate: "2026-06-07", teams: [] } },
+      {
+        path: "/api/team/tournaments/import/meinturnierplan",
+        body: { fromDate: "2026-06-01", toDate: "2026-06-07", teams: [] },
+      },
       { path: "/api/team/tournaments", body: { name: "Readonly Cup", dateFrom: "2026-06-01", dateTo: "2026-06-02" } },
       { path: "/api/team/import/dfb-national-games", body: { games: [] } },
       { path: "/api/team/notifications/read", body: { eventIds: ["event-readonly-test"] } },
-      { path: "/api/team/manual-games", body: { home: "A", away: "B", date: "2026-06-01", time: "12:00", venue: "Platz" } },
+      {
+        path: "/api/team/manual-games",
+        body: { home: "A", away: "B", date: "2026-06-01", time: "12:00", venue: "Platz" },
+      },
       { path: "/api/team/goals", body: { favoriteTeams: ["Readonly Team"] } },
-      { path: "/api/team/members", body: { id: "readonly-member-test", name: "Readonly Test", role: "scout", active: true } },
+      {
+        path: "/api/team/members",
+        body: { id: "readonly-member-test", name: "Readonly Test", role: "scout", active: true },
+      },
       { path: "/api/team/observations/seen", body: { gameId: "readonly-game" } },
       { path: "/api/team/observations/report", body: { observationId: "obs-readonly", reportId: "report-readonly" } },
       { path: "/api/team/observations/note", body: { observationId: "obs-readonly", note: "readonly" } },
@@ -3774,6 +3864,8 @@ describe("adapter-service server integration", () => {
         jugendId: "f-jugend",
         kreisId: "duisburg",
         teams: ["MSV Duisburg U12"],
+        regionName: "Duisburg",
+        regionKeywords: ["duisburg", "wedau", "mulheim"],
       }),
     });
 
@@ -3823,25 +3915,28 @@ describe("adapter-service server integration", () => {
     const tournamentId = tournamentPayload?.tournament?.id;
     expect(typeof tournamentId).toBe("string");
 
-    const addTournamentMatchResponse = await fetch(`${baseUrl}/api/team/tournaments/${encodeURIComponent(tournamentId)}/matches`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie,
-        "x-csrf-token": loginPayload.csrfToken,
+    const addTournamentMatchResponse = await fetch(
+      `${baseUrl}/api/team/tournaments/${encodeURIComponent(tournamentId)}/matches`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie,
+          "x-csrf-token": loginPayload.csrfToken,
+        },
+        body: JSON.stringify({
+          matches: [
+            {
+              home: "Turnier Team A",
+              away: "Turnier Team B",
+              date: "2026-09-10",
+              time: "10:00",
+              venue: "Turnierplatz",
+            },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        matches: [
-          {
-            home: "Turnier Team A",
-            away: "Turnier Team B",
-            date: "2026-09-10",
-            time: "10:00",
-            venue: "Turnierplatz",
-          },
-        ],
-      }),
-    });
+    );
     expect(addTournamentMatchResponse.status).toBe(200);
     const addTournamentMatchPayload = await parseJsonSafe(addTournamentMatchResponse);
     const tournamentGame = addTournamentMatchPayload?.matches?.[0];
@@ -4785,6 +4880,10 @@ describe("adapter-service server integration", () => {
     expect(Array.isArray(payload.events)).toBe(true);
     expect(payload.events.length).toBeGreaterThan(0);
     expect(["postgres", "ndjson"]).toContain(payload.source);
-    expect(payload.events[0].teamState.team.accounts.every((account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash"))).toBe(true);
+    expect(
+      payload.events[0].teamState.team.accounts.every(
+        (account) => !Object.prototype.hasOwnProperty.call(account, "passwordHash"),
+      ),
+    ).toBe(true);
   });
 });

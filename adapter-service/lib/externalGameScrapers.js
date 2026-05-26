@@ -30,7 +30,7 @@ function compactText(value) {
 }
 
 function normalizeAgeGroup(value) {
-  const match = String(value || "").match(/U\s*[- ]?\s*(15|16|17|18|19)/i);
+  const match = String(value || "").match(/U\s*[- ]?\s*(15|16|17|18|19|20|21)/i);
   return match ? `U${match[1]}` : "";
 }
 
@@ -90,7 +90,9 @@ function absolutizeUrl(value, baseUrl) {
 }
 
 function parseDfbDateRange(dateText) {
-  const text = String(dateText || "").replace(/[–—]/g, "-").trim();
+  const text = String(dateText || "")
+    .replace(/[–—]/g, "-")
+    .trim();
   const fullDate = text.match(/^(\d{1,2}\.\d{1,2}\.\d{4})$/);
   if (fullDate) {
     const date = parseGermanDate(fullDate[1]);
@@ -116,7 +118,7 @@ function parseDfbDateRange(dateText) {
 
 function parseTeamsFromEvent(eventText, ageGroup) {
   const normalizedEvent = compactText(eventText);
-  const match = normalizedEvent.match(/^(.*?)?\b(Deutschland\s+U\s*[- ]?\s*(?:15|16|17|18|19))\s*[-:]\s*(.+)$/i);
+  const match = normalizedEvent.match(/^(.*?)?\b(Deutschland\s+U\s*[- ]?\s*(?:15|16|17|18|19|20|21))\s*[-:]\s*(.+)$/i);
   if (match) {
     return {
       competitionName: compactText(match[1] || "Länderspiel") || "Länderspiel",
@@ -124,6 +126,21 @@ function parseTeamsFromEvent(eventText, ageGroup) {
       away: compactText(match[3]),
     };
   }
+
+  const suffixCompetitionMatch = normalizedEvent.match(/\(([^)]+)\)\s*$/);
+  const suffixCompetition = compactText(suffixCompetitionMatch?.[1] || "");
+  const withoutSuffix = suffixCompetition
+    ? compactText(normalizedEvent.slice(0, suffixCompetitionMatch.index))
+    : normalizedEvent;
+  const genericMatch = withoutSuffix.match(/^(.+?)\s*-\s*(.+)$/);
+  if (genericMatch) {
+    return {
+      competitionName: suffixCompetition || "Länderspiel",
+      home: compactText(genericMatch[1]),
+      away: compactText(genericMatch[2]),
+    };
+  }
+
   return {
     competitionName: normalizedEvent,
     home: `Deutschland ${ageGroup}`,
@@ -162,13 +179,24 @@ export function parseDfbNationalGamesFromHtml(html, options = {}) {
     .map((cells) => {
       const dateCell = cells[0] || "";
       const timeCell = /^\d{1,2}:\d{2}$/.test(cells[1] || "") ? cells[1] : "";
-      const eventCell = timeCell ? cells[2] || "" : cells.slice(1).join(" ");
-      const venueCell = timeCell ? cells.slice(3).join(" ") : "";
+      let eventCell = "";
+      let venueCell = "";
+      if (timeCell) {
+        eventCell = cells[2] || "";
+        venueCell = cells.slice(3).join(" ");
+      } else if (cells.length >= 4 || (cells.length === 3 && cells[1])) {
+        eventCell = cells[1] || "";
+        venueCell = cells[2] || "";
+      } else {
+        eventCell = cells.slice(1).join(" ");
+      }
       const { date, dateTo } = parseDfbDateRange(dateCell);
       if (!date) {
         return null;
       }
-      const eventParts = compactText(eventCell).split(/\s{2,}|\s+(?=Sportschule|DFB Campus|Kaiserau|Duisburg|Frankfurt)/);
+      const eventParts = compactText(eventCell).split(
+        /\s{2,}|\s+(?=Sportschule|DFB Campus|Kaiserau|Duisburg|Frankfurt)/,
+      );
       const rawEvent = compactText(eventParts[0] || eventCell);
       const venue = compactText(venueCell || eventParts.slice(1).join(" "));
       const teams = parseTeamsFromEvent(rawEvent, ageGroup);
@@ -302,18 +330,41 @@ function matchesKeywords(tournament, keywords) {
   if (safeKeywords.length === 0) {
     return true;
   }
-  const haystack = normalizeLookup([tournament.name, tournament.venue, tournament.teams?.join(" ")].filter(Boolean).join(" "));
+  const haystack = normalizeLookup(
+    [tournament.name, tournament.venue, tournament.teams?.join(" ")].filter(Boolean).join(" "),
+  );
   return safeKeywords.some((keyword) => haystack.includes(keyword));
 }
 
+function matchesRegion(tournament, regionKeywords) {
+  const safeKeywords = (Array.isArray(regionKeywords) ? regionKeywords : [])
+    .map((keyword) => normalizeLookup(keyword))
+    .filter((keyword) => keyword.length >= 2);
+  if (safeKeywords.length === 0) {
+    return true;
+  }
+  const locationHaystack = normalizeLookup([tournament.venue, tournament.note].filter(Boolean).join(" "));
+  if (locationHaystack) {
+    return safeKeywords.some((keyword) => locationHaystack.includes(keyword));
+  }
+  const fallbackHaystack = normalizeLookup(tournament.name);
+  return safeKeywords.some((keyword) => fallbackHaystack.includes(keyword));
+}
+
 export function extractMeinturnierplanTournaments(html, options = {}) {
-  const tournaments = [...extractTournamentsFromMapJson(html, options), ...extractTournamentsFromPublicList(html, options)];
+  const tournaments = [
+    ...extractTournamentsFromMapJson(html, options),
+    ...extractTournamentsFromPublicList(html, options),
+  ];
   const byId = new Map();
   for (const tournament of tournaments) {
     if (!overlapsDateRange(tournament.dateFrom, tournament.dateTo, options.fromDate, options.toDate)) {
       continue;
     }
     if (!matchesKeywords(tournament, options.keywords)) {
+      continue;
+    }
+    if (!matchesRegion(tournament, options.regionKeywords)) {
       continue;
     }
     byId.set(tournament.id, tournament);

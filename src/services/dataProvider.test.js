@@ -201,6 +201,95 @@ describe("data provider", () => {
     );
   });
 
+  it("passes selected region metadata to meinturnierplan import", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [
+        {
+          id: "mtp-1",
+          externalId: "1",
+          name: "Pfingstcup U12",
+          dateFrom: "2026-06-01",
+          dateTo: "2026-06-01",
+          url: "https://www.meinturnierplan.de/showit.php?id=1",
+          venue: "Sportschule Wedau, Duisburg",
+        },
+      ],
+    });
+
+    await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      stateCode: "NW",
+      regionName: "Duisburg",
+      regionShortCode: "DUI",
+      fussballDeMapping: {
+        searchName: "Duisburg",
+        areaKeywords: ["duisburg", "wedau", "mulheim"],
+      },
+      jugendId: "f-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeTournaments: true,
+    });
+
+    expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateCode: "NW",
+        regionName: "Duisburg",
+        regionShortCode: "DUI",
+        regionKeywords: ["duisburg", "wedau", "mulheim"],
+      }),
+    );
+  });
+
+  it("requests DFB national games from U15 through U21", async () => {
+    vi.mocked(importTeamNationalGames).mockResolvedValue({
+      ok: true,
+      games: [
+        {
+          id: "dfb-u21-1",
+          ageGroup: "U21",
+          home: "Deutschland",
+          away: "Georgien",
+          date: "2026-10-06",
+          time: "--:--",
+          venue: "Aachen",
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ games: [] }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "a-jugend",
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeNationalGames: true,
+    });
+
+    expect(result.source).toBe("combined");
+    expect(result.games.some((game) => game.ageGroup === "U21")).toBe(true);
+    expect(importTeamNationalGames).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ageGroups: ["U15", "U16", "U17", "U18", "U19", "U20", "U21"],
+      }),
+    );
+  });
+
   it("falls back to adapter when tournament import returns empty", async () => {
     vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
       ok: true,
@@ -661,10 +750,7 @@ describe("data provider", () => {
     expect(result.source).toBe("adapter");
     expect(result.games).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-      "http://localhost:8787/api/games",
-      "/api/games",
-    ]);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(["http://localhost:8787/api/games", "/api/games"]);
   });
 
   it("probiert unter iOS-Capacitor bei /api/games zuerst lokale Adapter-Hosts", async () => {

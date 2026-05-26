@@ -39,7 +39,7 @@ const GENERIC_TEAM_TOKENS = new Set([
   "u",
 ]);
 const LEAGUE_KEYWORDS = ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"];
-const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19"];
+const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19", "U20", "U21"];
 
 function toLookupKey(value) {
   return String(value || "")
@@ -55,7 +55,7 @@ function toTeamSearchKey(value) {
   return toLookupKey(value)
     .replace(/\bschwarz weiss\b/g, "sw")
     .replace(/\brot weiss\b/g, "rw")
-    .replace(/\bu ?(13|14|15|16|17|18|19)\b/g, "u")
+    .replace(/\bu ?(13|14|15|16|17|18|19|20|21)\b/g, "u")
     .replace(/\bjunioren?\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -127,14 +127,7 @@ function isLeagueMatch(query, game) {
   if (!queryKey) {
     return false;
   }
-  const candidates = [
-    game?.league,
-    game?.liga,
-    game?.competition,
-    game?.competitionName,
-    game?.division,
-    game?.staffel,
-  ]
+  const candidates = [game?.league, game?.liga, game?.competition, game?.competitionName, game?.division, game?.staffel]
     .map((value) => String(value || "").trim())
     .filter(Boolean);
   return candidates.some((candidate) => {
@@ -194,7 +187,9 @@ async function fetchWithTimeout(url, options, timeoutMs, errorPrefix) {
 }
 
 function isLocalHost(hostname) {
-  const host = String(hostname || "").toLowerCase().trim();
+  const host = String(hostname || "")
+    .toLowerCase()
+    .trim();
   return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0";
 }
 
@@ -513,7 +508,11 @@ function parseKm(value) {
     return null;
   }
 
-  const parsed = Number(String(value).replace(/,/g, ".").replace(/[^\d.]/g, ""));
+  const parsed = Number(
+    String(value)
+      .replace(/,/g, ".")
+      .replace(/[^\d.]/g, ""),
+  );
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null;
 }
 
@@ -528,9 +527,7 @@ function isRetryableProviderError(error) {
 
 async function runProviderWithRetry(providerName, providerFn, context, retryDelaysMs = PROVIDER_RETRY_DELAYS_MS) {
   const safeRetryDelays = Array.isArray(retryDelaysMs)
-    ? retryDelaysMs
-        .map((delay) => Number(delay))
-        .filter((delay) => Number.isFinite(delay) && delay >= 0)
+    ? retryDelaysMs.map((delay) => Number(delay)).filter((delay) => Number.isFinite(delay) && delay >= 0)
     : PROVIDER_RETRY_DELAYS_MS;
   let lastError = null;
 
@@ -620,7 +617,13 @@ function normalizeUploadedGame(rawGame, index, context) {
 
   const venue = rawGame.venue ?? rawGame.spielort ?? rawGame.ort ?? rawGame.location ?? "Sportanlage";
   const matchUrl = String(
-    rawGame.matchUrl ?? rawGame.match_url ?? rawGame.sourceUrl ?? rawGame.source_url ?? rawGame.url ?? rawGame.link ?? "",
+    rawGame.matchUrl ??
+      rawGame.match_url ??
+      rawGame.sourceUrl ??
+      rawGame.source_url ??
+      rawGame.url ??
+      rawGame.link ??
+      "",
   ).trim();
   const jugendId =
     rawGame.jugendId ?? rawGame.jugend ?? rawGame.altersklasse ?? rawGame.ageGroup ?? context.jugendId ?? "";
@@ -658,7 +661,9 @@ function normalizeUploadedGame(rawGame, index, context) {
       jugendId,
       kreisId,
       league: String(league || "").trim(),
-      competitionName: String(rawGame.competitionName ?? rawGame.wettbewerbName ?? rawGame.spielklasseName ?? rawGame.staffelName ?? "").trim(),
+      competitionName: String(
+        rawGame.competitionName ?? rawGame.wettbewerbName ?? rawGame.spielklasseName ?? rawGame.staffelName ?? "",
+      ).trim(),
     },
   };
 }
@@ -726,7 +731,7 @@ export function parseUploadedGamesReport(fileText, fileTypeHint, context) {
 
   if (type.includes("json")) {
     const parsed = JSON.parse(fileText);
-    rows = Array.isArray(parsed) ? parsed : parsed.games ?? [];
+    rows = Array.isArray(parsed) ? parsed : (parsed.games ?? []);
   } else {
     rows = parseCsvRows(fileText);
   }
@@ -891,7 +896,10 @@ export function buildMockSchedule(teams, jugendId, fromDate, kreisId, toDate) {
   const kickoffs = KICKOFF_ZEITEN[jugendId] || ["13:00", "14:00", "15:00"];
   const shuffled = [...teams].sort(() => Math.random() - 0.5);
   const rangeDays = toDate
-    ? Math.max(1, Math.round((new Date(`${toDate}T00:00:00`) - new Date(`${fromDate}T00:00:00`)) / (1000 * 60 * 60 * 24)))
+    ? Math.max(
+        1,
+        Math.round((new Date(`${toDate}T00:00:00`) - new Date(`${fromDate}T00:00:00`)) / (1000 * 60 * 60 * 24)),
+      )
     : 14;
 
   if (jugend?.turnier) {
@@ -1030,13 +1038,19 @@ async function fetchGamesAdapter(params) {
             adapterErrorDetail = compactResponsePreview(rawError);
           }
           if (response.status === 401) {
-            throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
+            throw new Error(
+              "Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.",
+            );
           }
-          throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
+          throw new Error(
+            adapterErrorDetail
+              ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}`
+              : `Adapter HTTP ${response.status}`,
+          );
         }
 
         const nextPayload = await parseJsonResponseStrict(response, endpoint);
-        const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
+        const nextRawGames = Array.isArray(nextPayload) ? nextPayload : (nextPayload.games ?? []);
 
         if (!nextRawGames.length) {
           sawEmptyResponse = true;
@@ -1098,13 +1112,19 @@ async function fetchGamesAdapter(params) {
               adapterErrorDetail = compactResponsePreview(rawError);
             }
             if (response.status === 401) {
-              throw new Error("Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.");
+              throw new Error(
+                "Adapter HTTP 401 (Unauthorized). Interner Zugriffstoken passt nicht zur Adapter-Konfiguration.",
+              );
             }
-            throw new Error(adapterErrorDetail ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}` : `Adapter HTTP ${response.status}`);
+            throw new Error(
+              adapterErrorDetail
+                ? `Adapter HTTP ${response.status}: ${adapterErrorDetail}`
+                : `Adapter HTTP ${response.status}`,
+            );
           }
 
           const nextPayload = await parseJsonResponseStrict(response, endpoint);
-          const nextRawGames = Array.isArray(nextPayload) ? nextPayload : nextPayload.games ?? [];
+          const nextRawGames = Array.isArray(nextPayload) ? nextPayload : (nextPayload.games ?? []);
           if (!nextRawGames.length) {
             continue;
           }
@@ -1126,12 +1146,14 @@ async function fetchGamesAdapter(params) {
 
   if (!payload) {
     if (sawEmptyResponse) {
-      throw new Error("Für diese Region wurden keine Spiele gefunden. Bitte Zeitraum, Altersklasse oder Region ändern.");
+      throw new Error(
+        "Für diese Region wurden keine Spiele gefunden. Bitte Zeitraum, Altersklasse oder Region ändern.",
+      );
     }
     const candidateInfo = endpointCandidates.length > 1 ? ` (getestet: ${endpointCandidates.join(", ")})` : "";
     throw new Error(`${connectionError?.message || "Adapter nicht erreichbar."}${candidateInfo}`);
   }
-  const rawGames = Array.isArray(payload) ? payload : payload.games ?? [];
+  const rawGames = Array.isArray(payload) ? payload : (payload.games ?? []);
 
   const report = parseUploadedGamesReport(JSON.stringify(rawGames), "adapter.json", {
     kreisId: params.kreisId,
@@ -1167,10 +1189,7 @@ async function fetchGamesAdapter(params) {
     return {
       games: markSelectedTeamGames(broadFilteredGames, querySplit.teams),
       meta: {
-        teamFilter:
-          payload && !Array.isArray(payload) && payload.teamFilter
-            ? payload.teamFilter
-            : fallbackTeamFilter,
+        teamFilter: payload && !Array.isArray(payload) && payload.teamFilter ? payload.teamFilter : fallbackTeamFilter,
       },
     };
   }
@@ -1181,7 +1200,9 @@ async function fetchGamesAdapter(params) {
 async function fetchGamesMock(params) {
   const inputTeams = Array.isArray(params.teams) ? params.teams.filter(Boolean) : [];
   const seedTeams =
-    inputTeams.length >= 2 ? inputTeams : [...inputTeams, ...buildMockTeams(params.kreisId, Math.max(2, 8 - inputTeams.length))];
+    inputTeams.length >= 2
+      ? inputTeams
+      : [...inputTeams, ...buildMockTeams(params.kreisId, Math.max(2, 8 - inputTeams.length))];
   const generated = buildMockSchedule(seedTeams, params.jugendId, params.fromDate, params.kreisId, params.toDate);
   const filteredGames = filterGamesBySelection(generated, params);
   return {
@@ -1236,12 +1257,37 @@ function extractNationalAgeGroup(item) {
     .map((value) => String(value || "").trim())
     .filter(Boolean);
   for (const value of candidates) {
-    const match = value.match(/\bU(15|16|17|18|19)\b/i);
+    const match = value.match(/\bU(15|16|17|18|19|20|21)\b/i);
     if (match) {
       return `U${match[1]}`;
     }
   }
   return "";
+}
+
+function buildTournamentRegionKeywords(params) {
+  const values = [
+    params?.regionName,
+    params?.fussballDeMapping?.searchName,
+    params?.fussballDeMapping?.region,
+    params?.fussballDeMapping?.kreis,
+    ...(Array.isArray(params?.fussballDeMapping?.areaKeywords) ? params.fussballDeMapping.areaKeywords : []),
+  ];
+  const seen = new Set();
+  const keywords = [];
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (!text) {
+      continue;
+    }
+    const lookup = toLookupKey(text);
+    if (!lookup || seen.has(lookup)) {
+      continue;
+    }
+    seen.add(lookup);
+    keywords.push(lookup);
+  }
+  return keywords;
 }
 
 async function fetchGamesTournament(params) {
@@ -1251,6 +1297,10 @@ async function fetchGamesTournament(params) {
     teams: Array.isArray(params.teams) ? params.teams : [],
     kreisId: params.kreisId,
     kreisLabel: params.regionName || params.kreisId || "",
+    stateCode: params.stateCode || "",
+    regionName: params.regionName || "",
+    regionShortCode: params.regionShortCode || "",
+    regionKeywords: buildTournamentRegionKeywords(params),
     jugendId: params.jugendId,
     jugendLabel: params.jugendId || "",
   });
@@ -1316,7 +1366,9 @@ async function fetchGamesNational(params) {
   if (!nationalGames.length) {
     throw new Error("Keine passenden Länderspiele gefunden.");
   }
-  const games = nationalGames.map((item, index) => nationalGameToGame(item, index, params)).sort(compareGamesByDateTime);
+  const games = nationalGames
+    .map((item, index) => nationalGameToGame(item, index, params))
+    .sort(compareGamesByDateTime);
   return {
     games: markSelectedTeamGames(games, params.teams),
     meta: {
@@ -1402,9 +1454,19 @@ export async function fetchGamesWithProviders({
       const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
       try {
         if (isOptionalAggregateProvider(providerName)) {
-          return await runOptionalProviderWithTimeout(providerName, providerMap[providerName], context, providerRetryDelays);
+          return await runOptionalProviderWithTimeout(
+            providerName,
+            providerMap[providerName],
+            context,
+            providerRetryDelays,
+          );
         }
-        const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
+        const providerResult = await runProviderWithRetry(
+          providerName,
+          providerMap[providerName],
+          context,
+          providerRetryDelays,
+        );
         return { providerName, providerResult };
       } catch (error) {
         return { providerName, error };
@@ -1466,7 +1528,11 @@ export async function fetchGamesWithProviders({
           deduped.set(key, game);
         }
       }
-      return { games: Array.from(deduped.values()).sort(compareGamesByDateTime), source: "combined", meta: aggregatedMeta };
+      return {
+        games: Array.from(deduped.values()).sort(compareGamesByDateTime),
+        source: "combined",
+        meta: aggregatedMeta,
+      };
     }
 
     if (baseError) {
@@ -1479,7 +1545,12 @@ export async function fetchGamesWithProviders({
   for (const providerName of providerOrder) {
     try {
       const providerRetryDelays = providerName === "adapter" ? [] : retryDelaysMs;
-      const providerResult = await runProviderWithRetry(providerName, providerMap[providerName], context, providerRetryDelays);
+      const providerResult = await runProviderWithRetry(
+        providerName,
+        providerMap[providerName],
+        context,
+        providerRetryDelays,
+      );
       const games = Array.isArray(providerResult) ? providerResult : providerResult?.games || [];
       const meta = Array.isArray(providerResult) ? {} : providerResult?.meta || {};
       if (games?.length) {
