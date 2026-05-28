@@ -49,6 +49,42 @@ function createBaseContext(overrides = {}) {
   };
 }
 
+async function uploadHrworksTimesheet(container, csv, filename = "AEB Test.csv") {
+  const fileInput = container.querySelector("input[type='file']");
+  const file = {
+    name: filename,
+    async text() {
+      return csv;
+    },
+  };
+  fireEvent.change(fileInput, { target: { files: [file] } });
+}
+
+async function dropHrworksTimesheet(csv, filename = "AEB Test.csv") {
+  const file = {
+    name: filename,
+    async text() {
+      return csv;
+    },
+  };
+  fireEvent.drop(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i }), {
+    dataTransfer: { files: [file] },
+  });
+}
+
+async function completeHrworksWizardUntilStep3(container, csv, filename = "AEB Test.csv") {
+  await uploadHrworksTimesheet(container, csv, filename);
+  const getDialog = () => screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+  await waitFor(() => {
+    expect(within(getDialog()).getByLabelText(/Ich bin jetzt in HRworks eingeloggt/i)).toBeInTheDocument();
+  });
+  fireEvent.click(within(getDialog()).getByLabelText(/Ich bin jetzt in HRworks eingeloggt/i));
+  await waitFor(() => {
+    expect(within(getDialog()).getByRole("button", { name: /^HRworks importieren$/i })).toBeInTheDocument();
+  });
+  return getDialog();
+}
+
 describe("PlanPage", () => {
   beforeEach(() => {
     mockedUseScoutX.mockReset();
@@ -115,6 +151,7 @@ describe("PlanPage", () => {
             priority: 5,
             dateObj: new Date("2026-04-10T00:00:00"),
             time: "14:00",
+            league: "D-Junioren Kreisleistungsklasse",
             matchUrl: "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
           },
         ],
@@ -124,6 +161,7 @@ describe("PlanPage", () => {
     render(<PlanPage />);
 
     expect(screen.getByText(/Alle 1 Spiele/i)).toBeInTheDocument();
+    expect(screen.getByText(/Liga\/Wettbewerb: D-Junioren Kreisleistungsklasse/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Zum Spiel auf fussball.de für Team A gegen Team B/i })).toHaveAttribute(
       "href",
       "https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ",
@@ -166,7 +204,7 @@ describe("PlanPage", () => {
     expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/Keine Spiele im Plan/i));
   });
 
-  it("öffnet HRworks-Review und blockiert Import bei fehlenden Pflichtdaten", () => {
+  it("öffnet den HRworks-Wizard und blockiert den finalen Import bei fehlenden Pflichtdaten", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
@@ -190,12 +228,16 @@ describe("PlanPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
 
-    expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
-    expect(screen.getByText(/Abfahrtsort fehlt/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).toBeDisabled();
+    const dialog = screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText(/STEP 1/i)).toBeInTheDocument();
+    expect(screen.queryByText(/STEP 2/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Abfahrtsort fehlt/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^HRworks importieren$/i })).not.toBeInTheDocument();
   });
 
-  it("setzt Zweck und Bemerkung auf Heimmannschaften und erlaubt leeren Zielort", () => {
+  it("setzt Zweck und Bemerkung auf Heimmannschaften und verlangt trotzdem erst die XLSX-Datei", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
@@ -226,16 +268,62 @@ describe("PlanPage", () => {
     render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
 
-    expect(screen.getAllByText("Sichtung / (Team A)").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText(/Sichtung \/ \(Team A vs Team B\)/)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Sternbuschweg 326 -> Team A \| Team A -> Sternbuschweg 326/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/Zielort fehlt/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).toBeDisabled();
-    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i })).not.toBeDisabled();
+    const dialog = screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+
+    expect(screen.queryByText(/STEP 2/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Ich bin jetzt in HRworks eingeloggt/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^HRworks importieren$/i })).not.toBeInTheDocument();
   });
 
-  it("nutzt den Abfahrtsort aus der Plan-Historie für den HRworks-Import", () => {
+  it("verarbeitet eine gedroppte Arbeitszeitdatei direkt im Wizard und schaltet danach auf Schritt 2", async () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Team A vs Team B",
+        startLocation: { label: "Sternbuschweg 326" },
+        routeOverview: {
+          legs: [
+            { from: "Sternbuschweg 326", to: "Sportplatz A", distanceKm: 10.2 },
+            { from: "Sportplatz A", to: "Sternbuschweg 326", distanceKm: 10.1 },
+          ],
+          totalKm: 20.3,
+          estimatedMinutes: 31,
+        },
+        games: [
+          {
+            id: "game-1",
+            home: "Team A",
+            away: "Team B",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            date: "2026-04-10",
+            time: "14:00",
+            venue: "Sportplatz A",
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+
+    await dropHrworksTimesheet(
+      [
+        "Name;Datum;Beginn;Ende;Vermerk",
+        "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+      ].join("\n"),
+      "AEB April Onay.csv",
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(/Ich bin jetzt in HRworks eingeloggt/i)).toBeInTheDocument();
+    });
+    expect(within(dialog).getByText(/AEB April Onay\.csv/i)).toBeInTheDocument();
+  });
+
+  it("nutzt den Abfahrtsort aus der Plan-Historie für den HRworks-Import", async () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
@@ -263,15 +351,21 @@ describe("PlanPage", () => {
       }),
     );
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
 
-    expect(screen.getByText(/Abfahrtsort/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Sternbuschweg 326/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Abfahrtsort fehlt/i)).not.toBeInTheDocument();
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
+
+    expect(within(dialog).getByText(/Abfahrtsort/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/Sternbuschweg 326/i).length).toBeGreaterThan(0);
+    expect(within(dialog).queryByText(/Abfahrtsort fehlt/i)).not.toBeInTheDocument();
   });
 
-  it("verwendet für HRworks den gespeicherten Kurz-Abfahrtsort statt der langen Geocode-Adresse", () => {
+  it("verwendet für HRworks den gespeicherten Kurz-Abfahrtsort statt der langen Geocode-Adresse", async () => {
     window.localStorage.setItem("scoutx.hrworksSmartDefaults.v1", JSON.stringify({
       "Onay Kirmizigül": {
         startLocation: "Sternbuschweg 326",
@@ -304,16 +398,21 @@ describe("PlanPage", () => {
       }),
     );
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
 
-    const dialog = screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
+
     expect(within(dialog).getAllByText(/Sternbuschweg 326/i).length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText(/Sternbuschweg 326 -> Team A \| Team A -> Sternbuschweg 326/i).length).toBeGreaterThan(0);
     expect(within(dialog).queryByText(new RegExp(rawStart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).not.toBeInTheDocument();
   });
 
-  it("zeigt im HRworks-Workflow die Route mit Heimmannschaften und Rückweg statt Venue-Labels", () => {
+  it("zeigt im HRworks-Workflow die Route mit Heimmannschaften und Rückweg statt Venue-Labels", async () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B\nSpiel 2: Team C vs Team D",
@@ -348,10 +447,15 @@ describe("PlanPage", () => {
       }),
     );
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;25.04.2026;18:00;20:30;Sichtung",
+    ].join("\n");
 
-    const dialog = screen.getByRole("dialog", { name: /HRworks-Import prüfen/i });
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
+
     expect(within(dialog).getAllByText(/Sternbuschweg 326 -> Team A \| Team A -> Team C \| Team C -> Sternbuschweg 326/i).length).toBeGreaterThanOrEqual(1);
     expect(within(dialog).queryByText(/Sportplatz A, Duisburg/)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/Sportplatz B, Duisburg/)).not.toBeInTheDocument();
@@ -383,29 +487,20 @@ describe("PlanPage", () => {
     );
 
     const { container } = render(<PlanPage />);
-    const fileInput = container.querySelector("input[type='file']");
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
     const csv = [
       "Name;Datum;Beginn;Ende;Vermerk",
       "Onay Kirmizigül;11.04.2026;08:00;13:00;Sichtung",
     ].join("\n");
-    const file = {
-      name: "AEB April Onay.csv",
-      async text() {
-        return csv;
-      },
-    };
 
-    fireEvent.change(fileInput, { target: { files: [file] } });
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
 
-    await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
-    });
-    expect(screen.getByText("2026-04-11")).toBeInTheDocument();
-    expect(screen.getByText("08:00")).toBeInTheDocument();
-    expect(screen.getByText("13:00")).toBeInTheDocument();
-    expect(screen.getByText(/XLSX-Datum ist bindend: 2026-04-11/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Sichtung / (Team A)").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText(/Sichtung \/ \(Team A vs Team B\)/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("2026-04-11")).toBeInTheDocument();
+    expect(within(dialog).getByText("08:00")).toBeInTheDocument();
+    expect(within(dialog).getByText("13:00")).toBeInTheDocument();
+    expect(within(dialog).getByText(/XLSX-Datum ist bindend: 2026-04-11/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Sichtung / (Team A)").length).toBeGreaterThanOrEqual(2);
+    expect(within(dialog).queryByText(/Sichtung \/ \(Team A vs Team B\)/)).not.toBeInTheDocument();
   });
 
   it("wählt bei mehreren XLSX-Tagen automatisch den zum Plan nächstliegenden Tag", async () => {
@@ -435,69 +530,64 @@ describe("PlanPage", () => {
     );
 
     const { container } = render(<PlanPage />);
-    const fileInput = container.querySelector("input[type='file']");
+    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
     const csv = [
       "Name;Datum;Beginn;Ende;Vermerk",
       "Onay Kirmizigül;25.04.2026;08:00;13:00;Sichtung",
       "Onay Kirmizigül;17.05.2026;18:00;20:30;Sichtung",
     ].join("\n");
-    const file = {
-      name: "AEB Mai Onay.csv",
-      async text() {
-        return csv;
-      },
-    };
 
-    fireEvent.change(fileInput, { target: { files: [file] } });
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB Mai Onay.csv");
 
-    await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
-    });
-    expect(screen.getByText("2026-05-17")).toBeInTheDocument();
-    expect(screen.getByText("18:00")).toBeInTheDocument();
-    expect(screen.getByText("20:30")).toBeInTheDocument();
-    expect(screen.getByText(/nächstliegender Sichtungstag 2026-05-17/i)).toBeInTheDocument();
-    expect(screen.getByText(/XLSX-Datum ist bindend: 2026-05-17/i)).toBeInTheDocument();
+    expect(within(dialog).getByText("2026-05-17")).toBeInTheDocument();
+    expect(within(dialog).getByText("18:00")).toBeInTheDocument();
+    expect(within(dialog).getByText("20:30")).toBeInTheDocument();
+    expect(within(dialog).getByText(/nächstliegender Sichtungstag 2026-05-17/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/XLSX-Datum ist bindend: 2026-05-17/i)).toBeInTheDocument();
     expect(confirmSpy).toHaveBeenCalled();
   });
 
-  it("blockiert Importstart wenn Betriebsentscheidungen fehlen", () => {
-    const setErr = vi.fn();
+  it("zeigt auf der Plan-Seite nur noch den einen HRworks-Einstieg und keine irreführenden Nebenbuttons", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
-        startLocation: { label: "Sternbuschweg 326" },
-        setErr,
-        games: [
-          {
-            id: "game-1",
-            home: "Team A",
-            away: "Team B",
-            priority: 5,
-            dateObj: new Date("2026-04-10T00:00:00"),
-            date: "2026-04-10",
-            time: "14:00",
-            venue: "Sportplatz A",
-          },
-        ],
       }),
     );
 
     render(<PlanPage />);
-    fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
-    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern und abschließen/i }));
 
-    expect(setErr).toHaveBeenCalledWith(expect.stringMatching(/HRworks-Setup unvollständig/i));
+    expect(screen.getByRole("button", { name: /In HRworks importieren/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Arbeitszeitdatei importieren/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /HRworks Mapping bearbeiten/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /HRworks Pflichtfelder/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /HRworks Setup/i })).not.toBeInTheDocument();
   });
 
-  it("lässt nach einem Testlauf den produktiven HRworks-Start im Review aktiv", () => {
-    const setErr = vi.fn();
+  it("öffnet HRworks und meldet transparent, wenn derselbe Chrome nicht direkt nutzbar ist", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return { ok: true, status: "started" };
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return {
+            ok: true,
+            url: "https://ssl4.hrworks.de/k/dashboard",
+            sameBrowser: false,
+            warning: "Aktiviere in Chrome einmal chrome://inspect/#remote-debugging.",
+          };
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
     mockedUseScoutX.mockReturnValue(
       createBaseContext({
         plan: "Spiel 1: Team A vs Team B",
-        startLocation: { label: "Sternbuschweg 326" },
-        setErr,
         games: [
           {
             id: "game-1",
@@ -512,28 +602,29 @@ describe("PlanPage", () => {
         ],
       }),
     );
-    window.localStorage.setItem("scoutx.hrworksPolicy.v1", JSON.stringify({
-      defaultCostCenter: "Junioren allgemein (321000)",
-      requireSaveConfirmation: true,
-      aggregationMode: "per_day",
-      finalSaveMode: "auto_save",
-      requiredFields: {
-        purpose: true,
-        note: true,
-        departureLocation: true,
-        destinationLocation: false,
-        costCenter: true,
-      },
-    }));
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
-    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Testlauf \(kein Speichern\)/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
 
-    expect(screen.getByRole("dialog", { name: /HRworks-Import prüfen/i })).toBeInTheDocument();
-    expect(screen.getByText(/Testlauf abgeschlossen/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i })).not.toBeDisabled();
+    await uploadHrworksTimesheet(container, csv, "AEB April Onay.csv");
+    const dialog = await waitFor(() => screen.getByRole("dialog", { name: /HRworks-Import prüfen/i }));
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /HRworks öffnen/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
+      expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/hrworks/bridge/start", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        "http://127.0.0.1:8791/api/hrworks/open-login",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(within(dialog).getByRole("status")).toHaveTextContent(/ScoutX-Automationsprofil|chrome:\/\/inspect\/#remote-debugging/i);
   });
 
   it("startet beim produktiven HRworks-Klick die lokale Automation-Bridge", async () => {
@@ -590,10 +681,15 @@ describe("PlanPage", () => {
       },
     }));
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
-    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
+
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^HRworks importieren$/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/api/hrworks/import", expect.objectContaining({
@@ -662,43 +758,18 @@ describe("PlanPage", () => {
       },
     }));
 
-    render(<PlanPage />);
+    const { container } = render(<PlanPage />);
     fireEvent.click(screen.getByRole("button", { name: /In HRworks importieren/i }));
-    fireEvent.click(screen.getByLabelText(/Ich bin in HRworks eingeloggt/i));
-    fireEvent.click(screen.getByRole("button", { name: /Produktiv in HRworks speichern/i }));
+    const csv = [
+      "Name;Datum;Beginn;Ende;Vermerk",
+      "Onay Kirmizigül;10.04.2026;08:00;13:00;Sichtung",
+    ].join("\n");
+
+    const dialog = await completeHrworksWizardUntilStep3(container, csv, "AEB April Onay.csv");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^HRworks importieren$/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(confirmSpy).not.toHaveBeenCalled();
-  });
-
-
-  it("zeigt sichtbare HRworks-Setup-Warnkarte bei fehlenden Entscheidungen", () => {
-    mockedUseScoutX.mockReturnValue(
-      createBaseContext({
-        plan: "Spiel 1: Team A vs Team B",
-      }),
-    );
-
-    render(<PlanPage />);
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/HRworks-Setup unvollständig/i);
-    expect(screen.getByText(/Aggregation nicht festgelegt/i)).toBeInTheDocument();
-    expect(screen.getByText(/Finaler Speichermodus nicht festgelegt/i)).toBeInTheDocument();
-  });
-
-  it("übernimmt empfohlenes HRworks-Setup und entfernt die Warnkarte", () => {
-    mockedUseScoutX.mockReturnValue(
-      createBaseContext({
-        plan: "Spiel 1: Team A vs Team B",
-      }),
-    );
-
-    render(<PlanPage />);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Empfohlenes HRworks Setup anwenden/i }));
-
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("zeigt Plan-Historie und lädt einen historischen Plan", () => {

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
+import { resolveGameCompetitionLabel } from "../utils/gameCompetition";
 import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
 import { cleanScoutXText } from "./shared";
 import { useGames } from "./GamesContext";
@@ -83,6 +84,7 @@ function buildManualScoutX({ games, jugendLabel, kreisLabel, isTurnier, usedFall
     sortedGames.forEach((game, index) => {
       const routeTime = KNOWN_TIME_RE.test(String(game.time || "").trim()) ? game.time : "--:--";
       lines.push(`${index + 1}. ${routeTime} — ${game.home} vs. ${game.away} | ${game.venue || "Sportanlage"}`);
+      lines.push(`   Liga/Wettbewerb: ${resolveGameCompetitionLabel(game)}`);
     });
   }
 

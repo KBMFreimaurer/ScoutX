@@ -378,7 +378,8 @@ export function SetupPage() {
         Liga-Parameter (optional)
       </div>
       <p style={{ fontSize: 12, color: C.gray, marginTop: 0 }}>
-        Definiere Ligen oder Suchbegriffe, die bei der Spielauswahl als Team-Parameter berücksichtigt werden.
+        Wenn du hier eine Liga angibst, nimmt ScoutX nur passende Spiele in den Plan auf. Regionale Varianten wie
+        Leistungsklasse oder Kreisleistungsklasse werden dabei tolerant abgeglichen.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input

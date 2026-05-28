@@ -5,6 +5,19 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { fillHrworksTravelExpenseForm } from "../e2e/helpers/hrworksAutomation.js";
+import {
+  buildHrworksBridgeActivationScript,
+  resolveHrworksBridgeBrowserConfig,
+  resolveHrworksBridgeSessionConfig,
+} from "./hrworksAutomationBridgeConfig.js";
+import {
+  isHrworksPageUrl,
+  openHrworksLoginTab,
+  pickPreferredHrworksPage,
+} from "./hrworksAutomationBridgePages.js";
+import { createHrworksBridgeSessionManager } from "./hrworksAutomationBridgeLifecycle.js";
+import { buildHrworksOpenLoginResponse } from "./hrworksAutomationBridgeResponses.js";
+import { createHrworksBridgeSession } from "./hrworksAutomationBridgeSession.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -12,8 +25,18 @@ const port = Number(process.env.HRWORKS_BRIDGE_PORT || 8791);
 const profileDir = process.env.HRWORKS_BRIDGE_PROFILE || path.join(repoRoot, ".hrworks-automation-profile");
 const startUrl = process.env.HRWORKS_START_URL || "https://ssl4.hrworks.de/k/dashboard";
 const execFileAsync = promisify(execFile);
-
-let contextPromise = null;
+const browserConfig = resolveHrworksBridgeBrowserConfig(process.env);
+const sessionConfig = resolveHrworksBridgeSessionConfig(process.env);
+const sessionManager = createHrworksBridgeSessionManager({
+  createSession: () =>
+    createHrworksBridgeSession({
+      chromiumImpl: chromium,
+      env: process.env,
+      profileDir,
+      browserConfig,
+      sessionConfig,
+    }),
+});
 
 function sendJson(response, status, body) {
   response.writeHead(status, {
@@ -41,27 +64,17 @@ function readBody(request) {
   });
 }
 
+async function getSession() {
+  return sessionManager.getSession();
+}
+
 async function getContext() {
-  if (!contextPromise) {
-    contextPromise = chromium.launchPersistentContext(profileDir, {
-      headless: false,
-      viewport: { width: 1280, height: 900 },
-    });
-  }
-  return contextPromise;
+  const session = await getSession();
+  return session.context;
 }
 
 async function selectedPage(context) {
-  const pages = context
-    .pages()
-    .filter((page) => !page.isClosed() && !String(page.url() || "").startsWith("devtools://"));
-  const preferredPage =
-    pages.find((page) => String(page.url() || "").startsWith("https://ssl4.hrworks.de/")) ||
-    pages.find((page) => {
-      const url = String(page.url() || "");
-      return url === "about:blank" || url.startsWith("chrome://newtab");
-    }) ||
-    pages.at(-1);
+  const preferredPage = pickPreferredHrworksPage(context.pages());
   return preferredPage || context.newPage();
 }
 
@@ -70,12 +83,7 @@ async function activateBrowserWindow() {
     return;
   }
   try {
-    await execFileAsync("osascript", [
-      "-e",
-      'tell application "Google Chrome for Testing" to activate',
-      "-e",
-      'tell application "System Events" to tell process "Google Chrome for Testing" to set frontmost to true',
-    ]);
+    await execFileAsync("osascript", buildHrworksBridgeActivationScript(browserConfig.appName));
   } catch (error) {
     console.warn(`Could not activate browser window: ${String(error?.message || error)}`);
   }
@@ -83,7 +91,7 @@ async function activateBrowserWindow() {
 
 async function ensureHrworksPage(context) {
   const page = await selectedPage(context);
-  if (!String(page.url() || "").startsWith("https://ssl4.hrworks.de/")) {
+  if (!isHrworksPageUrl(page.url())) {
     await page.goto(startUrl, { waitUntil: "domcontentloaded" });
   }
   await page.bringToFront();
@@ -93,8 +101,11 @@ async function ensureHrworksPage(context) {
 
 async function runImport(payload, options) {
   const startedAtMs = Date.now();
-  const context = await getContext();
-  const page = await ensureHrworksPage(context);
+  const { session, page } = await sessionManager.withSession(async (activeSession) => {
+    const context = activeSession.context;
+    const page = await ensureHrworksPage(context);
+    return { session: activeSession, page };
+  });
 
   const result = await fillHrworksTravelExpenseForm(page, payload, {
     confirmBeforeSave: true,
@@ -106,11 +117,27 @@ async function runImport(payload, options) {
   return {
     ok: true,
     status: result?.reportsCompleted ? "completed" : "saved",
+    browserMode: session.mode,
+    sameBrowser: session.sameBrowser,
     result,
     url: page.url(),
     durationMs: Number(result?.metrics?.durationMs || Math.max(0, Date.now() - startedAtMs)),
     metrics: result?.metrics || null,
   };
+}
+
+async function openLoginWindow() {
+  const { session, page } = await sessionManager.withSession(async (activeSession) => {
+    const context = activeSession.context;
+    const page = activeSession.sameBrowser
+      ? await openHrworksLoginTab(context, startUrl, async (nextPage) => {
+          await nextPage.bringToFront();
+          await activateBrowserWindow();
+        })
+      : await ensureHrworksPage(context);
+    return { session: activeSession, page };
+  });
+  return buildHrworksOpenLoginResponse(session, page);
 }
 
 const server = http.createServer(async (request, response) => {
@@ -120,7 +147,26 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && request.url === "/health") {
-    sendJson(response, 200, { ok: true, service: "hrworks-automation-bridge" });
+    sendJson(response, 200, {
+      ok: true,
+      service: "hrworks-automation-bridge",
+      browserChannel: browserConfig.channel,
+      sessionStrategy: sessionConfig.strategy,
+    });
+    return;
+  }
+  if (request.method === "POST" && request.url === "/api/hrworks/open-login") {
+    try {
+      const result = await openLoginWindow();
+      console.log(`HRworks login window ready at ${result.url}`);
+      sendJson(response, 200, result);
+    } catch (error) {
+      console.error(`HRworks login window could not be opened: ${String(error?.message || error)}`);
+      sendJson(response, 500, {
+        ok: false,
+        error: String(error?.message || error || "HRworks-Automationsfenster konnte nicht geöffnet werden."),
+      });
+    }
     return;
   }
   if (request.method !== "POST" || request.url !== "/api/hrworks/import") {
@@ -152,10 +198,17 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, "127.0.0.1", () => {
   console.log(`HRworks automation bridge listening on http://127.0.0.1:${port}`);
   console.log(`Browser profile: ${profileDir}`);
-  getContext()
-    .then(async (context) => {
+  console.log(`Browser channel: ${browserConfig.channel} (${browserConfig.appName})`);
+  console.log(`Session strategy: ${sessionConfig.strategy} (${sessionConfig.cdpEndpoint})`);
+  sessionManager.resetSession();
+  getSession()
+    .then(async (session) => {
+      const context = session.context;
       const page = await ensureHrworksPage(context);
-      console.log(`HRworks browser opened: ${page.url()} (${context.pages().length} tab(s))`);
+      console.log(`HRworks browser opened: ${page.url()} (${context.pages().length} tab(s)) · mode=${session.mode} sameBrowser=${session.sameBrowser}`);
+      if (session.attachError) {
+        console.warn(session.attachError);
+      }
     })
     .catch((error) => {
       console.error(`HRworks browser could not be opened: ${String(error?.message || error)}`);

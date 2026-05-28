@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
+import { createHrworksBridgeStartMiddleware } from "./dev/hrworksBridgeStarter.js";
 
 function resolveGitCommit() {
   try {
@@ -16,7 +17,15 @@ function resolveGitCommit() {
 
 export default defineConfig({
   base: "./",
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "scoutx-hrworks-bridge-starter",
+      configureServer(server) {
+        server.middlewares.use(createHrworksBridgeStartMiddleware());
+      },
+    },
+  ],
   define: {
     "globalThis.__SCOUTX_BUILD_ID__": JSON.stringify(resolveGitCommit()),
   },

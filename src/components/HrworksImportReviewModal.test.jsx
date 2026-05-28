@@ -3,12 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { HrworksImportReviewModal } from "./HrworksImportReviewModal";
 
 describe("HrworksImportReviewModal", () => {
-  it("renders review fields and blocks confirm when errors exist", () => {
+  it("shows only step 1 before an xlsx file has been uploaded", () => {
     const onCancel = vi.fn();
-    const onEdit = vi.fn();
     const onConfirm = vi.fn();
-    const onExportOnly = vi.fn();
-    const onDryRun = vi.fn();
+    const onPickFile = vi.fn();
+    const onOpenLogin = vi.fn();
     const onLoginConfirmedChange = vi.fn();
 
     render(
@@ -18,68 +17,149 @@ describe("HrworksImportReviewModal", () => {
           date: "2026-04-20",
           startTime: "08:00",
           endTime: "10:00",
-          workHours: 2,
-          purpose: "Sichtung",
-          note: "Hinweis",
+          purpose: "Sichtung / (A)",
+          note: "Sichtung / (A)",
           departureLocation: "Start",
-          destinationLocation: "Ziel",
-          intermediateStops: ["Stopp"],
           routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
-          costCenter: "321000",
           sourceGames: [{ home: "A", away: "B" }],
+          importSource: "plan",
         }}
-        warnings={[]}
-        errors={["Fehler"]}
+        warnings={["Bitte zuerst XLSX hochladen"]}
+        errors={["Abfahrtsort fehlt"]}
+        uploadedFileName=""
         loginConfirmed={false}
         onLoginConfirmedChange={onLoginConfirmedChange}
         onCancel={onCancel}
-        onEdit={onEdit}
         onConfirm={onConfirm}
-        onExportOnly={onExportOnly}
-        onDryRun={onDryRun}
+        onPickFile={onPickFile}
+        onOpenLogin={onOpenLogin}
       />,
     );
 
     expect(screen.getByRole("dialog", { name: "HRworks-Import prüfen" })).toBeInTheDocument();
-    expect(screen.getByText(/Kompletter HRworks-Workflow/i)).toBeInTheDocument();
-    expect(screen.getByText(/Kilometer-Bemerkung bleibt leer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Berichte werden abgeschlossen/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fehler/)).toBeInTheDocument();
-    expect(screen.getByText(/Zuhause -> Spiel \| Spiel -> Zuhause/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Produktiv in HRworks speichern und abschließen" })).toBeDisabled();
+    expect(screen.getByText(/STEP 1/i)).toBeInTheDocument();
+    expect(screen.queryByText(/STEP 2/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "HRworks öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Daten bearbeiten" }));
-    fireEvent.click(screen.getByRole("button", { name: "Nur Exportdatei erstellen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Testlauf (kein Speichern)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Produktiv in HRworks speichern und abschließen" }));
+    fireEvent.click(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Schließen" }));
 
+    expect(onPickFile).toHaveBeenCalledTimes(1);
+    expect(onOpenLogin).toHaveBeenCalledTimes(0);
     expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(onEdit).toHaveBeenCalledTimes(1);
-    expect(onExportOnly).toHaveBeenCalledTimes(1);
-    expect(onDryRun).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(0);
     expect(onLoginConfirmedChange).toHaveBeenCalledTimes(0);
   });
 
-  it("shows progress while contacting the connector", () => {
+  it("accepts a dropped xlsx file in step 1", () => {
+    const onDropFile = vi.fn();
+    const file = { name: "AEB Mai Onay.xlsx" };
+
     render(
       <HrworksImportReviewModal
         open
-        payload={{ date: "2026-04-20", routeLegs: [], sourceGames: [] }}
+        payload={{
+          date: "2026-04-20",
+          startTime: "08:00",
+          endTime: "10:00",
+          purpose: "Sichtung / (A)",
+          note: "Sichtung / (A)",
+          departureLocation: "Start",
+          routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
+          sourceGames: [{ home: "A", away: "B" }],
+          importSource: "plan",
+        }}
         warnings={[]}
         errors={[]}
-        loginConfirmed
-        automationStarting
+        uploadedFileName=""
+        loginConfirmed={false}
         onLoginConfirmedChange={vi.fn()}
         onCancel={vi.fn()}
-        onEdit={vi.fn()}
         onConfirm={vi.fn()}
-        onExportOnly={vi.fn()}
-        onDryRun={vi.fn()}
+        onPickFile={vi.fn()}
+        onDropFile={onDropFile}
+        onOpenLogin={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: /HRworks Connector wird kontaktiert/i })).toBeDisabled();
+    fireEvent.drop(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i }), {
+      dataTransfer: { files: [file] },
+    });
+
+    expect(onDropFile).toHaveBeenCalledTimes(1);
+    expect(onDropFile).toHaveBeenCalledWith(file);
+  });
+
+  it("shows step 2 after an xlsx file is available and keeps step 3 hidden until login is confirmed", () => {
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={{
+          date: "2026-04-20",
+          startTime: "08:00",
+          endTime: "10:00",
+          purpose: "Sichtung / (A)",
+          note: "Sichtung / (A)",
+          departureLocation: "Start",
+          routeLegs: [],
+          sourceGames: [],
+          importSource: "timesheet",
+        }}
+        warnings={[]}
+        errors={[]}
+        uploadedFileName="AEB Mai Onay.xlsx"
+        loginConfirmed={false}
+        onLoginConfirmedChange={vi.fn()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        onPickFile={vi.fn()}
+        onOpenLogin={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/STEP 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/STEP 2/i)).toBeInTheDocument();
+    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/AEB Mai Onay.xlsx/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "HRworks öffnen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
+  });
+
+  it("enables the final import button once xlsx and login are both confirmed", () => {
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={{
+          date: "2026-04-20",
+          startTime: "08:00",
+          endTime: "10:00",
+          purpose: "Sichtung / (A)",
+          note: "Sichtung / (A)",
+          departureLocation: "Start",
+          routeLegs: [],
+          sourceGames: [],
+          importSource: "timesheet",
+        }}
+        warnings={[]}
+        errors={[]}
+        uploadedFileName="AEB Mai Onay.xlsx"
+        wizardNotice="Empfohlenes HRworks-Setup wurde automatisch angewendet."
+        loginConfirmed
+        onLoginConfirmedChange={vi.fn()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        onPickFile={vi.fn()}
+        onOpenLogin={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Empfohlenes HRworks-Setup wurde automatisch angewendet/i)).toBeInTheDocument();
+    expect(screen.getByText(/AEB Mai Onay.xlsx/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "XLSX erneut hochladen" })).toBeInTheDocument();
+    expect(screen.getByText(/STEP 3/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "HRworks importieren" })).not.toBeDisabled();
   });
 });

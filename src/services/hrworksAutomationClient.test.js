@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveHrworksAutomationEndpoint, startHrworksAutomation } from "./hrworksAutomationClient";
+import {
+  ensureHrworksAutomationBridge,
+  openHrworksAutomationLogin,
+  resolveHrworksAutomationEndpoint,
+  resolveHrworksAutomationHealthEndpoint,
+  resolveHrworksAutomationLoginEndpoint,
+  resolveHrworksAutomationStarterEndpoint,
+  startHrworksAutomation,
+} from "./hrworksAutomationClient";
 
 describe("hrworksAutomationClient", () => {
   afterEach(() => {
@@ -8,6 +16,65 @@ describe("hrworksAutomationClient", () => {
 
   it("uses the local automation bridge by default", () => {
     expect(resolveHrworksAutomationEndpoint()).toBe("http://127.0.0.1:8791/api/hrworks/import");
+  });
+
+  it("derives health and starter endpoints for the local bridge", () => {
+    expect(resolveHrworksAutomationHealthEndpoint()).toBe("http://127.0.0.1:8791/health");
+    expect(resolveHrworksAutomationLoginEndpoint()).toBe("http://127.0.0.1:8791/api/hrworks/open-login");
+    expect(resolveHrworksAutomationStarterEndpoint()).toBe("/api/hrworks/bridge/start");
+  });
+
+  it("opens the HRworks login in the automation browser", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      async json() {
+        return { ok: true, url: "https://ssl4.hrworks.de/k/dashboard" };
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await openHrworksAutomationLogin();
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8791/api/hrworks/open-login",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("skips the starter route when the local bridge is already healthy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      async json() {
+        return { ok: true };
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ensureHrworksAutomationBridge();
+
+    expect(result.status).toBe("already_running");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("starts the local bridge through the starter route when health is missing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return { ok: true, status: "started" };
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ensureHrworksAutomationBridge();
+
+    expect(result.status).toBe("started");
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/hrworks/bridge/start", expect.objectContaining({ method: "POST" }));
   });
 
   it("sends the full HRworks workflow request", async () => {

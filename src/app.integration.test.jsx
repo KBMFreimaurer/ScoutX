@@ -15,6 +15,7 @@ describe("ScoutX Integration", () => {
       Array.isArray(options?.kreisIndices) && options.kreisIndices.length > 0 ? options.kreisIndices : [0];
     const jugendIndices =
       Array.isArray(options?.jugendIndices) && options.jugendIndices.length > 0 ? options.jugendIndices : [0];
+    const leagueParameters = Array.isArray(options?.leagueParameters) ? options.leagueParameters.filter(Boolean) : [];
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -50,6 +51,11 @@ describe("ScoutX Integration", () => {
     });
     if (clickedJugend === 0 && jugendButtons[0]) {
       fireEvent.click(jugendButtons[0]);
+    }
+
+    for (const league of leagueParameters) {
+      fireEvent.change(screen.getByLabelText(/Liga-Parameter hinzufügen/i), { target: { value: league } });
+      fireEvent.click(screen.getByRole("button", { name: /Liga hinzufügen/i }));
     }
 
     fireEvent.click(screen.getByRole("button", { name: /Weiter zum nächsten Schritt/i }));
@@ -410,6 +416,81 @@ describe("ScoutX Integration", () => {
     },
     15000,
   );
+
+  it("uebergibt Liga-Parameter an den Adapter und zeigt nur passende Ligaspiele im Plan", async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url.includes("/api/games")) {
+        const payload = JSON.parse(String(init?.body || "{}"));
+        const requestedDate = String(payload.fromDate || "2026-04-01");
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            games: [
+              {
+                date: requestedDate,
+                time: "11:00",
+                home: "Team LK A",
+                away: "Team LK B",
+                venue: "Sportanlage Nord",
+                km: 8,
+                kreisId: String(payload.kreisId || "duisburg"),
+                jugendId: String(payload.jugendId || "d-jugend"),
+                priority: 4,
+                staffelName: "D-Junioren Kreisleistungsklasse",
+              },
+              {
+                date: requestedDate,
+                time: "15:00",
+                home: "Team KK A",
+                away: "Team KK B",
+                venue: "Sportanlage Sued",
+                km: 12,
+                kreisId: String(payload.kreisId || "duisburg"),
+                jugendId: String(payload.jugendId || "d-jugend"),
+                priority: 3,
+                staffelName: "D-Junioren Kreisklasse",
+              },
+            ],
+            teamFilter: {
+              requested: true,
+              requestedCount: 1,
+              matchedCount: 1,
+              matchedTeamCount: 1,
+              matchedTeams: ["Leistungsklasse"],
+              missingTeams: [],
+              binding: true,
+              fallbackToUnfiltered: false,
+            },
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    await renderSetupAndSubmit(fetchMock, { leagueParameters: ["Leistungsklasse"] });
+    await screen.findByRole("button", { name: /Plan öffnen/i }, { timeout: 12000 });
+
+    const adapterCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/games"));
+    expect(adapterCalls).toHaveLength(1);
+    expect(JSON.parse(String(adapterCalls[0][1]?.body || "{}"))).toMatchObject({
+      teams: [],
+      leagues: ["Leistungsklasse"],
+    });
+
+    expect(screen.getAllByText(/Team LK A/i).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Team KK A/i)).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /Plan öffnen/i }));
+
+    await screen.findByText(/Manueller Scouting-Plan/i, { timeout: 12000 });
+    expect(screen.getAllByText(/Team LK A/i).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Team KK A/i)).toHaveLength(0);
+  });
 
   it("stellt persistierte Spielauswahl in Games nach Reload wieder her", async () => {
     const persistedSelectionId = "csv-0-Duis-Tusp";

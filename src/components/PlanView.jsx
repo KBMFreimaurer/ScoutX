@@ -1,4 +1,5 @@
 import { C, secH } from "../styles/theme";
+import { resolveGameCompetitionLabel } from "../utils/gameCompetition";
 import { resolveGameMatchUrl } from "../utils/gameLinks";
 
 function sortByDateAndKickoff(left, right) {
@@ -109,6 +110,9 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
                 </div>
                 <div style={{ fontSize: 11, color: C.grayDark, marginTop: 2 }}>
                   {game.dateLabel || "Datum offen"} · {kickoffLabel(game.time)}
+                </div>
+                <div style={{ fontSize: 11, color: C.grayDark, marginTop: 2 }}>
+                  Liga/Wettbewerb: {resolveGameCompetitionLabel(game)}
                 </div>
               </div>
 

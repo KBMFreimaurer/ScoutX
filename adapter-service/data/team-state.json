@@ -244,9 +244,115 @@
         "date": "",
         "status": "scheduled"
       }
+    },
+    {
+      "id": "obs-csv-25-spvg-djk-a-kerbab",
+      "gameId": "csv-25-Spvg-DJK",
+      "scoutId": "a-kerbab",
+      "status": "planned",
+      "note": "",
+      "planHistoryId": "plan-1779880689076-96x3er",
+      "plannedAt": "2026-05-27T11:18:09.096Z",
+      "seenAt": "",
+      "reportId": "",
+      "reportUrl": "",
+      "game": {
+        "id": "csv-25-Spvg-DJK",
+        "home": "Spvg. Meiderich 06/95 II",
+        "away": "DJK Lösort-Meiderich II",
+        "dateObj": "2026-05-29T22:00:00.000Z",
+        "dateLabel": "Sa., 30.05.2026",
+        "time": "14:00",
+        "venue": "Kunstrasenplatz, BSA Honigstr., Honigstr., 47137 Duisburg",
+        "matchUrl": "https://www.fussball.de/spiel/spvg-meiderich-06-95-2-djk-loesort-meiderich-ii/-/spiel/02VH8G4H2O000000VS5489BTVVTMOPA6",
+        "km": 0,
+        "priority": 4,
+        "turnier": false,
+        "jugendId": "d-jugend",
+        "kreisId": "duisburg",
+        "league": "",
+        "competitionName": "",
+        "note": "",
+        "date": "",
+        "status": "scheduled"
+      }
+    },
+    {
+      "id": "obs-csv-27-spvg-sv-b-a-kerbab",
+      "gameId": "csv-27-Spvg-SV-B",
+      "scoutId": "a-kerbab",
+      "status": "planned",
+      "note": "",
+      "planHistoryId": "plan-1779880689076-96x3er",
+      "plannedAt": "2026-05-27T11:18:09.096Z",
+      "seenAt": "",
+      "reportId": "",
+      "reportUrl": "",
+      "game": {
+        "id": "csv-27-Spvg-SV-B",
+        "home": "Spvg. Meiderich 06/95",
+        "away": "SV Beeckerwerth o.W.",
+        "dateObj": "2026-05-29T22:00:00.000Z",
+        "dateLabel": "Sa., 30.05.2026",
+        "time": "15:30",
+        "venue": "Kunstrasenplatz, BSA Honigstr., Honigstr., 47137 Duisburg",
+        "matchUrl": "https://www.fussball.de/spiel/spvg-meiderich-06-95-sv-beeckerwerth/-/spiel/02U563GIA8000000VS5489BUVS8CK5KT",
+        "km": 0,
+        "priority": 4,
+        "turnier": false,
+        "jugendId": "d-jugend",
+        "kreisId": "duisburg",
+        "league": "",
+        "competitionName": "",
+        "note": "",
+        "date": "",
+        "status": "scheduled"
+      }
+    },
+    {
+      "id": "obs-csv-28-djk--djk-a-kerbab",
+      "gameId": "csv-28-DJK--DJK",
+      "scoutId": "a-kerbab",
+      "status": "planned",
+      "note": "",
+      "planHistoryId": "plan-1779880689076-96x3er",
+      "plannedAt": "2026-05-27T11:18:09.096Z",
+      "seenAt": "",
+      "reportId": "",
+      "reportUrl": "",
+      "game": {
+        "id": "csv-28-DJK--DJK",
+        "home": "DJK Lösort-Meiderich IV",
+        "away": "DJK Lösort-Meiderich III",
+        "dateObj": "2026-05-29T22:00:00.000Z",
+        "dateLabel": "Sa., 30.05.2026",
+        "time": "16:00",
+        "venue": "Kunstrasenplatz, Talbahnstr., Talbahnstr. 52, 47137 Duisburg",
+        "matchUrl": "https://www.fussball.de/spiel/djk-loesort-meiderich-iv-djk-loesort-meiderich-iii/-/spiel/02U72KEPPC000000VS5489BUVT5HDAB3",
+        "km": 0,
+        "priority": 4,
+        "turnier": false,
+        "jugendId": "d-jugend",
+        "kreisId": "duisburg",
+        "league": "",
+        "competitionName": "",
+        "note": "",
+        "date": "",
+        "status": "scheduled"
+      }
     }
   ],
   "notifications": [
+    {
+      "id": "b8c90175-cd49-409e-8dcb-078bbafcbc18",
+      "eventId": "b8c90175-cd49-409e-8dcb-078bbafcbc18",
+      "type": "plan",
+      "title": "Team-Plan veroeffentlicht",
+      "body": "Ayoub Kerbab hat 3 Spiele in den Team-Plan gestellt.",
+      "recipientId": "",
+      "unread": true,
+      "createdAt": "2026-05-27T11:18:09.097Z"
+    },
     {
       "id": "4eab3f35-4e15-4d87-bfb8-0d13fc931934",
       "eventId": "4eab3f35-4e15-4d87-bfb8-0d13fc931934",
@@ -269,6 +375,22 @@
     }
   ],
   "feedItems": [
+    {
+      "id": "b8c90175-cd49-409e-8dcb-078bbafcbc18",
+      "type": "plan_published",
+      "createdAt": "2026-05-27T11:18:09.097Z",
+      "actorId": "a-kerbab",
+      "gameId": "",
+      "gameIds": [
+        "csv-25-Spvg-DJK",
+        "csv-27-Spvg-SV-B",
+        "csv-28-DJK--DJK"
+      ],
+      "planHistoryId": "plan-1779880689076-96x3er",
+      "observationId": "",
+      "title": "Team-Plan veroeffentlicht",
+      "body": "Ayoub Kerbab hat 3 Spiele in den Team-Plan gestellt."
+    },
     {
       "id": "4eab3f35-4e15-4d87-bfb8-0d13fc931934",
       "type": "plan_published",

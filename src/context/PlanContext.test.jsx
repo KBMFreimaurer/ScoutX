@@ -5,6 +5,7 @@ import { STORAGE_KEYS } from "../config/storage";
 import { SetupProvider, useSetup } from "./SetupContext";
 import { GamesProvider } from "./GamesContext";
 import { PlanProvider, usePlan } from "./PlanContext";
+import { useGames } from "./GamesContext";
 
 function createWrapper() {
   return function Wrapper({ children }) {
@@ -96,6 +97,49 @@ describe("PlanContext history restore", () => {
       expect(result.current.setup.startLocation).toMatchObject({
         label: "Sternbuschweg 326",
       });
+    });
+  });
+
+  it("deklariert im generierten Plan fuer jedes Spiel die Liga", async () => {
+    const { result } = renderHook(
+      () => ({
+        plan: usePlan(),
+        games: useGames(),
+        setup: useSetup(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      result.current.games.setGames([
+        {
+          id: "game-1",
+          home: "Team A",
+          away: "Team B",
+          venue: "Sportpark",
+          time: "11:00",
+          dateObj: new Date("2026-05-23T00:00:00.000Z"),
+          league: "D-Junioren Kreisleistungsklasse",
+        },
+        {
+          id: "game-2",
+          home: "Team C",
+          away: "Team D",
+          venue: "Nebenplatz",
+          time: "13:00",
+          dateObj: new Date("2026-05-23T00:00:00.000Z"),
+          competitionName: "D-Junioren Niederrheinliga",
+        },
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.plan.onGeneratePlanPdf();
+    });
+
+    await waitFor(() => {
+      expect(result.current.plan.plan).toContain("Liga/Wettbewerb: D-Junioren Kreisleistungsklasse");
+      expect(result.current.plan.plan).toContain("Liga/Wettbewerb: D-Junioren Niederrheinliga");
     });
   });
 });

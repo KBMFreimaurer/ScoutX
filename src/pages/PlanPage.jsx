@@ -18,10 +18,13 @@ import {
   readHrworksImportLog,
   validateHrworksImportPayload,
 } from "../services/hrworksImport";
-import { exportHrworksImportCsv } from "../services/hrworksCsvExport";
 import { parseHrworksTimesheetFile, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
 import { exportHrworksAuditLog } from "../services/hrworksAuditExport";
-import { startHrworksAutomation } from "../services/hrworksAutomationClient";
+import {
+  ensureHrworksAutomationBridge,
+  openHrworksAutomationLogin,
+  startHrworksAutomation,
+} from "../services/hrworksAutomationClient";
 import {
   advanceAutomationStep,
   canCaptureDebugScreenshot,
@@ -32,10 +35,8 @@ import {
 import {
   readHrworksSelectorMapping,
   validateHrworksSelectorMapping,
-  writeHrworksSelectorMapping,
 } from "../services/hrworksSelectorMapping";
 import {
-  getAllowedHrworksPolicyValues,
   getMissingHrworksOperationalDecisions,
   readHrworksPolicy,
   writeHrworksPolicy,
@@ -422,11 +423,12 @@ export function PlanPage() {
   const [hrworksValidation, setHrworksValidation] = useState({ errors: [], warnings: [] });
   const [hrworksRuntimeSession, setHrworksRuntimeSession] = useState(null);
   const [hrworksImportLog, setHrworksImportLog] = useState(() => readHrworksImportLog());
-  const [hrworksSelectorMapping, setHrworksSelectorMapping] = useState(() => readHrworksSelectorMapping());
+  const [hrworksSelectorMapping] = useState(() => readHrworksSelectorMapping());
   const [hrworksPolicy, setHrworksPolicy] = useState(() => readHrworksPolicy());
   const [hrworksDebugScreenshotConsent, setHrworksDebugScreenshotConsent] = useState(false);
   const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
-  const [hrworksDryRunNotice, setHrworksDryRunNotice] = useState("");
+  const [hrworksWizardNotice, setHrworksWizardNotice] = useState("");
+  const [hrworksUploadedFileName, setHrworksUploadedFileName] = useState("");
   const [hrworksAutomationStarting, setHrworksAutomationStarting] = useState(false);
   const [historyDeleteRequest, setHistoryDeleteRequest] = useState(null);
   const missingHrworksDecisions = useMemo(
@@ -589,6 +591,17 @@ export function PlanPage() {
       setErr("Keine Spiele im Plan. Importiere zuerst eine Arbeitszeitdatei oder füge Spiele zum Plan hinzu.");
       return;
     }
+    let nextPolicy = hrworksPolicy;
+    let autoSetupApplied = false;
+    if (missingHrworksDecisions.length > 0) {
+      nextPolicy = writeHrworksPolicy({
+        ...hrworksPolicy,
+        aggregationMode: "per_day",
+        finalSaveMode: "auto_save",
+      });
+      setHrworksPolicy(nextPolicy);
+      autoSetupApplied = true;
+    }
     const importLog = readHrworksImportLog();
     const routePurpose = "Sichtung / Route des Arbeitstages";
     const routeLegs = buildHrworksRouteLegs(routeOverview, activeGames, effectiveHrworksStartLocationLabel);
@@ -598,7 +611,7 @@ export function PlanPage() {
       employeeName: effectiveScoutName,
       games: activeGames,
       startLocation: effectiveHrworksStartLocationLabel,
-      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || nextPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       routeLegs,
     });
     const payload = payloads[0] || buildHrworksImportPayload({
@@ -606,7 +619,7 @@ export function PlanPage() {
       employeeName: effectiveScoutName,
       games: activeGames,
       startLocation: effectiveHrworksStartLocationLabel,
-      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
+      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || nextPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
       purpose: routePurpose,
       note: routePurpose,
       intermediateStops: routeLabels,
@@ -616,14 +629,14 @@ export function PlanPage() {
       payload.importSource = "plan";
     }
     const validation = validateHrworksImportPayload(payload, importLog, {
-      requiredFields: hrworksPolicy.requiredFields,
+      requiredFields: nextPolicy.requiredFields,
     });
     const warnings = [];
     if (payloads.length > 1) {
       warnings.push(`Mehrtagiger Plan: ${payloads.length} HRworks-Abrechnungen werden nacheinander vorbereitet.`);
     }
     if (String(payload.importSource || "plan") !== "timesheet") {
-      warnings.push("Arbeitszeitdatei noch nicht importiert: Für HRworks sind XLSX-Datum und XLSX-Uhrzeiten bindend. Bitte zuerst 'Arbeitszeitdatei importieren' nutzen.");
+      warnings.push("XLSX-Datei noch nicht hochgeladen: Für HRworks sind XLSX-Datum und XLSX-Uhrzeiten bindend. Bitte zuerst Schritt 1 im Wizard abschließen.");
     }
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
@@ -635,12 +648,41 @@ export function PlanPage() {
     setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
     setHrworksLoginConfirmed(false);
-    setHrworksDryRunNotice("");
+    setHrworksUploadedFileName("");
+    setHrworksWizardNotice(autoSetupApplied ? "Empfohlenes HRworks-Setup wurde automatisch angewendet." : "");
     setHrworksReviewOpen(true);
+  };
+
+  const handleOpenHrworksLoginTab = () => {
+    setHrworksWizardNotice("HRworks wird vorbereitet. Die lokale Bridge wird jetzt geprüft und bei Bedarf automatisch gestartet.");
+    setErr("");
+    void (async () => {
+      try {
+        const result = await ensureHrworksAutomationBridge();
+        const loginWindow = await openHrworksAutomationLogin();
+        setHrworksWizardNotice(
+          loginWindow?.sameBrowser
+            ? "HRworks wurde im selben Chrome-Browser wie ScoutX in einem neuen Tab geöffnet. Bitte dort einloggen und danach hier den Import starten."
+            : (
+                result?.status === "already_running"
+                  ? `ScoutX konnte den laufenden Chrome nicht direkt übernehmen und nutzt deshalb das ScoutX-Automationsprofil. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
+                  : `Die lokale Bridge wurde gestartet, aber derselbe Chrome-Browser war nicht direkt steuerbar. ScoutX nutzt deshalb das ScoutX-Automationsprofil. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
+              ),
+        );
+        setErr("");
+      } catch (error) {
+        setHrworksWizardNotice("HRworks konnte nicht für den Login vorbereitet werden.");
+        setErr(String(error?.message || error || "Lokale HRworks-Automation konnte nicht automatisch gestartet werden."));
+      }
+    })();
   };
 
   const handleConfirmHrworksImport = async () => {
     if (!hrworksPayload) {
+      return;
+    }
+    if (String(hrworksPayload.importSource || "") !== "timesheet") {
+      setErr("Bitte zuerst die XLSX-Datei des aktuellen Monats hochladen.");
       return;
     }
     if ((hrworksValidation?.errors?.length || 0) > 0) {
@@ -693,7 +735,7 @@ export function PlanPage() {
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
     const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
-    setHrworksDryRunNotice("");
+    setHrworksWizardNotice("");
 
     let bridgeResult = null;
     try {
@@ -748,65 +790,6 @@ export function PlanPage() {
     setErr(bridgeResult?.status === "completed"
       ? `HRworks-Import für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
       : `HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`);
-  };
-
-  const handleHrworksExportOnly = async () => {
-    if (!hrworksPayload) {
-      return;
-    }
-    try {
-      await exportHrworksImportCsv(hrworksPayload);
-    } catch (error) {
-      appendHrworksImportLog({
-        planId: hrworksPayload.planId,
-        date: hrworksPayload.date,
-        startTime: hrworksPayload.startTime,
-        endTime: hrworksPayload.endTime,
-        purpose: hrworksPayload.purpose,
-        hrworksStatus: "failed",
-        sourceType: String(hrworksPayload.importSource || "plan"),
-        executedBy: hrworksPayload.employeeName,
-        technicalResult: "CSV-Export fehlgeschlagen.",
-        errorMessage: String(error?.message || error || "Unbekannter Exportfehler"),
-      });
-      setErr("CSV-Export fehlgeschlagen. Bitte erneut versuchen.");
-      return;
-    }
-    appendHrworksImportLog({
-      planId: hrworksPayload.planId,
-      date: hrworksPayload.date,
-      startTime: hrworksPayload.startTime,
-      endTime: hrworksPayload.endTime,
-      purpose: hrworksPayload.purpose,
-      hrworksStatus: "needs_review",
-      sourceType: String(hrworksPayload.importSource || "plan"),
-      executedBy: hrworksPayload.employeeName,
-      technicalResult: "Nur Exportdatei erstellt (Import nicht gestartet).",
-    });
-    setHrworksImportLog(readHrworksImportLog());
-    setHrworksReviewOpen(false);
-    setHrworksLoginConfirmed(false);
-    setErr("Exportmodus gewählt: Bitte Exportdatei an HRworks-Importprozess übergeben.");
-  };
-
-  const handleHrworksDryRun = () => {
-    if (!hrworksPayload) {
-      return;
-    }
-    appendHrworksImportLog({
-      planId: hrworksPayload.planId,
-      date: hrworksPayload.date,
-      startTime: hrworksPayload.startTime,
-      endTime: hrworksPayload.endTime,
-      purpose: hrworksPayload.purpose,
-      hrworksStatus: "needs_review",
-      sourceType: String(hrworksPayload.importSource || "plan"),
-      executedBy: hrworksPayload.employeeName,
-      technicalResult: "Testlauf ohne Speichern bestätigt.",
-    });
-    setHrworksImportLog(readHrworksImportLog());
-    setHrworksDryRunNotice("Testlauf abgeschlossen. Es wurde nichts in HRworks gespeichert; du kannst jetzt produktiv speichern und abschließen.");
-    setErr("HRworks-Testlauf abgeschlossen. Produktives Speichern wurde noch nicht ausgelöst.");
   };
 
   const handleFailRuntimeSession = (message) => {
@@ -901,16 +884,17 @@ export function PlanPage() {
     hrworksFileInputRef.current?.click();
   };
 
-  const handleHrworksFileChange = async (event) => {
-    const file = event?.target?.files?.[0];
+  const processHrworksFile = async (file, resetInput = null) => {
     if (!file) {
       return;
     }
+    setHrworksUploadedFileName(String(file.name || "").trim());
+    setHrworksWizardNotice("");
     const fileValidation = validateHrworksTimesheetFile(file);
     if (!fileValidation.ok) {
       setErr(fileValidation.message);
-      if (event?.target) {
-        event.target.value = "";
+      if (typeof resetInput === "function") {
+        resetInput();
       }
       return;
     }
@@ -922,8 +906,8 @@ export function PlanPage() {
       setErr(`Arbeitszeitdatei konnte nicht gelesen werden: ${String(error?.message || error || "Unbekannter Fehler")}`);
       return;
     } finally {
-      if (event?.target) {
-        event.target.value = "";
+      if (typeof resetInput === "function") {
+        resetInput();
       }
     }
 
@@ -1050,79 +1034,22 @@ export function PlanPage() {
     setHrworksPayloadQueue([payload]);
     setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
-    setHrworksDryRunNotice("");
     setHrworksReviewOpen(true);
     setErr("");
   };
 
-  const handleEditHrworksMapping = () => {
-    if (typeof window === "undefined" || typeof window.prompt !== "function") {
-      return;
-    }
-
-    const initialJson = JSON.stringify(hrworksSelectorMapping, null, 2);
-    const nextText = window.prompt("HRworks Selector-Mapping bearbeiten (JSON):", initialJson);
-    if (!nextText) {
-      return;
-    }
-
-    let parsed = null;
-    try {
-      parsed = JSON.parse(nextText);
-    } catch {
-      setErr("Ungültiges JSON. Mapping wurde nicht gespeichert.");
-      return;
-    }
-
-    const result = writeHrworksSelectorMapping(parsed);
-    if (!result.ok) {
-      setErr(`Mapping ungültig: ${result.errors.join(" | ")}`);
-      return;
-    }
-
-    setHrworksSelectorMapping(result.mapping);
-    setErr("");
-  };
-
-  const handleEditHrworksPolicy = () => {
-    if (typeof window === "undefined" || typeof window.prompt !== "function") {
-      return;
-    }
-
-    const allowed = getAllowedHrworksPolicyValues();
-    const initialJson = JSON.stringify(hrworksPolicy, null, 2);
-    const helpText = [
-      "HRworks Pflichtfelder/Defaults bearbeiten (JSON).",
-      "defaultStartLocation ist der HRworks-Abfahrtsort, z. B. Sternbuschweg 326.",
-      `aggregationMode erlaubt: ${allowed.aggregationMode.join(", ")}`,
-      `finalSaveMode erlaubt: ${allowed.finalSaveMode.join(", ")}`,
-    ].join("\n");
-    const nextText = window.prompt(helpText, initialJson);
-    if (!nextText) {
-      return;
-    }
-
-    let parsed = null;
-    try {
-      parsed = JSON.parse(nextText);
-    } catch {
-      setErr("Ungültiges JSON. Policy wurde nicht gespeichert.");
-      return;
-    }
-
-    const nextPolicy = writeHrworksPolicy(parsed);
-    setHrworksPolicy(nextPolicy);
-    setErr("");
-  };
-
-  const handleApplyRecommendedHrworksPolicy = () => {
-    const nextPolicy = writeHrworksPolicy({
-      ...hrworksPolicy,
-      aggregationMode: "per_day",
-      finalSaveMode: "auto_save",
+  const handleHrworksFileChange = async (event) => {
+    const file = event?.target?.files?.[0];
+    await processHrworksFile(file, () => {
+      if (event?.target) {
+        event.target.value = "";
+      }
     });
-    setHrworksPolicy(nextPolicy);
+  };
+
+  const handleHrworksFileDrop = async (file) => {
     setErr("");
+    await processHrworksFile(file);
   };
 
   useEffect(() => {
@@ -1381,106 +1308,6 @@ export function PlanPage() {
           />
           <button
             type="button"
-            onClick={handlePickHrworksFile}
-            aria-label="Arbeitszeitdatei importieren"
-            style={{
-              fontSize: 12,
-              padding: "9px 14px",
-              borderRadius: 10,
-              border: `1px solid ${C.border}`,
-              background: "rgba(255,255,255,0.04)",
-              color: C.grayLight,
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 600,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              width: useStackedTopActions ? "100%" : "auto",
-              minWidth: useStackedTopActions ? 0 : undefined,
-            }}
-          >
-            Arbeitszeitdatei importieren
-          </button>
-          <button
-            type="button"
-            onClick={handleEditHrworksMapping}
-            aria-label="HRworks Mapping bearbeiten"
-            style={{
-              fontSize: 12,
-              padding: "9px 14px",
-              borderRadius: 10,
-              border: `1px solid ${C.border}`,
-              background: "rgba(255,255,255,0.04)",
-              color: C.gray,
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 600,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              width: useStackedTopActions ? "100%" : "auto",
-              minWidth: useStackedTopActions ? 0 : undefined,
-            }}
-          >
-            HRworks Mapping bearbeiten
-          </button>
-          <button
-            type="button"
-            onClick={handleEditHrworksPolicy}
-            aria-label="HRworks Pflichtfelder bearbeiten"
-            style={{
-              fontSize: 12,
-              padding: "9px 14px",
-              borderRadius: 10,
-              border: `1px solid ${C.border}`,
-              background: "rgba(255,255,255,0.04)",
-              color: C.gray,
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 600,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              width: useStackedTopActions ? "100%" : "auto",
-              minWidth: useStackedTopActions ? 0 : undefined,
-            }}
-          >
-            HRworks Pflichtfelder
-          </button>
-          <button
-            type="button"
-            onClick={handleApplyRecommendedHrworksPolicy}
-            aria-label="Empfohlenes HRworks Setup anwenden"
-            style={{
-              fontSize: 12,
-              padding: "9px 14px",
-              borderRadius: 10,
-              border: `1px solid ${C.greenBorder}`,
-              background: C.greenDim,
-              color: C.green,
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
-              fontWeight: 600,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              width: useStackedTopActions ? "100%" : "auto",
-              minWidth: useStackedTopActions ? 0 : undefined,
-            }}
-          >
-            HRworks Setup (Empfohlen)
-          </button>
-          <button
-            type="button"
             onClick={() => downloadCalendarIcs(activeGames, cfg)}
             aria-label="In Kalender exportieren"
             disabled={activeGames.length === 0}
@@ -1553,52 +1380,23 @@ export function PlanPage() {
       <HrworksImportReviewModal
         open={hrworksReviewOpen}
         payload={hrworksPayload}
-        payloads={hrworksPayloadQueue}
-        payloadIndex={hrworksPayloadIndex}
         warnings={hrworksValidation.warnings}
         errors={hrworksValidation.errors}
         loginConfirmed={hrworksLoginConfirmed}
-        dryRunNotice={hrworksDryRunNotice}
+        uploadedFileName={hrworksUploadedFileName}
+        wizardNotice={hrworksWizardNotice}
         automationStarting={hrworksAutomationStarting}
         onLoginConfirmedChange={setHrworksLoginConfirmed}
+        onPickFile={handlePickHrworksFile}
+        onDropFile={handleHrworksFileDrop}
+        onOpenLogin={handleOpenHrworksLoginTab}
         onCancel={() => {
           setHrworksReviewOpen(false);
           setHrworksLoginConfirmed(false);
-          setHrworksDryRunNotice("");
+          setHrworksWizardNotice("");
         }}
-        onEdit={() => {
-          setHrworksReviewOpen(false);
-          setHrworksLoginConfirmed(false);
-          setHrworksDryRunNotice("");
-          setErr("Bitte Plan-/Abrechnungsdaten prüfen und anschließend erneut importieren.");
-        }}
-        onExportOnly={handleHrworksExportOnly}
-        onDryRun={handleHrworksDryRun}
         onConfirm={handleConfirmHrworksImport}
       />
-      {missingHrworksDecisions.length > 0 ? (
-        <div
-          className="fu2"
-          role="alert"
-          style={{
-            background: "rgba(252,211,77,0.08)",
-            border: "1px solid rgba(252,211,77,0.35)",
-            borderRadius: 12,
-            padding: 12,
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#fde68a", fontWeight: 700 }}>HRworks-Setup unvollständig</div>
-          <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 11, color: "#fde68a" }}>
-            {missingHrworksDecisions.map((item) => (
-              <div key={item}>• {item}</div>
-            ))}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: C.gray }}>
-            Bitte zuerst „HRworks Pflichtfelder“ konfigurieren.
-          </div>
-        </div>
-      ) : null}
       {hrworksRuntimeSession?.status === "running" ? (
         <div
           className="fu2"
