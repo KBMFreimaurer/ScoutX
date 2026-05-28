@@ -10,6 +10,10 @@ const DEFAULT_STARTUP_TIMEOUT_MS = 15000;
 const DEFAULT_POLL_INTERVAL_MS = 250;
 
 let bridgeStartPromise = null;
+const STARTER_ROUTES = new Set([
+  "/api/hrworks/bridge/start",
+  "/api/companion/start",
+]);
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -82,7 +86,7 @@ export async function ensureHrworksBridgeRunning(options = {}) {
       }
       await wait(Math.max(100, Number(pollIntervalMs || DEFAULT_POLL_INTERVAL_MS)));
     }
-    throw new Error("Lokale HRworks-Automation konnte nicht automatisch gestartet werden. Starte zuerst: npm run hrworks:bridge");
+    throw new Error("Lokaler ScoutX Companion konnte nicht automatisch gestartet werden. Starte zuerst: npm run companion:dev");
   })().finally(() => {
     bridgeStartPromise = null;
   });
@@ -98,7 +102,7 @@ function sendJson(response, statusCode, body) {
 
 export function createHrworksBridgeStartMiddleware(options = {}) {
   return async function hrworksBridgeStartMiddleware(request, response, next) {
-    if (request.url !== "/api/hrworks/bridge/start") {
+    if (!STARTER_ROUTES.has(request.url)) {
       next();
       return;
     }
@@ -109,12 +113,13 @@ export function createHrworksBridgeStartMiddleware(options = {}) {
     }
 
     try {
-      const result = await ensureHrworksBridgeRunning(options);
+      const ensureBridgeRunning = options.ensureBridgeRunning || ensureHrworksBridgeRunning;
+      const result = await ensureBridgeRunning(options);
       sendJson(response, 200, result);
     } catch (error) {
       sendJson(response, 503, {
         ok: false,
-        error: String(error?.message || error || "Lokale HRworks-Automation konnte nicht automatisch gestartet werden."),
+        error: String(error?.message || error || "Lokaler ScoutX Companion konnte nicht automatisch gestartet werden."),
       });
     }
   };

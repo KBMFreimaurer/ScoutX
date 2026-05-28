@@ -124,6 +124,7 @@ describe("HrworksImportReviewModal", () => {
     expect(screen.getByText(/STEP 2/i)).toBeInTheDocument();
     expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
     expect(screen.getByText(/AEB Mai Onay.xlsx/i)).toBeInTheDocument();
+    expect(screen.getByText(/ScoutX Companion/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "HRworks öffnen" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
   });

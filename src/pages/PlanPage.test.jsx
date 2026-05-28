@@ -617,14 +617,14 @@ describe("PlanPage", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
-      expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/hrworks/bridge/start", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/companion/start", expect.objectContaining({ method: "POST" }));
       expect(fetchMock).toHaveBeenNthCalledWith(
         3,
-        "http://127.0.0.1:8791/api/hrworks/open-login",
+        "http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/open-login",
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(within(dialog).getByRole("status")).toHaveTextContent(/ScoutX-Automationsprofil|chrome:\/\/inspect\/#remote-debugging/i);
+    expect(within(dialog).getByRole("status")).toHaveTextContent(/ScoutX Companion|chrome:\/\/inspect\/#remote-debugging/i);
   });
 
   it("startet beim produktiven HRworks-Klick die lokale Automation-Bridge", async () => {
@@ -692,7 +692,7 @@ describe("PlanPage", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^HRworks importieren$/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/api/hrworks/import", expect.objectContaining({
+      expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/run", expect.objectContaining({
         method: "POST",
         body: expect.stringContaining("\"completeWorkflow\":true"),
       }));

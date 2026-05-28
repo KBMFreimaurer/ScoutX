@@ -277,7 +277,7 @@ export function HrworksImportReviewModal({
                 false,
                 <>
                   <div>Öffne HRworks, logge dich dort ein und komme dann hierher zurück.</div>
-                  <div>ScoutX versucht zuerst denselben Chrome-Browser wie für ScoutX zu verwenden. Falls das technisch nicht freigegeben ist, wird transparent auf das ScoutX-Automationsprofil gewechselt.</div>
+                  <div>ScoutX Companion läuft lokal auf deinem Gerät. Er versucht zuerst denselben Desktop-Browser wie ScoutX zu verwenden. Falls das technisch nicht freigegeben ist, übernimmt der Companion ein eigenes kontrolliertes HRworks-Fenster.</div>
                   <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.grayLight }}>
                     <input
                       type="checkbox"

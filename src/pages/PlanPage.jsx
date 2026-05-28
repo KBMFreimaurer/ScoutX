@@ -654,7 +654,7 @@ export function PlanPage() {
   };
 
   const handleOpenHrworksLoginTab = () => {
-    setHrworksWizardNotice("HRworks wird vorbereitet. Die lokale Bridge wird jetzt geprüft und bei Bedarf automatisch gestartet.");
+    setHrworksWizardNotice("HRworks wird vorbereitet. ScoutX prüft jetzt den lokalen Companion auf deinem Gerät und weckt ihn bei Bedarf.");
     setErr("");
     void (async () => {
       try {
@@ -662,17 +662,19 @@ export function PlanPage() {
         const loginWindow = await openHrworksAutomationLogin();
         setHrworksWizardNotice(
           loginWindow?.sameBrowser
-            ? "HRworks wurde im selben Chrome-Browser wie ScoutX in einem neuen Tab geöffnet. Bitte dort einloggen und danach hier den Import starten."
+            ? "HRworks wurde im selben Desktop-Browser wie ScoutX in einem neuen Tab geöffnet. Bitte dort einloggen und danach hier den Import starten."
             : (
-                result?.status === "already_running"
-                  ? `ScoutX konnte den laufenden Chrome nicht direkt übernehmen und nutzt deshalb das ScoutX-Automationsprofil. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
-                  : `Die lokale Bridge wurde gestartet, aber derselbe Chrome-Browser war nicht direkt steuerbar. ScoutX nutzt deshalb das ScoutX-Automationsprofil. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
+                result?.status === "woken"
+                  ? `ScoutX Companion wurde lokal auf deinem Gerät geweckt und nutzt jetzt ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
+                  : result?.status === "already_running"
+                  ? `ScoutX Companion konnte den laufenden Desktop-Browser nicht direkt übernehmen und nutzt deshalb ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
+                  : `Der lokale ScoutX Companion wurde gestartet, aber derselbe Desktop-Browser war nicht direkt steuerbar. ScoutX Companion nutzt deshalb ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
               ),
         );
         setErr("");
       } catch (error) {
-        setHrworksWizardNotice("HRworks konnte nicht für den Login vorbereitet werden.");
-        setErr(String(error?.message || error || "Lokale HRworks-Automation konnte nicht automatisch gestartet werden."));
+        setHrworksWizardNotice("ScoutX Companion konnte HRworks auf diesem Gerät nicht für den Login vorbereiten.");
+        setErr(String(error?.message || error || "ScoutX Companion konnte lokal auf diesem Gerät nicht gestartet werden."));
       }
     })();
   };
@@ -731,7 +733,7 @@ export function PlanPage() {
     }
 
     setHrworksAutomationStarting(true);
-    setErr("HRworks Connector wird kontaktiert. Prüfe das HRworks-Bridge-Terminal, dort muss gleich ein POST /api/hrworks/import erscheinen.");
+    setErr("ScoutX Companion wird kontaktiert. Prüfe das Companion-Terminal, dort muss gleich ein POST /api/companion/capabilities/hrworks-import/run erscheinen.");
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
     const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
@@ -753,7 +755,7 @@ export function PlanPage() {
         hrworksStatus: "failed",
         sourceType: String(hrworksPayload.importSource || "plan"),
         executedBy: hrworksPayload.employeeName,
-        technicalResult: "Lokale HRworks-Automation konnte nicht gestartet werden.",
+        technicalResult: "Lokaler ScoutX Companion konnte nicht gestartet werden.",
         errorMessage: message,
       });
       setHrworksImportLog(readHrworksImportLog());
@@ -777,8 +779,8 @@ export function PlanPage() {
       sourceType: String(hrworksPayload.importSource || "plan"),
       executedBy: hrworksPayload.employeeName,
       technicalResult: bridgeResult?.status === "completed"
-        ? `Lokale HRworks-Automation hat den vollständigen Workflow abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
-        : `Lokale HRworks-Automation wurde gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`,
+        ? `Lokaler ScoutX Companion hat den vollständigen Workflow abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
+        : `Lokaler ScoutX Companion wurde gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`,
       hrworksReference: String(bridgeResult?.url || ""),
       durationMs: bridgeResult?.durationMs || bridgeResult?.metrics?.durationMs,
       performanceSteps,

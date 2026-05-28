@@ -20,7 +20,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: "scoutx-hrworks-bridge-starter",
+      name: "scoutx-companion-starter",
       configureServer(server) {
         server.middlewares.use(createHrworksBridgeStartMiddleware());
       },

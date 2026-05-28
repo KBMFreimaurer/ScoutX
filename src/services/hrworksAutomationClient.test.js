@@ -15,13 +15,13 @@ describe("hrworksAutomationClient", () => {
   });
 
   it("uses the local automation bridge by default", () => {
-    expect(resolveHrworksAutomationEndpoint()).toBe("http://127.0.0.1:8791/api/hrworks/import");
+    expect(resolveHrworksAutomationEndpoint()).toBe("http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/run");
   });
 
   it("derives health and starter endpoints for the local bridge", () => {
     expect(resolveHrworksAutomationHealthEndpoint()).toBe("http://127.0.0.1:8791/health");
-    expect(resolveHrworksAutomationLoginEndpoint()).toBe("http://127.0.0.1:8791/api/hrworks/open-login");
-    expect(resolveHrworksAutomationStarterEndpoint()).toBe("/api/hrworks/bridge/start");
+    expect(resolveHrworksAutomationLoginEndpoint()).toBe("http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/open-login");
+    expect(resolveHrworksAutomationStarterEndpoint()).toBe("/api/companion/start");
   });
 
   it("opens the HRworks login in the automation browser", async () => {
@@ -37,7 +37,7 @@ describe("hrworksAutomationClient", () => {
 
     expect(result.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8791/api/hrworks/open-login",
+      "http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/open-login",
       expect.objectContaining({ method: "POST" }),
     );
   });
@@ -74,7 +74,7 @@ describe("hrworksAutomationClient", () => {
 
     expect(result.status).toBe("started");
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/hrworks/bridge/start", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/companion/start", expect.objectContaining({ method: "POST" }));
   });
 
   it("sends the full HRworks workflow request", async () => {
@@ -98,7 +98,7 @@ describe("hrworksAutomationClient", () => {
   it("explains how to start the bridge when localhost is unreachable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
 
-    await expect(startHrworksAutomation({ planId: "p1" })).rejects.toThrow(/npm run hrworks:bridge/);
+    await expect(startHrworksAutomation({ planId: "p1" })).rejects.toThrow(/npm run companion:dev/);
   });
 
   it("times out with a bridge-terminal hint", async () => {

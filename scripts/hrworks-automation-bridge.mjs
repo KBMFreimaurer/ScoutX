@@ -140,6 +140,10 @@ async function openLoginWindow() {
   return buildHrworksOpenLoginResponse(session, page);
 }
 
+function isCompanionCapabilityRoute(request, capability, action) {
+  return request.method === "POST" && request.url === `/api/companion/capabilities/${capability}/${action}`;
+}
+
 const server = http.createServer(async (request, response) => {
   console.log(`[${new Date().toISOString()}] ${request.method} ${request.url}`);
   if (request.method === "OPTIONS") {
@@ -149,13 +153,41 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/health") {
     sendJson(response, 200, {
       ok: true,
-      service: "hrworks-automation-bridge",
+      service: "scoutx-companion",
+      transport: "local-http",
       browserChannel: browserConfig.channel,
       sessionStrategy: sessionConfig.strategy,
+      capabilities: {
+        "hrworks-import": {
+          supported: true,
+          login: "user-session",
+          routes: {
+            openLogin: "/api/companion/capabilities/hrworks-import/open-login",
+            run: "/api/companion/capabilities/hrworks-import/run",
+          },
+        },
+      },
+      legacyService: "hrworks-automation-bridge",
     });
     return;
   }
-  if (request.method === "POST" && request.url === "/api/hrworks/open-login") {
+  if (request.method === "GET" && request.url === "/api/companion/capabilities/hrworks-import") {
+    sendJson(response, 200, {
+      ok: true,
+      capability: "hrworks-import",
+      supported: true,
+      login: "user-session",
+      routes: {
+        openLogin: "/api/companion/capabilities/hrworks-import/open-login",
+        run: "/api/companion/capabilities/hrworks-import/run",
+      },
+    });
+    return;
+  }
+  if (
+    (request.method === "POST" && request.url === "/api/hrworks/open-login")
+    || isCompanionCapabilityRoute(request, "hrworks-import", "open-login")
+  ) {
     try {
       const result = await openLoginWindow();
       console.log(`HRworks login window ready at ${result.url}`);
@@ -169,7 +201,13 @@ const server = http.createServer(async (request, response) => {
     }
     return;
   }
-  if (request.method !== "POST" || request.url !== "/api/hrworks/import") {
+  if (
+    request.method !== "POST"
+    || (
+      request.url !== "/api/hrworks/import"
+      && request.url !== "/api/companion/capabilities/hrworks-import/run"
+    )
+  ) {
     sendJson(response, 404, { ok: false, error: "Route nicht gefunden." });
     return;
   }
