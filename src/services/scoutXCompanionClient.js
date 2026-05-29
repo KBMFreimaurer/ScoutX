@@ -106,18 +106,44 @@ export function resolveScoutXCompanionProtocolUrl(capability = "", explicitProto
   return `${baseProtocolUrl}${separator}capability=${encodeURIComponent(normalizedCapability)}`;
 }
 
-export function canUseScoutXCompanionServerStarter(locationOrigin = "") {
+function isPrivateNetworkHostname(hostname) {
+  const host = String(hostname || "").trim().toLowerCase();
+  if (!host) {
+    return false;
+  }
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") {
+    return true;
+  }
+  if (host.endsWith(".local")) {
+    return true;
+  }
+  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) {
+    return true;
+  }
+  const parts = host.split(".").map((part) => Number(part));
+  return parts.length === 4
+    && parts[0] === 172
+    && parts[1] >= 16
+    && parts[1] <= 31;
+}
+
+export function canUseScoutXCompanionServerStarter(locationOrigin = "", options = {}) {
   const origin = String(
     locationOrigin
     || (typeof window !== "undefined" ? window.location?.origin : "")
     || "",
   ).trim();
+  const starterEndpoint = String(options.starterEndpoint || resolveScoutXCompanionStartEndpoint()).trim();
+  const isDevServer = options.isDevServer ?? import.meta.env?.DEV === true;
+  if (isDevServer && starterEndpoint.startsWith("/")) {
+    return true;
+  }
   if (!origin) {
     return false;
   }
   try {
     const url = new URL(origin);
-    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+    return starterEndpoint.startsWith("/") && isPrivateNetworkHostname(url.hostname);
   } catch {
     return false;
   }
@@ -194,7 +220,10 @@ export async function ensureScoutXCompanion(options = {}) {
     throw new Error("Lokaler ScoutX Companion Starter fehlt. Starte zuerst: npm run companion:dev");
   }
 
-  if (!canUseScoutXCompanionServerStarter(locationOrigin)) {
+  if (!canUseScoutXCompanionServerStarter(locationOrigin, {
+    starterEndpoint,
+    isDevServer: options.isDevServer,
+  })) {
     if (wakeProtocolUrl) {
       try {
         await wakeCompanionImpl(wakeProtocolUrl, {

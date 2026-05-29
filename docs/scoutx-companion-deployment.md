@@ -17,9 +17,17 @@ Wenn ScoutX über `localhost` oder `127.0.0.1` läuft, darf die Web-App den loka
 
 Das ist nur für lokale Entwicklung gedacht.
 
-### Deployte Instanz / Homeserver
+### Homeserver im lokalen Netzwerk
 
-Wenn ScoutX von einer produktiven Origin läuft, versucht die Web-App **nicht**, einen Prozess auf dem Homeserver zu starten.
+Wenn ScoutX von einer privaten Netzwerk-Origin läuft (`localhost`, `127.0.0.1`, `10.x`, `192.168.x`, `172.16-31.x`, `169.254.x` oder `*.local`), darf die Web-App zuerst den same-origin Starter verwenden:
+
+- `POST /api/companion/start`
+
+Damit kann ein Homeserver, der den Starter-Endpunkt bereitstellt, die HRworks-Bridge und Chrome direkt auf dem Homeserver öffnen.
+
+### Externe deployte Instanz
+
+Wenn ScoutX von einer externen produktiven Origin läuft, versucht die Web-App **nicht**, einen Prozess auf dem Server zu starten.
 
 Stattdessen:
 
@@ -31,9 +39,9 @@ Stattdessen:
 
 ## Konsequenz
 
-Der HRworks-Button ist auf einer Homeserver-Instanz nur dann vollständig funktionsfähig, wenn auf dem Benutzergerät ein lokaler `ScoutX Companion` läuft oder per Protocol-Wakeup erreichbar ist.
+Der HRworks-Button ist auf einer externen Instanz nur dann vollständig funktionsfähig, wenn auf dem Benutzergerät ein lokaler `ScoutX Companion` läuft oder per Protocol-Wakeup erreichbar ist.
 
-Der Homeserver selbst ist **kein** HRworks-Automationshost.
+Der lokale Homeserver kann ein HRworks-Automationshost sein, wenn er den Companion-Starter bereitstellt und Chrome/Playwright auf demselben Gerät verfügbar sind.
 
 ## Aktueller Stand
 

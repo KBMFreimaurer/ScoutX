@@ -24,9 +24,28 @@ describe("scoutXCompanionClient", () => {
   });
 
   it("uses the server starter only for local dev origins", () => {
-    expect(canUseScoutXCompanionServerStarter("http://127.0.0.1:5173")).toBe(true);
-    expect(canUseScoutXCompanionServerStarter("http://localhost:4173")).toBe(true);
-    expect(canUseScoutXCompanionServerStarter("https://scoutx.example.com")).toBe(false);
+    expect(canUseScoutXCompanionServerStarter("http://127.0.0.1:5173", { isDevServer: false })).toBe(true);
+    expect(canUseScoutXCompanionServerStarter("http://localhost:4173", { isDevServer: false })).toBe(true);
+    expect(canUseScoutXCompanionServerStarter("https://scoutx.example.com", { isDevServer: false })).toBe(false);
+  });
+
+  it("allows the server starter from a LAN homeserver origin", () => {
+    expect(canUseScoutXCompanionServerStarter("http://10.0.0.1:5580", {
+      isDevServer: false,
+      starterEndpoint: "/api/companion/start",
+    })).toBe(true);
+    expect(canUseScoutXCompanionServerStarter("http://192.168.178.10:5580", {
+      isDevServer: false,
+      starterEndpoint: "/api/companion/start",
+    })).toBe(true);
+    expect(canUseScoutXCompanionServerStarter("http://172.16.0.5:5580", {
+      isDevServer: false,
+      starterEndpoint: "/api/companion/start",
+    })).toBe(true);
+    expect(canUseScoutXCompanionServerStarter("http://scoutx.local:5580", {
+      isDevServer: false,
+      starterEndpoint: "/api/companion/start",
+    })).toBe(true);
   });
 
   it("starts the local Companion through the generic starter route when health is missing", async () => {
@@ -48,6 +67,31 @@ describe("scoutXCompanionClient", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/companion/start", expect.objectContaining({ method: "POST" }));
   });
 
+  it("starts the Companion through the homeserver starter before using protocol wakeup", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNREFUSED"))
+      .mockResolvedValueOnce({
+        ok: true,
+        async json() {
+          return { ok: true, status: "started" };
+        },
+      });
+    const wakeCompanionImpl = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ensureScoutXCompanion({
+      locationOrigin: "http://10.0.0.1:5580",
+      isDevServer: false,
+      wakeCompanionImpl,
+    });
+
+    expect(result.status).toBe("started");
+    expect(wakeCompanionImpl).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/companion/start", expect.objectContaining({ method: "POST" }));
+  });
+
   it("wakes the local Companion through a protocol launch for deployed origins", async () => {
     const fetchMock = vi
       .fn()
@@ -58,6 +102,7 @@ describe("scoutXCompanionClient", () => {
 
     const result = await ensureScoutXCompanion({
       locationOrigin: "https://scoutx.example.com",
+      isDevServer: false,
       wakeCompanionImpl,
       wakeTimeoutMs: 10,
       wakePollIntervalMs: 1,
@@ -80,6 +125,7 @@ describe("scoutXCompanionClient", () => {
     await expect(
       ensureScoutXCompanion({
         locationOrigin: "https://scoutx.example.com",
+        isDevServer: false,
         wakeCompanionImpl,
         wakeTimeoutMs: 5,
         wakePollIntervalMs: 1,
