@@ -86,6 +86,34 @@ function PlanningBadge({ game }) {
   );
 }
 
+function GameTypeBadge({ game }) {
+  const isTournament = Boolean(game?.turnier) || String(game?.source || "").toLowerCase() === "tournament";
+  if (!isTournament) {
+    return null;
+  }
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        marginTop: 5,
+        marginRight: 6,
+        border: "1px solid rgba(251,191,36,0.24)",
+        borderRadius: 999,
+        background: C.warnDim,
+        color: C.warn,
+        padding: "2px 7px",
+        fontSize: 10,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      Turnier
+    </span>
+  );
+}
+
 export function GameTable({
   games,
   mode = "games",
@@ -133,6 +161,7 @@ export function GameTable({
                 <strong style={{ color: C.white }}>{game.home}</strong>
                 <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
                 <span style={{ color: C.offWhite }}>{game.away}</span>
+                <GameTypeBadge game={game} />
                 <PlanningBadge game={game} />
               </span>
               <span style={{ fontSize: 12, color: C.gray, whiteSpace: "nowrap" }}>{game.dateLabel}</span>
@@ -258,6 +287,7 @@ export function GameTable({
                       <strong style={{ color: C.white }}>{game.home}</strong>
                       <span style={{ color: C.grayDark, margin: "0 4px" }}>vs</span>
                       <span style={{ color: C.offWhite }}>{game.away}</span>
+                      <GameTypeBadge game={game} />
                       <PlanningBadge game={game} />
                     </div>
                   </td>

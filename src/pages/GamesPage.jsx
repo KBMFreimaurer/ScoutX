@@ -80,6 +80,8 @@ export function GamesPage() {
     startLocation,
     teamValidation,
     enrichingGames,
+    providerWarnings = [],
+    includeTournaments,
     gameNotes,
     selectedGameIds,
     selectedGameCount,
@@ -104,6 +106,12 @@ export function GamesPage() {
       ? teamValidation.matchedCount
       : games.filter((game) => game.selectedTeamMatch).length;
   const showTeamHint = requestedTeamCount > 0;
+  const tournamentCount = games.filter((game) => Boolean(game?.turnier) || String(game?.source || "").toLowerCase() === "tournament").length;
+  const tournamentCountLabel = `${tournamentCount} ${tournamentCount === 1 ? "Turnier" : "Turniere"}`;
+  const providerWarningText = (Array.isArray(providerWarnings) ? providerWarnings : [])
+    .map((warning) => String(warning || "").trim())
+    .filter(Boolean)
+    .join(" ");
   const shouldPaginate = games.length > 100;
   const [sortMode, setSortMode] = useState("date");
   const [expandedNoteId, setExpandedNoteId] = useState(null);
@@ -422,8 +430,23 @@ export function GamesPage() {
                 "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
             }}
           >
-            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"} · {activeTeams.length} Team-Parameter
+            {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"}
+            {includeTournaments || tournamentCount > 0 ? ` · ${tournamentCountLabel}` : ""} · {activeTeams.length} Team-Parameter
           </div>
+
+          {providerWarningText ? (
+            <div
+              style={{
+                fontSize: 11,
+                color: C.warn,
+                marginTop: 4,
+                fontFamily:
+                  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+              }}
+            >
+              {providerWarningText}
+            </div>
+          ) : null}
 
           {showTeamHint ? (
             <div

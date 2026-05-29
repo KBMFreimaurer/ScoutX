@@ -33,6 +33,34 @@ function PlanningBadge({ game }) {
   );
 }
 
+function GameTypeBadge({ game }) {
+  const isTournament = Boolean(game?.turnier) || String(game?.source || "").toLowerCase() === "tournament";
+  if (!isTournament) {
+    return null;
+  }
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        marginTop: 6,
+        marginRight: 6,
+        border: "1px solid rgba(251,191,36,0.24)",
+        borderRadius: 999,
+        background: C.warnDim,
+        color: C.warn,
+        padding: "2px 8px",
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      Turnier
+    </span>
+  );
+}
+
 export function GameCards({
   games,
   notes = {},
@@ -101,6 +129,7 @@ export function GameCards({
                 {game.isFavoriteGame ? <span style={{ color: C.green, marginRight: 5 }}>★</span> : null}
                 {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
                 <div>
+                  <GameTypeBadge game={game} />
                   <PlanningBadge game={game} />
                 </div>
               </div>

@@ -641,6 +641,7 @@ export function GamesProvider({ children }) {
   const [loadingGames, setLoadingGames] = useState(false);
   const [enrichingGames, setEnrichingGames] = useState(false);
   const [dataSourceUsed, setDataSourceUsed] = useState("mock");
+  const [providerWarnings, setProviderWarnings] = useState([]);
   const [gameNotes, setGameNotes] = useState(() => {
     if (typeof window === "undefined") {
       return {};
@@ -714,6 +715,7 @@ export function GamesProvider({ children }) {
     setSelectedGameIds({});
     setEnrichingGames(false);
     setDataSourceUsed("mock");
+    setProviderWarnings([]);
   }, []);
 
   const onBackSetup = useCallback(() => {
@@ -834,6 +836,7 @@ export function GamesProvider({ children }) {
     setErr("");
     setLoadingGames(true);
     setEnrichingGames(false);
+    setProviderWarnings([]);
     setTeamValidation(null);
 
     const runId = buildRunRef.current + 1;
@@ -925,6 +928,14 @@ export function GamesProvider({ children }) {
         throw new Error("Keine passenden Spiele für die gewählte Liga gefunden. Bitte Zeitraum oder Liga prüfen.");
       }
       const teamFilterMeta = buildTeamFilterMetaFromGames(fetchedGames, activeTeams);
+      const warningMessages = successfulRuns.flatMap((run) => {
+        const warnings = Array.isArray(run?.meta?.warnings) ? run.meta.warnings : [];
+        return warnings.map((warning) => String(warning || "").trim()).filter(Boolean);
+      });
+      const hasTournamentGames = fetchedGames.some((game) => Boolean(game?.turnier) || normalizeLookup(game?.source) === "tournament");
+      if (includeTournaments && !hasTournamentGames) {
+        warningMessages.unshift("Keine passenden Turniere von meinturnierplan.de geladen. Normale Spiele werden weiterhin angezeigt.");
+      }
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
       const boostedGames = withFavoriteBoost(applyVenueFallbackHeuristics(fetchedGames), favoriteSnapshot);
@@ -950,12 +961,19 @@ export function GamesProvider({ children }) {
         return next;
       });
       setDataSourceUsed(source);
+      setProviderWarnings([...new Set(warningMessages)]);
       setTeamValidation(teamFilterMeta);
-      if (failedRuns.length > 0) {
+      if (failedRuns.length > 0 || warningMessages.length > 0) {
         const failedLabels = failedRuns
           .map((run) => `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId} (${run.selectedJugendId || "-"})`)
           .join(", ");
-        setErr(`Einige Kreise konnten nicht geladen werden: ${failedLabels}. Der Plan nutzt die erfolgreich geladenen Spiele.`);
+        const messages = [];
+        if (failedLabels) {
+          messages.push(`Einige Kreise konnten nicht geladen werden: ${failedLabels}.`);
+        }
+        messages.push(...warningMessages);
+        messages.push("Der Plan nutzt die erfolgreich geladenen Spiele.");
+        setErr(messages.join(" "));
       }
       navigate("/games");
 
@@ -1028,6 +1046,7 @@ export function GamesProvider({ children }) {
       loadingGames,
       enrichingGames,
       dataSourceUsed,
+      providerWarnings,
       prioritized,
       setGames,
       setDataSourceUsed,
@@ -1051,6 +1070,7 @@ export function GamesProvider({ children }) {
       loadingGames,
       enrichingGames,
       dataSourceUsed,
+      providerWarnings,
       prioritized,
       resetGames,
       onBackSetup,

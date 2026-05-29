@@ -39,6 +39,8 @@ function createScoutXContext(overrides = {}) {
     startLocation: null,
     teamValidation: null,
     enrichingGames: false,
+    providerWarnings: [],
+    includeTournaments: false,
     gameNotes: {},
     selectedGameIds: {},
     selectedGameCount: 0,
@@ -137,5 +139,31 @@ describe("GamesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Plan öffnen/i }));
 
     expect(onGeneratePlanPdf).toHaveBeenCalledTimes(1);
+  });
+
+  it("zeigt geladene Turniere und Turnier-Warnungen getrennt von normalen Spielen", () => {
+    mockedUseScoutX.mockReturnValue(
+      createScoutXContext({
+        includeTournaments: true,
+        providerWarnings: ["Keine passenden Turniere von meinturnierplan.de geladen."],
+        games: [
+          createGame({ id: "game-1", home: "Team A", away: "Team B" }),
+          createGame({
+            id: "tournament-1",
+            home: "U12 Cup Duisburg",
+            away: "Turnier",
+            turnier: true,
+            source: "tournament",
+            provider: "meinturnierplan.de",
+          }),
+        ],
+      }),
+    );
+
+    render(<GamesPage />);
+
+    expect(screen.getByText(/2 Spiele · 1 Turnier · 0 Team-Parameter/i)).toBeInTheDocument();
+    expect(screen.getByText(/Keine passenden Turniere von meinturnierplan\.de geladen\./i)).toBeInTheDocument();
+    expect(screen.getAllByText("Turnier").length).toBeGreaterThan(0);
   });
 });

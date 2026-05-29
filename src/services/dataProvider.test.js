@@ -368,6 +368,7 @@ describe("data provider", () => {
     expect(result.source).toBe("combined");
     expect(result.games).toHaveLength(1);
     expect(result.games[0].home).toBe("Fallback Team A");
+    expect(result.meta.warnings.join(" ")).toMatch(/tournament: Keine passenden Turniere/i);
     expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledTimes(1);
   });
 
