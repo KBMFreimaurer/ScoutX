@@ -501,6 +501,7 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const onRestoreLocation = useCallback((locationInput) => {
     const location = locationInput && typeof locationInput === "object" ? locationInput : null;
     const label = String(location?.label || "").trim();
+    const hasCoordinates = Number.isFinite(location?.lat) && Number.isFinite(location?.lon);
     if (!location && !label) {
       setStartLocation(null);
       setLocationDraft("");
@@ -513,7 +514,28 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
     setLocationDraft(label);
     setLocationError("");
     setResolvingLocation(false);
-  }, []);
+    if (label && !hasCoordinates) {
+      setResolvingLocation(true);
+      void geocodeAddress(label, { kreisId })
+        .then((resolved) => {
+          if (!resolved || !Number.isFinite(resolved.lat) || !Number.isFinite(resolved.lon)) {
+            return;
+          }
+          setStartLocation((prev) => {
+            const currentLabel = String(prev?.label || "").trim();
+            const currentHasCoordinates = Number.isFinite(prev?.lat) && Number.isFinite(prev?.lon);
+            return currentLabel === label && !currentHasCoordinates ? resolved : prev;
+          });
+          setLocationDraft((prev) => (String(prev || "").trim() === label ? resolved.label || label : prev));
+        })
+        .catch(() => {
+          // Legacy history entries can still be opened with the stored label.
+        })
+        .finally(() => {
+          setResolvingLocation(false);
+        });
+    }
+  }, [kreisId]);
 
   const onAddFavoriteTeam = useCallback(
     (value = favoriteDraft) => {

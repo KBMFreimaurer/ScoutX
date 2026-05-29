@@ -75,6 +75,7 @@ describe("ScoutX Integration", () => {
     if (typeof window.sessionStorage?.clear === "function") {
       window.sessionStorage.clear();
     }
+    window.localStorage.setItem("scoutx.test.authenticated", "true");
     vi.restoreAllMocks();
   });
 

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { GhostButton, PrimaryButton } from "../components/Buttons";
-import { TeamAuthGate } from "../components/TeamAuthGate";
 import { STORAGE_KEYS } from "../config/storage";
 import { useScoutX } from "../context/ScoutXContext";
 import { useScoutXProduct } from "../context/ScoutXProductContext";
@@ -46,8 +45,6 @@ const WORKSPACE_TABS = [
   { id: "time", label: "Zeiterfassungen" },
   { id: "profiles", label: "Profile" },
 ];
-
-const REGISTRATION_TEAMS = [{ key: "borussia-moenchengladbach", label: "Borussia Mönchengladbach" }];
 
 const SEARCH_TYPE_LABELS = {
   report: "Report",
@@ -255,9 +252,7 @@ export function ScoutingHubPage() {
     productError,
     teamBackendState,
     analysisStateByReportId,
-    onLoginTeamBackend,
     onLogoutTeamBackend,
-    onRegisterTeamBackend,
     onSwitchUser,
     onUpsertReport,
     onAnalyzeReport,
@@ -304,12 +299,6 @@ export function ScoutingHubPage() {
   const [selectedProfileKey, setSelectedProfileKey] = useState("");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [selectedTimeMonthKey, setSelectedTimeMonthKey] = useState("");
-  const [teamLoginPassword, setTeamLoginPassword] = useState("");
-  const [teamLoginUserId, setTeamLoginUserId] = useState("");
-  const [teamRegisterName, setTeamRegisterName] = useState("");
-  const [teamRegisterKey, setTeamRegisterKey] = useState(REGISTRATION_TEAMS[0].key);
-  const [teamAuthMode, setTeamAuthMode] = useState("login");
-  const [teamLoginBusy, setTeamLoginBusy] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [observationNoteDrafts, setObservationNoteDrafts] = useState({});
   const [notificationStatusFilter, setNotificationStatusFilter] = useState("unread");
@@ -505,32 +494,8 @@ export function ScoutingHubPage() {
   );
   const canWrite = canRole(activeUser.role, "create");
   const canManageTeam = activeUser.role === "admin" || activeUser.role === "coordinator";
-  const authRequired = teamBackendState.status !== "connected";
   const selectedWatchlistId = watchlistEntry.watchlistId || visibleWatchlists[0]?.id || "";
   const latestGames = allTeamGames.slice(0, 8);
-
-  const submitTeamBackendLogin = async (event) => {
-    event.preventDefault();
-    if (!teamLoginPassword.trim() || teamLoginBusy) {
-      return;
-    }
-    setTeamLoginBusy(true);
-    try {
-      const userId = teamLoginUserId.trim() || activeUser.id;
-      if (teamAuthMode === "register") {
-        await onRegisterTeamBackend(userId, teamRegisterName.trim(), teamLoginPassword, teamRegisterKey);
-      } else {
-        await onLoginTeamBackend(userId, teamLoginPassword);
-      }
-      if (userId && userId !== activeUser.id) {
-        onSwitchUser(userId);
-      }
-      setTeamRegisterName("");
-      setTeamLoginPassword("");
-    } finally {
-      setTeamLoginBusy(false);
-    }
-  };
 
   const submitManualGame = () => {
     if (!manualGameForm.home.trim() || !manualGameForm.away.trim()) {
@@ -900,26 +865,6 @@ export function ScoutingHubPage() {
           {productError}
         </div>
       ) : null}
-      <TeamAuthGate
-        isOpen={authRequired}
-        isMobile={isMobile}
-        mode={teamAuthMode}
-        busy={teamLoginBusy}
-        status={teamBackendState.status}
-        statusMessage={teamBackendState.error}
-        activeUserId={activeUser.id}
-        userId={teamLoginUserId}
-        password={teamLoginPassword}
-        registerName={teamRegisterName}
-        registerTeamKey={teamRegisterKey}
-        registerTeams={REGISTRATION_TEAMS}
-        onModeChange={setTeamAuthMode}
-        onUserIdChange={setTeamLoginUserId}
-        onPasswordChange={setTeamLoginPassword}
-        onRegisterNameChange={setTeamRegisterName}
-        onRegisterTeamKeyChange={setTeamRegisterKey}
-        onSubmit={submitTeamBackendLogin}
-      />
 
       <section
         style={{
