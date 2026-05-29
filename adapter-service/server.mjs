@@ -472,6 +472,13 @@ function toFilterKeywords(payload) {
       keywords.push(normalized);
     }
   }
+  const ageKeywords = Array.isArray(payload?.ageKeywords) ? payload.ageKeywords : [];
+  for (const keyword of ageKeywords) {
+    const normalized = normalizeSearchQuery(keyword).toLowerCase();
+    if (normalized.length >= 2) {
+      keywords.push(normalized);
+    }
+  }
   const extras = [payload?.jugendLabel, payload?.jugendId, payload?.kreisLabel, payload?.kreisId];
   for (const value of extras) {
     const normalized = normalizeSearchQuery(value).toLowerCase();

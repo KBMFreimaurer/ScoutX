@@ -77,4 +77,34 @@ describe("external game scrapers region and U21 coverage", () => {
       venue: "Sportschule Wedau, Duisburg",
     });
   });
+
+  it("matches meinturnierplan tournaments by youth age aliases", () => {
+    const payload = {
+      features: [
+        {
+          properties: {
+            name: "U12 Cup Duisburg",
+            url: "/showit.php?id=u12",
+            startDate: "03.06.2026",
+            endDate: "03.06.2026",
+            venue: "Sportpark Mitte",
+          },
+        },
+      ],
+    };
+    const html = `<script>window.mapSearchTournaments = ${JSON.stringify(payload)};</script>`;
+
+    const tournaments = extractMeinturnierplanTournaments(html, {
+      baseUrl: "https://www.meinturnierplan.de",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      keywords: ["d-jugend", "u12", "u13"],
+    });
+
+    expect(tournaments).toHaveLength(1);
+    expect(tournaments[0]).toMatchObject({
+      externalId: "u12",
+      name: "U12 Cup Duisburg",
+    });
+  });
 });

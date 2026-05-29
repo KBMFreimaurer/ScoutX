@@ -40,6 +40,15 @@ const GENERIC_TEAM_TOKENS = new Set([
 ]);
 const LEAGUE_KEYWORDS = ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"];
 const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19", "U20", "U21"];
+const TOURNAMENT_AGE_KEYWORDS_BY_JUGEND_ID = {
+  bambini: ["Bambini", "G-Jugend", "U6", "U7"],
+  "f-jugend": ["F-Jugend", "U8", "U9"],
+  "e-jugend": ["E-Jugend", "U10", "U11"],
+  "d-jugend": ["D-Jugend", "U12", "U13"],
+  "c-jugend": ["C-Jugend", "U14", "U15"],
+  "b-jugend": ["B-Jugend", "U16", "U17"],
+  "a-jugend": ["A-Jugend", "U18", "U19"],
+};
 
 function toLookupKey(value) {
   return String(value || "")
@@ -1290,7 +1299,12 @@ function buildTournamentRegionKeywords(params) {
   return keywords;
 }
 
+function buildTournamentAgeKeywords(jugendId) {
+  return TOURNAMENT_AGE_KEYWORDS_BY_JUGEND_ID[String(jugendId || "").trim().toLowerCase()] || [];
+}
+
 async function fetchGamesTournament(params) {
+  const ageKeywords = buildTournamentAgeKeywords(params.jugendId);
   const payload = await importTeamTournamentsFromMeinturnierplan({
     fromDate: params.fromDate,
     toDate: params.toDate,
@@ -1302,7 +1316,8 @@ async function fetchGamesTournament(params) {
     regionShortCode: params.regionShortCode || "",
     regionKeywords: buildTournamentRegionKeywords(params),
     jugendId: params.jugendId,
-    jugendLabel: params.jugendId || "",
+    jugendLabel: ageKeywords[0] || params.jugendId || "",
+    ageKeywords,
   });
 
   const tournaments = Array.isArray(payload?.tournaments) ? payload.tournaments : [];

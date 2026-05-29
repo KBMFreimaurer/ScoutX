@@ -246,6 +246,44 @@ describe("data provider", () => {
     );
   });
 
+  it("passes generic age aliases to meinturnierplan import for non-tournament youth classes", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [
+        {
+          id: "mtp-u12",
+          externalId: "u12",
+          name: "U12 Cup Duisburg",
+          dateFrom: "2026-06-01",
+          dateTo: "2026-06-01",
+          url: "https://www.meinturnierplan.de/showit.php?id=u12",
+          venue: "Sportpark Duisburg",
+        },
+      ],
+    });
+
+    await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      regionName: "Duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeTournaments: true,
+    });
+
+    expect(importTeamTournamentsFromMeinturnierplan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jugendId: "d-jugend",
+        jugendLabel: "D-Jugend",
+        ageKeywords: ["D-Jugend", "U12", "U13"],
+      }),
+    );
+  });
+
   it("requests DFB national games from U15 through U21", async () => {
     vi.mocked(importTeamNationalGames).mockResolvedValue({
       ok: true,
