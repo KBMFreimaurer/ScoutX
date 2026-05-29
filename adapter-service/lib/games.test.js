@@ -28,7 +28,12 @@ describe("adapter games lib", () => {
     expect(games[0].matchUrl).toBe("https://www.fussball.de/spiel/team-a-team-b/-/spiel/02U0CT5KV4000000VS5489BTVUFLAKGJ");
   });
 
-  it("keeps league metadata from live fussball.de imports", () => {
+  it.each([
+    ["d-jugend", "D-Junioren Kreisleistungsklasse"],
+    ["c-jugend", "C-Junioren Leistungsklasse"],
+    ["b-jugend", "B-Junioren Bezirksliga"],
+    ["a-jugend", "A-Junioren Niederrheinliga"],
+  ])("keeps league metadata from live fussball.de imports for %s / %s", (jugendId, leagueName) => {
     const games = normalizeGames([
       {
         home: "Team A",
@@ -36,22 +41,23 @@ describe("adapter games lib", () => {
         date: "2026-06-06",
         time: "11:00",
         kreisId: "duisburg",
-        jugendId: "d-jugend",
+        jugendId,
         stateCode: "NW",
         regionName: "Duisburg",
         regionShortCode: "DUI",
-        league: "D-Junioren Kreisleistungsklasse",
-        competitionName: "D-Junioren Kreisleistungsklasse",
-        staffelName: "D-Junioren Kreisleistungsklasse",
+        league: leagueName,
+        competitionName: leagueName,
+        staffelName: leagueName,
         competitionUrl: "https://www.fussball.de/spieltagsuebersicht/example/-/staffel/abc",
       },
     ]);
 
     expect(games).toHaveLength(1);
     expect(games[0]).toMatchObject({
-      league: "D-Junioren Kreisleistungsklasse",
-      competitionName: "D-Junioren Kreisleistungsklasse",
-      staffelName: "D-Junioren Kreisleistungsklasse",
+      jugendId,
+      league: leagueName,
+      competitionName: leagueName,
+      staffelName: leagueName,
       competitionUrl: "https://www.fussball.de/spieltagsuebersicht/example/-/staffel/abc",
       stateCode: "NW",
       regionName: "Duisburg",
