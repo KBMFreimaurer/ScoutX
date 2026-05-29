@@ -168,6 +168,60 @@ describe("PlanPage", () => {
     );
   });
 
+  it("zeigt Turniere und DFB-Spiele im Plan uebersichtlich als eigene Typen", () => {
+    mockedUseScoutX.mockReturnValue(
+      createBaseContext({
+        plan: "Spiel 1: Pfingstcup U12\nSpiel 2: Deutschland U21 vs Frankreich U21",
+        games: [
+          {
+            id: "turnier-1",
+            home: "Pfingstcup U12",
+            away: "Turnier",
+            priority: 5,
+            dateObj: new Date("2026-04-10T00:00:00"),
+            dateLabel: "Fr., 10.04.2026",
+            time: "--:--",
+            source: "tournament",
+            provider: "meinturnierplan.de",
+            turnier: true,
+            competitionName: "Pfingstcup U12",
+            matchUrl: "https://www.meinturnierplan.de/showit.php?id=1",
+          },
+          {
+            id: "dfb-1",
+            home: "Deutschland U21",
+            away: "Frankreich U21",
+            priority: 5,
+            dateObj: new Date("2026-04-11T00:00:00"),
+            dateLabel: "Sa., 11.04.2026",
+            time: "18:00",
+            source: "national",
+            provider: "dfb.de",
+            ageGroup: "U21",
+            competitionName: "DFB U21-Länderspiel",
+            matchUrl: "https://www.dfb.de/u-21-maenner/spiele-termine",
+          },
+        ],
+      }),
+    );
+
+    render(<PlanPage />);
+
+    expect(screen.getByText(/Spieltypen/i)).toBeInTheDocument();
+    expect(screen.getByText("Turniere")).toBeInTheDocument();
+    expect(screen.getByText("DFB-Spiele")).toBeInTheDocument();
+    expect(screen.getAllByText("Turnier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("DFB U21").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Typ\/Quelle: Turnier · meinturnierplan\.de/i)).toBeInTheDocument();
+    expect(screen.getByText(/Typ\/Quelle: DFB U21 · dfb\.de/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Zum Spiel auf meinturnierplan\.de für Pfingstcup U12 gegen Turnier/i })).toHaveTextContent(
+      "meinturnierplan.de öffnen",
+    );
+    expect(screen.getByRole("link", { name: /Zum Spiel auf dfb\.de für Deutschland U21 gegen Frankreich U21/i })).toHaveTextContent(
+      "dfb.de öffnen",
+    );
+  });
+
   it("zeigt manuelle Arbeitszeiterfassung in der Fahrtkosten-Sektion", () => {
     mockedUseScoutX.mockReturnValue(
       createBaseContext({

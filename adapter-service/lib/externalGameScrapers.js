@@ -56,6 +56,32 @@ function parseFlexibleGermanDate(value) {
   return `${match[3]}-${String(match[2]).padStart(2, "0")}-${String(match[1]).padStart(2, "0")}`;
 }
 
+function normalizeMatchDate(value, fallbackDate = "") {
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+  return parseFlexibleGermanDate(text) || String(fallbackDate || "").trim();
+}
+
+function normalizeTournamentMatch(raw, tournament) {
+  const home = compactText(raw?.home || raw?.team1 || raw?.heim || raw?.homeTeam);
+  const away = compactText(raw?.away || raw?.team2 || raw?.gast || raw?.awayTeam);
+  if (!home || !away) {
+    return null;
+  }
+  const time = compactText(raw?.time || raw?.kickoff || raw?.startTime);
+  return {
+    home,
+    away,
+    date: normalizeMatchDate(raw?.date || raw?.datum, tournament?.dateFrom),
+    time: /^\d{1,2}:\d{2}$/.test(time) ? time.padStart(5, "0") : "",
+    venue: compactText(raw?.venue || raw?.place || raw?.field || raw?.platz) || tournament?.venue || "",
+    status: compactText(raw?.status || "scheduled"),
+    note: compactText(raw?.note || ""),
+  };
+}
+
 function overlapsDateRange(dateFrom, dateTo, filterFrom, filterTo) {
   if (!dateFrom) {
     return false;
@@ -125,6 +151,19 @@ function parseTeamsFromEvent(eventText, ageGroup) {
       home: compactText(match[2]).replace(/\s+/g, " "),
       away: compactText(match[3]),
     };
+  }
+
+  const ageNumber = String(ageGroup || "").match(/U(15|16|17|18|19|20|21)/i)?.[1] || "";
+  if (ageNumber) {
+    const ageEventPattern = new RegExp(`^U\\s*[- ]?\\s*${ageNumber}\\b`, "i");
+    const scoutableEventPattern = /\b(?:sichtungs)?turnier|cup|laenderpokal|ländercup\b/i;
+    if (ageEventPattern.test(normalizedEvent) && scoutableEventPattern.test(normalizedEvent)) {
+      return {
+        competitionName: normalizedEvent,
+        home: `Deutschland ${ageGroup}`,
+        away: normalizedEvent,
+      };
+    }
   }
 
   const suffixCompetitionMatch = normalizedEvent.match(/\(([^)]+)\)\s*$/);
@@ -247,7 +286,7 @@ function normalizeTournament(raw, options = {}) {
     return null;
   }
 
-  return {
+  const tournament = {
     id: `mtp-${externalId}`,
     externalId,
     source: "tournament",
@@ -262,6 +301,10 @@ function normalizeTournament(raw, options = {}) {
     teams: Array.isArray(raw.teams) ? raw.teams.map(compactText).filter(Boolean) : [],
     note: compactText(raw.note || ""),
   };
+  const matches = (Array.isArray(raw.matches) ? raw.matches : [])
+    .map((match) => normalizeTournamentMatch(match, tournament))
+    .filter(Boolean);
+  return matches.length > 0 ? { ...tournament, matches } : tournament;
 }
 
 function extractTournamentsFromMapJson(html, options = {}) {
@@ -281,6 +324,7 @@ function extractTournamentsFromMapJson(html, options = {}) {
           endTime: props?.endTime,
           venue: props?.venue || props?.place || props?.location,
           address: props?.address,
+          matches: props?.matches || props?.games || props?.fixtures,
         },
         options,
       );
@@ -351,6 +395,23 @@ function matchesRegion(tournament, regionKeywords) {
   return safeKeywords.some((keyword) => fallbackHaystack.includes(keyword));
 }
 
+function withMatchReview(tournament, regionMatched) {
+  if (regionMatched) {
+    return {
+      ...tournament,
+      reviewRequired: false,
+      matchConfidence: "confirmed",
+      reviewReason: "",
+    };
+  }
+  return {
+    ...tournament,
+    reviewRequired: true,
+    matchConfidence: "weak",
+    reviewReason: "Region nicht eindeutig im Turnierort gefunden.",
+  };
+}
+
 export function extractMeinturnierplanTournaments(html, options = {}) {
   const tournaments = [
     ...extractTournamentsFromMapJson(html, options),
@@ -364,10 +425,11 @@ export function extractMeinturnierplanTournaments(html, options = {}) {
     if (!matchesKeywords(tournament, options.keywords)) {
       continue;
     }
-    if (!matchesRegion(tournament, options.regionKeywords)) {
+    const regionMatched = matchesRegion(tournament, options.regionKeywords);
+    if (!regionMatched && !options.includeReviewCandidates) {
       continue;
     }
-    byId.set(tournament.id, tournament);
+    byId.set(tournament.id, withMatchReview(tournament, regionMatched));
   }
   return [...byId.values()];
 }

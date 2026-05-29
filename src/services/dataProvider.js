@@ -512,6 +512,103 @@ function compareGamesByDateTime(left, right) {
   return timeSortKey(left.time).localeCompare(timeSortKey(right.time));
 }
 
+function toGameDateKey(game) {
+  const explicit = String(game?.date || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(explicit)) {
+    return explicit;
+  }
+  return game?.dateObj instanceof Date && !Number.isNaN(game.dateObj.getTime()) ? toIsoDate(game.dateObj) : "";
+}
+
+function buildGameDedupeKey(game) {
+  return [
+    toLookupKey(game?.home),
+    toLookupKey(game?.away),
+    toGameDateKey(game),
+    String(game?.time || ""),
+    toLookupKey(game?.venue),
+  ].join("|");
+}
+
+function mergeDuplicateGames(existing, next) {
+  const existingAliases = Array.isArray(existing?.sourceAliases) ? existing.sourceAliases : [existing?.source].filter(Boolean);
+  const nextAliases = Array.isArray(next?.sourceAliases) ? next.sourceAliases : [next?.source].filter(Boolean);
+  const sourceAliases = [...new Set([...existingAliases, ...nextAliases].map((value) => String(value || "").trim()).filter(Boolean))];
+  return {
+    ...next,
+    ...existing,
+    matchUrl: existing?.matchUrl || next?.matchUrl || "",
+    provider: existing?.provider || next?.provider || "",
+    sourceAliases,
+    duplicateSourceCount: sourceAliases.length,
+    duplicateIds: [
+      ...new Set([
+        ...(Array.isArray(existing?.duplicateIds) ? existing.duplicateIds : [existing?.id]),
+        ...(Array.isArray(next?.duplicateIds) ? next.duplicateIds : [next?.id]),
+      ].map((value) => String(value || "").trim()).filter(Boolean)),
+    ],
+    priority: Math.max(Number(existing?.priority || 0), Number(next?.priority || 0)) || existing?.priority || next?.priority,
+  };
+}
+
+function dedupeGamesAcrossSources(games) {
+  const deduped = new Map();
+  for (const game of Array.isArray(games) ? games : []) {
+    const key = buildGameDedupeKey(game);
+    if (deduped.has(key)) {
+      deduped.set(key, mergeDuplicateGames(deduped.get(key), game));
+    } else {
+      deduped.set(key, {
+        ...game,
+        sourceAliases: [String(game?.source || "").trim()].filter(Boolean),
+        duplicateSourceCount: 1,
+      });
+    }
+  }
+  return [...deduped.values()];
+}
+
+function toKickoffTimestamp(game) {
+  const dateKey = toGameDateKey(game);
+  const time = String(game?.time || "").trim();
+  if (!dateKey || !TIME_RE.test(time)) {
+    return Number.NaN;
+  }
+  const parsed = new Date(`${dateKey}T${time}:00`).getTime();
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function annotateScheduleConflicts(games) {
+  const nextGames = (Array.isArray(games) ? games : []).map((game) => ({ ...game, scheduleConflicts: [] }));
+  const entries = nextGames
+    .map((game) => ({ game, kickoff: toKickoffTimestamp(game) }))
+    .filter((entry) => Number.isFinite(entry.kickoff))
+    .sort((left, right) => left.kickoff - right.kickoff);
+
+  for (let index = 0; index < entries.length - 1; index += 1) {
+    const left = entries[index];
+    const right = entries[index + 1];
+    const deltaMinutes = Math.round((right.kickoff - left.kickoff) / 60000);
+    if (deltaMinutes >= 120) {
+      continue;
+    }
+    const conflict = {
+      type: "time_overlap",
+      severity: "hard-conflict",
+      minutesBetween: deltaMinutes,
+      message: `${left.game.home} vs ${left.game.away} kollidiert zeitlich mit ${right.game.home} vs ${right.game.away}.`,
+    };
+    left.game.scheduleConflicts.push({ ...conflict, gameId: right.game.id });
+    right.game.scheduleConflicts.push({ ...conflict, gameId: left.game.id });
+  }
+
+  return nextGames.map((game) => (game.scheduleConflicts.length > 0 ? game : { ...game, scheduleConflicts: undefined }));
+}
+
+function finalizeProviderGames(games) {
+  return annotateScheduleConflicts(dedupeGamesAcrossSources(games)).sort(compareGamesByDateTime);
+}
+
 function parseKm(value) {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -1222,18 +1319,20 @@ async function fetchGamesMock(params) {
   };
 }
 
-function tournamentToGame(item, index, params) {
+function tournamentToGame(item, index, params, match = null, matchIndex = -1) {
   const dateText = String(item?.dateFrom || item?.dateTo || params?.fromDate || "").trim();
-  const dateObj = normalizeDate(dateText, params?.fromDate || "1970-01-01").value;
+  const matchDateText = String(match?.date || match?.dateFrom || "").trim();
+  const dateObj = normalizeDate(matchDateText || dateText, params?.fromDate || "1970-01-01").value;
   const tournamentName = String(item?.name || "Turnier").trim();
-  const venue = String(item?.venue || item?.location || "Turnierort").trim();
+  const venue = String(match?.venue || item?.venue || item?.location || "Turnierort").trim();
   const matchUrl = String(item?.url || "").trim();
-  const time = String(item?.timeFrom || item?.startTime || item?.time || "--:--").trim();
+  const time = String(match?.time || item?.timeFrom || item?.startTime || item?.time || "--:--").trim();
+  const hasMatch = Boolean(match);
 
   return {
-    id: String(item?.id || `mtp-${index}`),
-    home: tournamentName,
-    away: "Turnier",
+    id: hasMatch ? `${String(item?.id || `mtp-${index}`)}-match-${matchIndex}` : String(item?.id || `mtp-${index}`),
+    home: hasMatch ? String(match?.home || "").trim() : tournamentName,
+    away: hasMatch ? String(match?.away || "").trim() : "Turnier",
     dateObj,
     dateLabel: formatDate(dateObj),
     date: toIsoDate(dateObj),
@@ -1246,10 +1345,25 @@ function tournamentToGame(item, index, params) {
     source: "tournament",
     provider: "meinturnierplan.de",
     competitionName: tournamentName,
+    tournamentName,
     tournamentId: String(item?.externalId || item?.id || ""),
+    matchConfidence: String(item?.matchConfidence || "confirmed"),
+    reviewRequired: Boolean(item?.reviewRequired),
+    reviewReason: String(item?.reviewReason || "").trim(),
+    priorityReason: hasMatch ? "Turnier-Detailspiel" : "Turniertermin",
     jugendId: String(params?.jugendId || ""),
     kreisId: String(params?.kreisId || ""),
   };
+}
+
+function tournamentToGames(item, index, params) {
+  const matches = Array.isArray(item?.matches) ? item.matches : [];
+  if (matches.length === 0) {
+    return [tournamentToGame(item, index, params)];
+  }
+  return matches
+    .map((match, matchIndex) => tournamentToGame(item, index, params, match, matchIndex))
+    .filter((game) => game.home && game.away);
 }
 
 function extractNationalAgeGroup(item) {
@@ -1318,6 +1432,7 @@ async function fetchGamesTournament(params) {
     jugendId: params.jugendId,
     jugendLabel: ageKeywords[0] || params.jugendId || "",
     ageKeywords,
+    includeReviewCandidates: true,
   });
 
   const tournaments = Array.isArray(payload?.tournaments) ? payload.tournaments : [];
@@ -1325,7 +1440,7 @@ async function fetchGamesTournament(params) {
     throw new Error("Keine passenden Turniere von meinturnierplan.de gefunden.");
   }
 
-  const games = tournaments.map((item, index) => tournamentToGame(item, index, params)).sort(compareGamesByDateTime);
+  const games = tournaments.flatMap((item, index) => tournamentToGames(item, index, params)).sort(compareGamesByDateTime);
   return {
     games: markSelectedTeamGames(games, params.teams),
     meta: {
@@ -1353,12 +1468,13 @@ function nationalGameToGame(item, index, params) {
     venue,
     matchUrl: String(item?.url || item?.matchUrl || "").trim(),
     km: null,
-    priority: 5,
+    priority: 6,
     turnier: false,
     source: "national",
     provider: "dfb.de",
     competitionName: "Länderspiel",
     ageGroup: extractNationalAgeGroup(item),
+    priorityReason: "DFB-Nationalspiel",
     jugendId: String(params?.jugendId || ""),
     kreisId: String(params?.kreisId || ""),
   };
@@ -1517,7 +1633,7 @@ export async function fetchGamesWithProviders({
         if (!games.length) {
           continue;
         }
-        aggregatedGames.push(...games);
+        aggregatedGames.push(...games.map((game) => ({ ...game, source: String(game?.source || providerName) })));
         aggregatedMeta.providers.push(providerName);
       } catch (error) {
         if (isOptionalAggregateProvider(providerName)) {
@@ -1529,22 +1645,8 @@ export async function fetchGamesWithProviders({
     }
 
     if (aggregatedGames.length > 0) {
-      const deduped = new Map();
-      for (const game of aggregatedGames) {
-        const key = [
-          toLookupKey(game?.home),
-          toLookupKey(game?.away),
-          String(game?.date || ""),
-          String(game?.time || ""),
-          toLookupKey(game?.venue),
-          String(game?.source || ""),
-        ].join("|");
-        if (!deduped.has(key)) {
-          deduped.set(key, game);
-        }
-      }
       return {
-        games: Array.from(deduped.values()).sort(compareGamesByDateTime),
+        games: finalizeProviderGames(aggregatedGames),
         source: "combined",
         meta: aggregatedMeta,
       };

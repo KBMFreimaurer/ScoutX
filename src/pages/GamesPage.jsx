@@ -8,6 +8,7 @@ import { isNativeCapacitorRuntime } from "../native/deepLinks";
 import { confirmTeamKreisPdfImport, previewTeamKreisPdfImport } from "../services/teamBackendClient";
 import { C } from "../styles/theme";
 import { downloadCalendarIcs } from "../utils/calendar";
+import { resolveGameCompetitionType } from "../utils/gameCompetition";
 import { formatDistanceKm } from "../utils/geo";
 
 function toKickoffMs(game) {
@@ -106,8 +107,18 @@ export function GamesPage() {
       ? teamValidation.matchedCount
       : games.filter((game) => game.selectedTeamMatch).length;
   const showTeamHint = requestedTeamCount > 0;
-  const tournamentCount = games.filter((game) => Boolean(game?.turnier) || String(game?.source || "").toLowerCase() === "tournament").length;
+  const competitionCounts = games.reduce(
+    (acc, game) => {
+      const type = resolveGameCompetitionType(game);
+      acc[type.key] = (acc[type.key] || 0) + 1;
+      return acc;
+    },
+    { league: 0, tournament: 0, national: 0 },
+  );
+  const tournamentCount = competitionCounts.tournament || 0;
+  const nationalCount = competitionCounts.national || 0;
   const tournamentCountLabel = `${tournamentCount} ${tournamentCount === 1 ? "Turnier" : "Turniere"}`;
+  const nationalCountLabel = `${nationalCount} ${nationalCount === 1 ? "DFB-Spiel" : "DFB-Spiele"}`;
   const providerWarningText = (Array.isArray(providerWarnings) ? providerWarnings : [])
     .map((warning) => String(warning || "").trim())
     .filter(Boolean)
@@ -431,7 +442,8 @@ export function GamesPage() {
             }}
           >
             {games.length} {jugend?.turnier ? "Begegnungen" : "Spiele"}
-            {includeTournaments || tournamentCount > 0 ? ` · ${tournamentCountLabel}` : ""} · {activeTeams.length} Team-Parameter
+            {includeTournaments || tournamentCount > 0 ? ` · ${tournamentCountLabel}` : ""}
+            {nationalCount > 0 ? ` · ${nationalCountLabel}` : ""} · {activeTeams.length} Team-Parameter
           </div>
 
           {providerWarningText ? (

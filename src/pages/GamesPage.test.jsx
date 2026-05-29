@@ -166,4 +166,27 @@ describe("GamesPage", () => {
     expect(screen.getByText(/Keine passenden Turniere von meinturnierplan\.de geladen\./i)).toBeInTheDocument();
     expect(screen.getAllByText("Turnier").length).toBeGreaterThan(0);
   });
+
+  it("zaehlt geladene DFB-Spiele in der Spiele-Uebersicht", () => {
+    mockedUseScoutX.mockReturnValue(
+      createScoutXContext({
+        games: [
+          createGame({ id: "game-1", home: "Team A", away: "Team B" }),
+          createGame({
+            id: "dfb-1",
+            home: "Deutschland U21",
+            away: "Frankreich U21",
+            source: "national",
+            provider: "dfb.de",
+            ageGroup: "U21",
+          }),
+        ],
+      }),
+    );
+
+    render(<GamesPage />);
+
+    expect(screen.getByText(/2 Spiele · 1 DFB-Spiel · 0 Team-Parameter/i)).toBeInTheDocument();
+    expect(screen.getAllByText("DFB U21").length).toBeGreaterThan(0);
+  });
 });

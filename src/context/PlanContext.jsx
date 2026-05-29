@@ -1,7 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../config/storage";
-import { resolveGameCompetitionLabel } from "../utils/gameCompetition";
+import {
+  buildGameCompetitionSummary,
+  resolveGameCompetitionLabel,
+  resolveGameCompetitionType,
+} from "../utils/gameCompetition";
 import { calculateDirectStartRoutes, calculateRoute, calculateRouteWithDriving, isGoogleRoutingStrictMode } from "../utils/geo";
 import { cleanScoutXText } from "./shared";
 import { useGames } from "./GamesContext";
@@ -74,6 +78,10 @@ function buildManualScoutX({ games, jugendLabel, kreisLabel, isTurnier, usedFall
   } else {
     lines.push(`Ausgewählte Spiele: ${sortedGames.length}`);
   }
+  const competitionSummary = buildGameCompetitionSummary(sortedGames);
+  if (competitionSummary.length > 0) {
+    lines.push(`Spieltypen: ${competitionSummary.map((entry) => `${entry.label} ${entry.count}`).join(" · ")}`);
+  }
   lines.push("");
   lines.push("Besuchsplan");
   lines.push("ROUTENPLAN");
@@ -83,8 +91,10 @@ function buildManualScoutX({ games, jugendLabel, kreisLabel, isTurnier, usedFall
   } else {
     sortedGames.forEach((game, index) => {
       const routeTime = KNOWN_TIME_RE.test(String(game.time || "").trim()) ? game.time : "--:--";
+      const competitionType = resolveGameCompetitionType(game);
       lines.push(`${index + 1}. ${routeTime} — ${game.home} vs. ${game.away} | ${game.venue || "Sportanlage"}`);
       lines.push(`   Liga/Wettbewerb: ${resolveGameCompetitionLabel(game)}`);
+      lines.push(`   Typ/Quelle: ${competitionType.label} · ${competitionType.sourceLabel}`);
     });
   }
 

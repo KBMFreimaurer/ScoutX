@@ -114,4 +114,32 @@ describe("GameTable", () => {
 
     expect(screen.getByText("im Plan von Koordination, Scout")).toBeInTheDocument();
   });
+
+  it("zeigt Review-, Dubletten- und Konflikt-Badges", () => {
+    render(
+      <GameTable
+        games={[
+          {
+            id: "game-review",
+            home: "Turnier Team A",
+            away: "Turnier Team B",
+            priority: 5,
+            dateObj: new Date("2026-05-01T00:00:00"),
+            dateLabel: "Fr, 01.05.2026",
+            time: "10:00",
+            venue: "Platz A",
+            source: "tournament",
+            reviewRequired: true,
+            reviewReason: "Region unsicher",
+            duplicateSourceCount: 2,
+            scheduleConflicts: [{ type: "time_overlap", severity: "hard-conflict", message: "Zeitgleich" }],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Prüfen")).toHaveAttribute("title", "Region unsicher");
+    expect(screen.getByText("2 Quellen")).toBeInTheDocument();
+    expect(screen.getByText("Konflikt")).toBeInTheDocument();
+  });
 });

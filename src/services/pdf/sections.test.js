@@ -61,6 +61,11 @@ Begründung: Starkes Spiel für Vergleich auf gutem Niveau.
     expect(tags).toContain("Jahrgang gemischt");
   });
 
+  it("kennzeichnet Turniere und DFB-Spiele in PDF-Tags", () => {
+    expect(inferBadges({ source: "tournament", turnier: true }, "")).toContain("Turnier");
+    expect(inferBadges({ source: "national", provider: "dfb.de", ageGroup: "U21" }, "")).toContain("DFB U21");
+  });
+
   it("berechnet Gesamtkette nur aus sichtbaren Segmenten", () => {
     const totals = computeVisibleChainTotals(
       [

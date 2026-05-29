@@ -232,6 +232,7 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
         toDate: String(payload?.toDate || payload?.fromDate || ""),
         keywords,
         regionKeywords: Array.isArray(payload?.regionKeywords) ? payload.regionKeywords : [],
+        includeReviewCandidates: Boolean(payload?.includeReviewCandidates),
       });
       requestLogger.info("meinturnierplan source parsed", {
         count: tournaments.length,

@@ -199,4 +199,54 @@ describe("PlanContext history restore", () => {
       expect(result.current.plan.plan).toContain("Liga/Wettbewerb: D-Junioren Niederrheinliga");
     });
   });
+
+  it("deklariert Turniere und DFB-Spiele im generierten Plan mit Typ und Quelle", async () => {
+    const { result } = renderHook(
+      () => ({
+        plan: usePlan(),
+        games: useGames(),
+        setup: useSetup(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      result.current.games.setGames([
+        {
+          id: "turnier-1",
+          home: "Pfingstcup U12",
+          away: "Turnier",
+          venue: "Sportpark",
+          time: "--:--",
+          dateObj: new Date("2026-05-23T00:00:00.000Z"),
+          source: "tournament",
+          provider: "meinturnierplan.de",
+          turnier: true,
+          competitionName: "Pfingstcup U12",
+        },
+        {
+          id: "dfb-1",
+          home: "Deutschland U21",
+          away: "Frankreich U21",
+          venue: "Aachen",
+          time: "18:00",
+          dateObj: new Date("2026-05-24T00:00:00.000Z"),
+          source: "national",
+          provider: "dfb.de",
+          ageGroup: "U21",
+          competitionName: "DFB U21-Länderspiel",
+        },
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.plan.onGeneratePlanPdf();
+    });
+
+    await waitFor(() => {
+      expect(result.current.plan.plan).toContain("Spieltypen: Turniere 1 · DFB-Spiele 1");
+      expect(result.current.plan.plan).toContain("Typ/Quelle: Turnier · meinturnierplan.de");
+      expect(result.current.plan.plan).toContain("Typ/Quelle: DFB U21 · dfb.de");
+    });
+  });
 });

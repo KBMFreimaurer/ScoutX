@@ -1,5 +1,9 @@
 import { C, secH } from "../styles/theme";
-import { resolveGameCompetitionLabel } from "../utils/gameCompetition";
+import {
+  buildGameCompetitionSummary,
+  resolveGameCompetitionLabel,
+  resolveGameCompetitionType,
+} from "../utils/gameCompetition";
 import { resolveGameMatchUrl } from "../utils/gameLinks";
 
 function sortByDateAndKickoff(left, right) {
@@ -18,7 +22,23 @@ function kickoffLabel(time) {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "").trim()) ? `${time} Uhr` : "Anstoß offen";
 }
 
+function resolveSourceLinkLabel(game, matchUrl) {
+  const urlText = String(matchUrl || "").toLowerCase();
+  if (urlText.includes("meinturnierplan.de")) {
+    return "meinturnierplan.de";
+  }
+  if (urlText.includes("dfb.de")) {
+    return "dfb.de";
+  }
+  if (urlText.includes("fussball.de")) {
+    return "fussball.de";
+  }
+  const type = resolveGameCompetitionType(game);
+  return type.sourceLabel;
+}
+
 export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }) {
+  const competitionSummary = buildGameCompetitionSummary(games);
   const linkedReviewGames = [...games]
     .sort(sortByDateAndKickoff)
     .map((game) => ({ game, matchUrl: resolveGameMatchUrl(game) }))
@@ -54,6 +74,47 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
         {plan}
       </div>
 
+      {competitionSummary.length > 0 ? (
+        <div
+          aria-label="Spieltypen im Plan"
+          style={{
+            marginTop: 18,
+            borderTop: `1px solid ${C.greenBorder}`,
+            paddingTop: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+          }}
+        >
+          <span style={{ fontSize: 12, color: C.gray, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Spieltypen
+          </span>
+          {competitionSummary.map((entry) => (
+            <span
+              key={entry.key}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                border: `1px solid ${entry.key === "league" ? C.greenBorder : "rgba(251,191,36,0.24)"}`,
+                borderRadius: 999,
+                background: entry.key === "league" ? "rgba(0,200,83,0.05)" : C.warnDim,
+                color: entry.key === "league" ? C.greenLight : C.warn,
+                padding: "4px 9px",
+                fontSize: 11,
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {entry.label}
+              <strong>{entry.count}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {linkedReviewGames.length > 0 ? (
         <div
           style={{
@@ -78,6 +139,10 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
             Direktlinks zu den Spielen ({linkedReviewGames.length})
           </div>
           {linkedReviewGames.map(({ game, matchUrl }, index) => (
+            (() => {
+              const competitionType = resolveGameCompetitionType(game);
+              const sourceLinkLabel = resolveSourceLinkLabel(game, matchUrl);
+              return (
             <div
               key={`${game.id || game.home}-${game.away}-${index}`}
               style={{
@@ -114,13 +179,16 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
                 <div style={{ fontSize: 11, color: C.grayDark, marginTop: 2 }}>
                   Liga/Wettbewerb: {resolveGameCompetitionLabel(game)}
                 </div>
+                <div style={{ fontSize: 11, color: C.grayDark, marginTop: 2 }}>
+                  Typ/Quelle: {competitionType.label} · {competitionType.sourceLabel}
+                </div>
               </div>
 
               <a
                 href={matchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={`Zum Spiel auf fussball.de für ${game.home} gegen ${game.away}`}
+                aria-label={`Zum Spiel auf ${sourceLinkLabel} für ${game.home} gegen ${game.away}`}
                 style={{
                   color: C.green,
                   textDecoration: "none",
@@ -134,9 +202,11 @@ export function PlanView({ plan, jugendLabel, kreisLabel, isMobile, games = [] }
                   whiteSpace: "nowrap",
                 }}
               >
-                fussball.de öffnen
+                {sourceLinkLabel} öffnen
               </a>
             </div>
+              );
+            })()
           ))}
         </div>
       ) : null}

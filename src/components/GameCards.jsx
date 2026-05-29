@@ -1,4 +1,5 @@
 import { C } from "../styles/theme";
+import { resolveGameCompetitionType } from "../utils/gameCompetition";
 import { formatDistanceKm } from "../utils/geo";
 import { resolveGameMatchUrl } from "../utils/gameLinks";
 
@@ -34,10 +35,11 @@ function PlanningBadge({ game }) {
 }
 
 function GameTypeBadge({ game }) {
-  const isTournament = Boolean(game?.turnier) || String(game?.source || "").toLowerCase() === "tournament";
-  if (!isTournament) {
+  const type = resolveGameCompetitionType(game);
+  if (type.key === "league") {
     return null;
   }
+  const isNational = type.key === "national";
   return (
     <span
       style={{
@@ -46,18 +48,72 @@ function GameTypeBadge({ game }) {
         width: "fit-content",
         marginTop: 6,
         marginRight: 6,
-        border: "1px solid rgba(251,191,36,0.24)",
+        border: isNational ? "1px solid rgba(96,165,250,0.26)" : "1px solid rgba(251,191,36,0.24)",
         borderRadius: 999,
-        background: C.warnDim,
-        color: C.warn,
+        background: isNational ? "rgba(37,99,235,0.16)" : C.warnDim,
+        color: isNational ? "#93c5fd" : C.warn,
         padding: "2px 8px",
         fontSize: 11,
         fontWeight: 800,
         whiteSpace: "nowrap",
       }}
     >
-      Turnier
+      {type.label}
     </span>
+  );
+}
+
+function SmallMetaBadge({ children, title, tone = "muted" }) {
+  const toneStyles = {
+    muted: { border: C.border, background: "rgba(255,255,255,0.03)", color: C.gray },
+    warn: { border: "rgba(251,191,36,0.24)", background: C.warnDim, color: C.warn },
+    danger: { border: "rgba(252,165,165,0.35)", background: "rgba(127,29,29,0.18)", color: "#fca5a5" },
+  };
+  const style = toneStyles[tone] || toneStyles.muted;
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        marginTop: 6,
+        marginRight: 6,
+        border: `1px solid ${style.border}`,
+        borderRadius: 999,
+        background: style.background,
+        color: style.color,
+        padding: "2px 8px",
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function GameMetaBadges({ game }) {
+  const conflictCount = Array.isArray(game?.scheduleConflicts) ? game.scheduleConflicts.length : 0;
+  return (
+    <>
+      {game?.reviewRequired ? (
+        <SmallMetaBadge title={String(game?.reviewReason || "Treffer bitte prüfen")} tone="warn">
+          Prüfen
+        </SmallMetaBadge>
+      ) : null}
+      {Number(game?.duplicateSourceCount || 0) > 1 ? (
+        <SmallMetaBadge title="Aus mehreren Quellen zusammengeführt">
+          {game.duplicateSourceCount} Quellen
+        </SmallMetaBadge>
+      ) : null}
+      {conflictCount > 0 ? (
+        <SmallMetaBadge title={String(game.scheduleConflicts?.[0]?.message || "Zeitkonflikt")} tone="danger">
+          Konflikt
+        </SmallMetaBadge>
+      ) : null}
+    </>
   );
 }
 
@@ -130,6 +186,7 @@ export function GameCards({
                 {game.home} <span style={{ color: C.grayDark, fontWeight: 400 }}>vs</span> {game.away}
                 <div>
                   <GameTypeBadge game={game} />
+                  <GameMetaBadges game={game} />
                   <PlanningBadge game={game} />
                 </div>
               </div>

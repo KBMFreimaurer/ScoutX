@@ -201,6 +201,63 @@ describe("data provider", () => {
     );
   });
 
+  it("expands tournament detail matches into scoutable games with review metadata", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [
+        {
+          id: "mtp-cup",
+          externalId: "cup",
+          name: "D-Junioren Pfingstcup Duisburg",
+          dateFrom: "2026-06-01",
+          timeFrom: "09:00",
+          url: "https://www.meinturnierplan.de/showit.php?id=cup",
+          venue: "Sportpark Duisburg",
+          reviewRequired: true,
+          reviewReason: "Region nur aus Turniername abgeleitet.",
+          matchConfidence: "weak",
+          matches: [
+            {
+              home: "MSV Duisburg U12",
+              away: "Rot-Weiss Essen U12",
+              date: "2026-06-01",
+              time: "10:30",
+              venue: "Platz 1",
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeTournaments: true,
+    });
+
+    expect(result.games).toHaveLength(1);
+    expect(result.games[0]).toMatchObject({
+      id: "mtp-cup-match-0",
+      home: "MSV Duisburg U12",
+      away: "Rot-Weiss Essen U12",
+      time: "10:30",
+      venue: "Platz 1",
+      source: "tournament",
+      turnier: true,
+      tournamentName: "D-Junioren Pfingstcup Duisburg",
+      reviewRequired: true,
+      reviewReason: "Region nur aus Turniername abgeleitet.",
+      matchConfidence: "weak",
+      priority: 5,
+    });
+  });
+
   it("passes selected region metadata to meinturnierplan import", async () => {
     vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
       ok: true,
@@ -320,12 +377,97 @@ describe("data provider", () => {
     });
 
     expect(result.source).toBe("combined");
-    expect(result.games.some((game) => game.ageGroup === "U21")).toBe(true);
+    const dfbGame = result.games.find((game) => game.ageGroup === "U21");
+    expect(dfbGame).toMatchObject({
+      priority: 6,
+      priorityReason: "DFB-Nationalspiel",
+    });
     expect(importTeamNationalGames).toHaveBeenCalledWith(
       expect.objectContaining({
         ageGroups: ["U15", "U16", "U17", "U18", "U19", "U20", "U21"],
       }),
     );
+  });
+
+  it("deduplicates cross-source games and marks schedule conflicts", async () => {
+    vi.mocked(importTeamTournamentsFromMeinturnierplan).mockResolvedValue({
+      ok: true,
+      tournaments: [
+        {
+          id: "mtp-dup",
+          externalId: "dup",
+          name: "D-Junioren Cup",
+          dateFrom: "2026-06-01",
+          url: "https://www.meinturnierplan.de/showit.php?id=dup",
+          venue: "Sportpark",
+          matches: [
+            {
+              home: "Team A",
+              away: "Team B",
+              date: "2026-06-01",
+              time: "10:00",
+              venue: "Sportpark",
+            },
+          ],
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          games: [
+            {
+              id: "adapter-dup",
+              date: "2026-06-01",
+              time: "10:00",
+              home: "Team A",
+              away: "Team B",
+              venue: "Sportpark",
+              jugendId: "d-jugend",
+              kreisId: "duisburg",
+            },
+            {
+              id: "adapter-conflict",
+              date: "2026-06-01",
+              time: "10:45",
+              home: "Team C",
+              away: "Team D",
+              venue: "Nebenplatz",
+              jugendId: "d-jugend",
+              kreisId: "duisburg",
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeTournaments: true,
+    });
+
+    expect(result.games).toHaveLength(2);
+    const deduped = result.games.find((game) => game.home === "Team A");
+    const conflict = result.games.find((game) => game.home === "Team C");
+    expect(deduped?.sourceAliases).toEqual(["tournament", "adapter"]);
+    expect(deduped?.duplicateSourceCount).toBe(2);
+    expect(deduped?.scheduleConflicts?.[0]).toMatchObject({
+      type: "time_overlap",
+      gameId: conflict?.id,
+    });
+    expect(conflict?.scheduleConflicts?.[0]).toMatchObject({
+      type: "time_overlap",
+      gameId: deduped?.id,
+    });
   });
 
   it("falls back to adapter when tournament import returns empty", async () => {

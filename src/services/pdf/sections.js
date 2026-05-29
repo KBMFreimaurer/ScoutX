@@ -12,6 +12,7 @@ import {
 } from "./layout";
 import { COLORS, normalizeLookup, sanitizePdfText, toSafeString, truncateText } from "./styles";
 import { buildAttendanceRows, formatPresenceMinutes, normalizePresenceMinutes } from "../../utils/arbeitszeit";
+import { resolveGameCompetitionType } from "../../utils/gameCompetition";
 import { resolveGameMatchUrl } from "../../utils/gameLinks";
 import { buildFahrtkostenRows } from "../../utils/fahrtkosten";
 
@@ -138,6 +139,11 @@ export function reasonForGame(game, reasonMap) {
 export function inferBadges(game, reasonText) {
   const tags = [];
   const normalizedReason = normalizeLookup(reasonText);
+  const competitionType = resolveGameCompetitionType(game);
+
+  if (competitionType.key !== "league") {
+    tags.push(competitionType.label);
+  }
 
   if (Number(game?.priority || 0) >= 5) {
     tags.push("NLZ-relevant");
