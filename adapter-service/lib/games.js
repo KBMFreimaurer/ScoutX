@@ -197,6 +197,24 @@ function normalizeGame(raw, index, options = {}) {
   }
 
   const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : toIsoDateLocal(parsedDate);
+  const league = String(
+    raw.league ??
+      raw.liga ??
+      raw.competition ??
+      raw.wettbewerb ??
+      raw.wettbewerbName ??
+      raw.division ??
+      raw.spielklasse ??
+      raw.spielklasseName ??
+      raw.klasse ??
+      raw.staffel ??
+      raw.staffelName ??
+      raw.leagueName ??
+      raw.competitionName ??
+      "",
+  ).trim();
+  const competitionName = String(raw.competitionName ?? raw.wettbewerbName ?? raw.spielklasseName ?? raw.staffelName ?? league).trim();
+  const staffelName = String(raw.staffelName ?? raw.staffel ?? raw.leagueName ?? competitionName).trim();
 
   return {
     id: raw.id ?? `adapter-${index}`,
@@ -209,6 +227,13 @@ function normalizeGame(raw, index, options = {}) {
     km: Number.isFinite(Number(raw.km)) ? Number(raw.km) : 0,
     kreisId: String(raw.kreisId ?? raw.kreis ?? raw.district ?? "").trim(),
     jugendId: String(raw.jugendId ?? raw.jugend ?? raw.altersklasse ?? raw.ageGroup ?? "").trim(),
+    stateCode: String(raw.stateCode ?? raw.state_code ?? raw.bundesland ?? raw.state ?? "").trim(),
+    regionName: String(raw.regionName ?? raw.region_name ?? "").trim(),
+    regionShortCode: String(raw.regionShortCode ?? raw.region_short_code ?? "").trim(),
+    league,
+    competitionName,
+    staffelName,
+    competitionUrl: String(raw.competitionUrl ?? raw.competition_url ?? raw.staffelUrl ?? raw.staffel_url ?? "").trim(),
     turnier: toBoolean(raw.turnier),
     source: options.source || String(raw.source || "unknown"),
   };
