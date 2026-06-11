@@ -1,4 +1,5 @@
 import {
+  checkScoutXCompanionHealth,
   ensureScoutXCompanion,
   openScoutXCompanionCapability,
   resolveScoutXCompanionCapabilityEndpoint,
@@ -29,6 +30,10 @@ export function resolveHrworksAutomationStarterEndpoint(explicitEndpoint = "") {
 
 export async function ensureHrworksAutomationBridge(options = {}) {
   return ensureScoutXCompanion(options);
+}
+
+export async function checkHrworksAutomationBridge(options = {}) {
+  return checkScoutXCompanionHealth(options);
 }
 
 export async function openHrworksAutomationLogin(options = {}) {

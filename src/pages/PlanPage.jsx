@@ -21,10 +21,12 @@ import {
 import { parseHrworksTimesheetFile, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
 import { exportHrworksAuditLog } from "../services/hrworksAuditExport";
 import {
+  checkHrworksAutomationBridge,
   ensureHrworksAutomationBridge,
   openHrworksAutomationLogin,
   startHrworksAutomation,
 } from "../services/hrworksAutomationClient";
+import { resolveScoutXCompanionInstallTarget } from "../services/scoutXCompanionInstall";
 import {
   advanceAutomationStep,
   canCaptureDebugScreenshot,
@@ -430,10 +432,15 @@ export function PlanPage() {
   const [hrworksWizardNotice, setHrworksWizardNotice] = useState("");
   const [hrworksUploadedFileName, setHrworksUploadedFileName] = useState("");
   const [hrworksAutomationStarting, setHrworksAutomationStarting] = useState(false);
+  const [hrworksCompanionStatus, setHrworksCompanionStatus] = useState("unknown");
   const [historyDeleteRequest, setHistoryDeleteRequest] = useState(null);
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
+  );
+  const hrworksCompanionInstallTarget = useMemo(
+    () => resolveScoutXCompanionInstallTarget(),
+    [],
   );
   const [presenceMinutesByGame, setPresenceMinutesByGame] = useState(() => {
     if (typeof window === "undefined") {
@@ -649,8 +656,22 @@ export function PlanPage() {
     setHrworksValidation({ errors: validation.errors, warnings });
     setHrworksLoginConfirmed(false);
     setHrworksUploadedFileName("");
+    setHrworksCompanionStatus("unknown");
     setHrworksWizardNotice(autoSetupApplied ? "Empfohlenes HRworks-Setup wurde automatisch angewendet." : "");
     setHrworksReviewOpen(true);
+  };
+
+  const handleCheckHrworksCompanion = async () => {
+    setHrworksWizardNotice("ScoutX prüft den lokalen Companion auf diesem Gerät.");
+    const result = await checkHrworksAutomationBridge();
+    if (result.ok) {
+      setHrworksCompanionStatus("reachable");
+      setHrworksWizardNotice("ScoutX Companion ist lokal erreichbar. Du kannst HRworks jetzt öffnen.");
+      setErr("");
+      return;
+    }
+    setHrworksCompanionStatus("missing");
+    setHrworksWizardNotice("ScoutX Companion ist lokal noch nicht erreichbar. Bitte Companion installieren und danach erneut prüfen.");
   };
 
   const handleOpenHrworksLoginTab = () => {
@@ -660,6 +681,7 @@ export function PlanPage() {
       try {
         const result = await ensureHrworksAutomationBridge();
         const loginWindow = await openHrworksAutomationLogin();
+        setHrworksCompanionStatus("reachable");
         setHrworksWizardNotice(
           loginWindow?.sameBrowser
             ? "HRworks wurde im selben Desktop-Browser wie ScoutX in einem neuen Tab geöffnet. Bitte dort einloggen und danach hier den Import starten."
@@ -673,6 +695,7 @@ export function PlanPage() {
         );
         setErr("");
       } catch (error) {
+        setHrworksCompanionStatus("missing");
         setHrworksWizardNotice("ScoutX Companion konnte HRworks auf diesem Gerät nicht für den Login vorbereiten.");
         setErr(String(error?.message || error || "ScoutX Companion konnte lokal auf diesem Gerät nicht gestartet werden."));
       }
@@ -737,6 +760,7 @@ export function PlanPage() {
     const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
     const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
     setHrworksRuntimeSession(sessionRunning);
+    setHrworksCompanionStatus("reachable");
     setHrworksWizardNotice("");
 
     let bridgeResult = null;
@@ -1388,6 +1412,9 @@ export function PlanPage() {
         uploadedFileName={hrworksUploadedFileName}
         wizardNotice={hrworksWizardNotice}
         automationStarting={hrworksAutomationStarting}
+        companionStatus={hrworksCompanionStatus}
+        companionInstallTarget={hrworksCompanionInstallTarget}
+        onCheckCompanion={handleCheckHrworksCompanion}
         onLoginConfirmedChange={setHrworksLoginConfirmed}
         onPickFile={handlePickHrworksFile}
         onDropFile={handleHrworksFileDrop}

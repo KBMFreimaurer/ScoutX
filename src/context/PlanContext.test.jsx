@@ -157,6 +157,70 @@ describe("PlanContext history restore", () => {
     });
   });
 
+  it("restores stored route data immediately when reopening a historical plan", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const storedRouteOverview = {
+      totalKm: 24.6,
+      estimatedMinutes: 32,
+      legs: [
+        { from: "Start", to: "Team A vs Team B", distanceKm: 12.3, durationMinutes: 16, source: "route" },
+        { from: "Team A vs Team B", to: "Start", distanceKm: 12.3, durationMinutes: 16, source: "route" },
+      ],
+    };
+    const storedDirectOptions = [
+      { id: "g-1", label: "Team A vs Team B", distanceKm: 12.3, durationMinutes: 16 },
+    ];
+    window.localStorage.setItem(STORAGE_KEYS.planHistory, JSON.stringify([
+      {
+        id: "hist-route",
+        createdAt: "2026-05-22T14:00:00.000Z",
+        planText: "Plan",
+        games: [
+          {
+            id: "g-1",
+            home: "Team A",
+            away: "Team B",
+            venue: "Sportpark",
+            time: "11:00",
+            dateObj: "2026-05-23T00:00:00.000Z",
+          },
+        ],
+        selectedGameIds: ["g-1"],
+        meta: {
+          startLocation: {
+            label: "Start",
+            lat: 51.43,
+            lon: 6.77,
+          },
+          startLocationLabel: "Start",
+        },
+        routeOverview: storedRouteOverview,
+        routeDirectOptions: storedDirectOptions,
+      },
+    ]));
+
+    const { result } = renderHook(
+      () => ({
+        plan: usePlan(),
+        setup: useSetup(),
+      }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      result.current.plan.onOpenPlanHistory("hist-route");
+    });
+
+    expect(result.current.plan.routeOverview).toEqual(storedRouteOverview);
+    expect(result.current.plan.routeDirectOptions).toEqual(storedDirectOptions);
+    expect(result.current.plan.routeCalculating).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("deklariert im generierten Plan fuer jedes Spiel die Liga", async () => {
     const { result } = renderHook(
       () => ({

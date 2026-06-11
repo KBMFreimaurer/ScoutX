@@ -88,6 +88,9 @@ export function HrworksImportReviewModal({
   uploadedFileName = "",
   wizardNotice = "",
   automationStarting = false,
+  companionStatus = "unknown",
+  companionInstallTarget = null,
+  onCheckCompanion,
 }) {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const games = Array.isArray(payload?.sourceGames) ? payload.sourceGames : [];
@@ -96,6 +99,9 @@ export function HrworksImportReviewModal({
   const canStartImport = fileReady && loginConfirmed === true && (errors?.length || 0) === 0 && !automationStarting;
   const currentStep = !fileReady ? 1 : loginConfirmed === true ? 3 : 2;
   const isCompactViewport = typeof window !== "undefined" ? window.innerWidth < 900 : false;
+  const showCompanionInstall = fileReady && loginConfirmed !== true && companionStatus === "missing";
+  const primaryCompanionDownload = companionInstallTarget?.primaryDownload || null;
+  const companionDownloads = Array.isArray(companionInstallTarget?.downloads) ? companionInstallTarget.downloads : [];
 
   useEffect(() => {
     if (!open || typeof document === "undefined") {
@@ -186,6 +192,62 @@ export function HrworksImportReviewModal({
       </div>
     </div>
   );
+
+  const companionInstallPanel = showCompanionInstall ? (
+    <div
+      style={{
+        border: "1px solid rgba(96,165,250,0.32)",
+        background: "rgba(96,165,250,0.08)",
+        borderRadius: 12,
+        padding: 12,
+        display: "grid",
+        gap: 8,
+      }}
+    >
+      <div style={{ color: C.white, fontSize: 14, fontWeight: 800 }}>ScoutX Companion installieren</div>
+      <div style={{ color: C.grayLight, fontSize: 12 }}>
+        Für den HRworks-Import muss der Companion einmal lokal auf diesem Gerät installiert werden.
+      </div>
+      {primaryCompanionDownload ? (
+        <a
+          href={primaryCompanionDownload.href}
+          download={primaryCompanionDownload.fileName || undefined}
+          style={{
+            display: "inline-flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: 38,
+            padding: "9px 12px",
+            borderRadius: 10,
+            background: C.green,
+            color: C.bg,
+            fontSize: 13,
+            fontWeight: 800,
+            textDecoration: "none",
+          }}
+        >
+          {primaryCompanionDownload.label}
+        </a>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {companionDownloads.map((download) => (
+            <a
+              key={download.platform}
+              href={download.href}
+              download={download.fileName || undefined}
+              style={{ color: C.green, fontSize: 12, fontWeight: 800 }}
+            >
+              {download.label}
+            </a>
+          ))}
+        </div>
+      )}
+      <div style={{ color: C.grayLight, fontSize: 12 }}>
+        {primaryCompanionDownload?.installHint || "ZIP entpacken, Installer starten und danach die Verbindung erneut prüfen."}
+      </div>
+      <button type="button" onClick={onCheckCompanion}>Verbindung erneut prüfen</button>
+    </div>
+  ) : null;
 
   const dialog = (
     <div
@@ -278,6 +340,7 @@ export function HrworksImportReviewModal({
                 <>
                   <div>Öffne HRworks, logge dich dort ein und komme dann hierher zurück.</div>
                   <div>ScoutX Companion läuft lokal auf deinem Gerät. Er versucht zuerst denselben Desktop-Browser wie ScoutX zu verwenden. Falls das technisch nicht freigegeben ist, übernimmt der Companion ein eigenes kontrolliertes HRworks-Fenster.</div>
+                  {companionInstallPanel}
                   <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.grayLight }}>
                     <input
                       type="checkbox"

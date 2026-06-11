@@ -183,6 +183,74 @@ async function requestWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT
   }
 }
 
+export async function checkScoutXCompanionHealth(options = {}) {
+  const healthEndpoint = resolveScoutXCompanionHealthEndpoint(options.endpoint);
+  if (!healthEndpoint || typeof fetch !== "function") {
+    return { ok: false, status: "missing" };
+  }
+  try {
+    const response = await requestWithTimeout(
+      healthEndpoint,
+      {
+        method: "GET",
+        headers: { accept: "application/json" },
+      },
+      Math.max(500, Number(options.healthTimeoutMs || DEFAULT_HEALTH_TIMEOUT_MS)),
+    );
+    return {
+      ok: response.ok,
+      status: response.ok ? "reachable" : "missing",
+      httpStatus: response.status,
+    };
+  } catch {
+    return { ok: false, status: "missing" };
+  }
+}
+
+async function waitForScoutXCompanionWakeup({
+  healthEndpoint,
+  wakeCompanionImpl,
+  wakeProtocolUrl,
+  wakeCapability,
+  locationOrigin,
+  wakeTimeoutMs,
+  wakePollIntervalMs,
+  healthTimeoutMs,
+}) {
+  if (wakeProtocolUrl) {
+    try {
+      await wakeCompanionImpl(wakeProtocolUrl, {
+        capability: wakeCapability,
+        locationOrigin,
+      });
+    } catch {
+      // Continue with health polling and final fallback messaging.
+    }
+  }
+
+  const deadline = Date.now() + Math.max(1000, Number(wakeTimeoutMs || DEFAULT_WAKE_TIMEOUT_MS));
+  while (Date.now() < deadline) {
+    if (await requestWithTimeout(
+      healthEndpoint,
+      {
+        method: "GET",
+        headers: { accept: "application/json" },
+      },
+      Math.max(500, Number(healthTimeoutMs || DEFAULT_HEALTH_TIMEOUT_MS)),
+    ).then((response) => response.ok).catch(() => false)) {
+      return {
+        ok: true,
+        status: "woken",
+        launch: "protocol",
+        protocolUrl: wakeProtocolUrl,
+      };
+    }
+    await wait(Math.max(50, Number(wakePollIntervalMs || DEFAULT_WAKE_POLL_INTERVAL_MS)));
+  }
+
+  throw new Error("ScoutX Companion wurde auf diesem Gerät nicht erreicht. Bei deploytem ScoutX muss der Companion lokal auf deinem Rechner laufen und auf localhost:8791 antworten.");
+}
+
 export async function ensureScoutXCompanion(options = {}) {
   const healthEndpoint = resolveScoutXCompanionHealthEndpoint(options.endpoint);
   const starterEndpoint = resolveScoutXCompanionStartEndpoint(options.startEndpoint);
@@ -224,41 +292,20 @@ export async function ensureScoutXCompanion(options = {}) {
     starterEndpoint,
     isDevServer: options.isDevServer,
   })) {
-    if (wakeProtocolUrl) {
-      try {
-        await wakeCompanionImpl(wakeProtocolUrl, {
-          capability: wakeCapability,
-          locationOrigin,
-        });
-      } catch {
-        // Continue with health polling and final fallback messaging.
-      }
-    }
-
-    const deadline = Date.now() + Math.max(1000, Number(options.wakeTimeoutMs || DEFAULT_WAKE_TIMEOUT_MS));
-    while (Date.now() < deadline) {
-      if (await requestWithTimeout(
-        healthEndpoint,
-        {
-          method: "GET",
-          headers: { accept: "application/json" },
-        },
-        Math.max(500, Number(options.healthTimeoutMs || DEFAULT_HEALTH_TIMEOUT_MS)),
-      ).then((response) => response.ok).catch(() => false)) {
-        return {
-          ok: true,
-          status: "woken",
-          launch: "protocol",
-          protocolUrl: wakeProtocolUrl,
-        };
-      }
-      await wait(Math.max(50, Number(options.wakePollIntervalMs || DEFAULT_WAKE_POLL_INTERVAL_MS)));
-    }
-
-    throw new Error("ScoutX Companion wurde auf diesem Gerät nicht erreicht. Bei deploytem ScoutX muss der Companion lokal auf deinem Rechner laufen und auf localhost:8791 antworten.");
+    return waitForScoutXCompanionWakeup({
+      healthEndpoint,
+      wakeCompanionImpl,
+      wakeProtocolUrl,
+      wakeCapability,
+      locationOrigin,
+      wakeTimeoutMs: options.wakeTimeoutMs,
+      wakePollIntervalMs: options.wakePollIntervalMs,
+      healthTimeoutMs: options.healthTimeoutMs,
+    });
   }
 
   let response;
+  let body = {};
   try {
     response = await requestWithTimeout(
       starterEndpoint,
@@ -268,13 +315,43 @@ export async function ensureScoutXCompanion(options = {}) {
       },
       Math.max(3000, Number(options.startTimeoutMs || 15000)),
     );
+    body = await response.json().catch(() => ({}));
   } catch (error) {
     const message = String(error?.message || error || "unbekannter Netzwerkfehler");
+    try {
+      return await waitForScoutXCompanionWakeup({
+        healthEndpoint,
+        wakeCompanionImpl,
+        wakeProtocolUrl,
+        wakeCapability,
+        locationOrigin,
+        wakeTimeoutMs: options.wakeTimeoutMs,
+        wakePollIntervalMs: options.wakePollIntervalMs,
+        healthTimeoutMs: options.healthTimeoutMs,
+      });
+    } catch {
+      // Preserve the direct starter failure for local dev, where it is most actionable.
+    }
     throw new Error(`Lokaler ScoutX Companion konnte nicht automatisch gestartet werden. Starte zuerst: npm run companion:dev (${message})`);
   }
 
-  const body = await response.json().catch(() => ({}));
   if (!response.ok || body?.ok === false) {
+    try {
+      return await waitForScoutXCompanionWakeup({
+        healthEndpoint,
+        wakeCompanionImpl,
+        wakeProtocolUrl,
+        wakeCapability,
+        locationOrigin,
+        wakeTimeoutMs: options.wakeTimeoutMs,
+        wakePollIntervalMs: options.wakePollIntervalMs,
+        healthTimeoutMs: options.healthTimeoutMs,
+      });
+    } catch (wakeError) {
+      if (response.status === 404 || /not found/i.test(String(body?.error || ""))) {
+        throw wakeError;
+      }
+    }
     throw new Error(body?.error || "Lokaler ScoutX Companion konnte nicht automatisch gestartet werden. Starte zuerst: npm run companion:dev");
   }
   return body;

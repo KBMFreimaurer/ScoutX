@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  checkHrworksAutomationBridge,
   ensureHrworksAutomationBridge,
   openHrworksAutomationLogin,
   resolveHrworksAutomationEndpoint,
@@ -40,6 +41,16 @@ describe("hrworksAutomationClient", () => {
       "http://127.0.0.1:8791/api/companion/capabilities/hrworks-import/open-login",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("checks the bridge health without starting it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkHrworksAutomationBridge();
+
+    expect(result.status).toBe("reachable");
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8791/health", expect.objectContaining({ method: "GET" }));
   });
 
   it("skips the starter route when the local bridge is already healthy", async () => {

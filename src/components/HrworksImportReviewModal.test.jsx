@@ -129,6 +129,58 @@ describe("HrworksImportReviewModal", () => {
     expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
   });
 
+  it("shows companion installation actions when the local companion is missing", () => {
+    const onCheckCompanion = vi.fn();
+
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={{
+          date: "2026-04-20",
+          startTime: "08:00",
+          endTime: "10:00",
+          purpose: "Sichtung / (A)",
+          note: "Sichtung / (A)",
+          departureLocation: "Start",
+          routeLegs: [],
+          sourceGames: [],
+          importSource: "timesheet",
+        }}
+        warnings={[]}
+        errors={[]}
+        uploadedFileName="AEB Mai Onay.xlsx"
+        loginConfirmed={false}
+        companionStatus="missing"
+        companionInstallTarget={{
+          platform: "macos",
+          primaryDownload: {
+            platform: "macos",
+            label: "Companion für macOS herunterladen",
+            href: "/downloads/scoutx-companion-macos.zip",
+            installHint: "ZIP entpacken und install.command öffnen.",
+          },
+          downloads: [],
+        }}
+        onCheckCompanion={onCheckCompanion}
+        onLoginConfirmedChange={vi.fn()}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        onPickFile={vi.fn()}
+        onOpenLogin={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/ScoutX Companion installieren/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Companion für macOS herunterladen/i })).toHaveAttribute(
+      "href",
+      "/downloads/scoutx-companion-macos.zip",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Verbindung erneut prüfen/i }));
+
+    expect(onCheckCompanion).toHaveBeenCalledTimes(1);
+  });
+
   it("enables the final import button once xlsx and login are both confirmed", () => {
     render(
       <HrworksImportReviewModal

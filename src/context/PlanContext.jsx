@@ -122,6 +122,16 @@ function deserializeGameFromHistory(game) {
   };
 }
 
+function normalizeStoredRouteOverview(value) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.legs)) {
+    return null;
+  }
+  return {
+    ...value,
+    legs: value.legs,
+  };
+}
+
 function normalizePlanHistoryEntry(entry) {
   if (!entry || typeof entry !== "object") {
     return null;
@@ -144,6 +154,8 @@ function normalizePlanHistoryEntry(entry) {
     planText: String(entry.planText || ""),
     games,
     selectedGameIds,
+    routeOverview: normalizeStoredRouteOverview(entry.routeOverview),
+    routeDirectOptions: Array.isArray(entry.routeDirectOptions) ? entry.routeDirectOptions : [],
     meta: entry.meta && typeof entry.meta === "object" ? entry.meta : {},
     syncContext: entry.syncContext && typeof entry.syncContext === "object" ? entry.syncContext : {},
     presenceByGame: entry.presenceByGame && typeof entry.presenceByGame === "object" ? entry.presenceByGame : {},
@@ -234,10 +246,24 @@ export function PlanProvider({ children }) {
   }, [effectivePlannedGames]);
 
   const routePreviewGames = useMemo(() => routeGames.slice(0, 5), [routeGames]);
+  const activeHistoryEntry = useMemo(
+    () => planHistory.find((entry) => entry.id === activeHistoryId) || null,
+    [planHistory, activeHistoryId],
+  );
 
   useEffect(() => {
     let alive = true;
     const expectedDirectCount = routePreviewGames.length;
+    const storedRouteOverview = normalizeStoredRouteOverview(activeHistoryEntry?.routeOverview);
+
+    if (storedRouteOverview) {
+      setRouteOverview(storedRouteOverview);
+      setRouteDirectOptions(Array.isArray(activeHistoryEntry?.routeDirectOptions) ? activeHistoryEntry.routeDirectOptions : []);
+      setRouteCalculating(false);
+      return () => {
+        alive = false;
+      };
+    }
 
     if (!setup.startLocation || routePreviewGames.length === 0) {
       setRouteOverview(null);
@@ -250,11 +276,12 @@ export function PlanProvider({ children }) {
 
     if (strictGoogleRouting) {
       setRouteOverview(null);
+      setRouteCalculating(true);
     } else {
       const fallback = calculateRoute(setup.startLocation, routePreviewGames);
       setRouteOverview(fallback);
+      setRouteCalculating(false);
     }
-    setRouteCalculating(true);
 
     void Promise.all([
       withTimeout(calculateRouteWithDriving(setup.startLocation, routePreviewGames), ROUTE_TIMEOUT_MS, null),
@@ -284,7 +311,7 @@ export function PlanProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [setup.startLocation, routePreviewGames, strictGoogleRouting]);
+  }, [setup.startLocation, routePreviewGames, strictGoogleRouting, activeHistoryEntry?.id, activeHistoryEntry?.routeOverview, activeHistoryEntry?.routeDirectOptions]);
 
   useEffect(() => {
     if (suspendNextPlanResetRef.current) {
@@ -307,11 +334,6 @@ export function PlanProvider({ children }) {
     }
   }, [planHistory]);
 
-  const activeHistoryEntry = useMemo(
-    () => planHistory.find((entry) => entry.id === activeHistoryId) || null,
-    [planHistory, activeHistoryId],
-  );
-
   const onOpenPlanHistory = useCallback(
     (entryId) => {
       const id = String(entryId || "").trim();
@@ -327,6 +349,11 @@ export function PlanProvider({ children }) {
       const restoredGames = (Array.isArray(entry.games) ? entry.games : []).map(deserializeGameFromHistory);
       const restoredStartLocation = buildRestoredStartLocation(entry.meta);
       suspendNextPlanResetRef.current = true;
+      if (entry.routeOverview) {
+        setRouteOverview(entry.routeOverview);
+        setRouteDirectOptions(Array.isArray(entry.routeDirectOptions) ? entry.routeDirectOptions : []);
+        setRouteCalculating(false);
+      }
       gamesCtx.setGames(restoredGames);
       gamesCtx.setDataSourceUsed("history");
       gamesCtx.onRestorePlannedGames(entry.selectedGameIds);
@@ -446,6 +473,8 @@ export function PlanProvider({ children }) {
         planText: manualPlan,
         games: effectivePlannedGames.map(serializeGameForHistory),
         selectedGameIds: usedFallbackAll ? [] : selectedGames.map((game) => String(game?.id || "").trim()).filter(Boolean),
+        routeOverview,
+        routeDirectOptions,
         meta: {
           kreisLabel: setup.kreisLabel || setup.kreis?.label || "",
           jugendLabel: setup.jugend?.label || "",
@@ -498,6 +527,8 @@ export function PlanProvider({ children }) {
     gamesCtx.dataSourceUsed,
     effectivePlannedGames,
     navigate,
+    routeDirectOptions,
+    routeOverview,
     setup,
   ]);
 
