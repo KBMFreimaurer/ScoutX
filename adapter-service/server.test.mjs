@@ -1320,6 +1320,92 @@ describe("adapter-service server integration", () => {
     expect(payload.team).toMatchObject({ id: "team-scoutx" });
   });
 
+  it("gates new email accounts behind verification and profile completion", async () => {
+    const email = `verify-${Date.now()}@example.com`;
+    const registerResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userId: email,
+        email,
+        name: "Verify Scout",
+        password: "Very-secure-password-2026",
+        teamKey: "borussia-moenchengladbach",
+      }),
+    });
+
+    expect(registerResponse.status).toBe(201);
+    const cookie = String(registerResponse.headers.get("set-cookie") || "").split(";")[0];
+    const registerPayload = await parseJsonSafe(registerResponse);
+    expect(registerPayload.status).toBe("email_verification_required");
+    expect(registerPayload.user).toMatchObject({ email, emailVerified: false, role: "scout" });
+    expect(typeof registerPayload.verificationToken).toBe("string");
+
+    const verifyResponse = await fetch(`${baseUrl}/api/team/auth/verification/confirm`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": registerPayload.csrfToken,
+      },
+      body: JSON.stringify({ token: registerPayload.verificationToken }),
+    });
+    expect(verifyResponse.status).toBe(200);
+    const verifyPayload = await parseJsonSafe(verifyResponse);
+    expect(verifyPayload.status).toBe("profile_required");
+    expect(verifyPayload.user.emailVerified).toBe(true);
+
+    const profileResponse = await fetch(`${baseUrl}/api/team/auth/profile`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie,
+        "x-csrf-token": registerPayload.csrfToken,
+      },
+      body: JSON.stringify({
+        name: "Verify Scout Final",
+        birthDate: "2000-01-01",
+        profileImage: "data:image/png;base64,AAAA",
+        role: "admin",
+      }),
+    });
+    expect(profileResponse.status).toBe(200);
+    const profilePayload = await parseJsonSafe(profileResponse);
+    expect(profilePayload.status).toBe("connected");
+    expect(profilePayload.user).toMatchObject({
+      name: "Verify Scout Final",
+      birthDate: "2000-01-01",
+      profileComplete: true,
+      role: "scout",
+    });
+  });
+
+  it("rejects duplicate normalized registration email addresses", async () => {
+    const email = `duplicate-${Date.now()}@example.com`;
+    const body = {
+      userId: email,
+      email,
+      name: "Duplicate Scout",
+      password: "Very-secure-password-2026",
+      teamKey: "borussia-moenchengladbach",
+    };
+    const firstResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...body, userId: `other-${Date.now()}@example.com`, email: email.toUpperCase() }),
+    });
+    expect(secondResponse.status).toBe(409);
+    const payload = await parseJsonSafe(secondResponse);
+    expect(String(payload.error || "")).toMatch(/E-Mail-Adresse/);
+  });
+
   it("rejects registration to unknown team", async () => {
     const registerResponse = await fetch(`${baseUrl}/api/team/auth/register`, {
       method: "POST",

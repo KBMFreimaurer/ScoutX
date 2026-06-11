@@ -93,9 +93,30 @@ export async function loginTeamBackend(userId, password) {
 export async function registerTeamBackend(userId, name, password, teamKey) {
   const payload = await requestTeamBackend("/auth/register", {
     method: "POST",
-    body: { userId, name, password, teamKey },
+    body: { userId, email: userId, name, password, teamKey },
   });
   return payload;
+}
+
+export async function confirmTeamEmailVerification(token) {
+  return requestTeamBackend("/auth/verification/confirm", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export async function resendTeamEmailVerification() {
+  return requestTeamBackend("/auth/verification/resend", {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function updateTeamAuthProfile(input) {
+  return requestTeamBackend("/auth/profile", {
+    method: "POST",
+    body: input,
+  });
 }
 
 export async function createTeamInvitation(input) {

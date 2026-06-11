@@ -19,6 +19,8 @@ const STATUS_COPY = {
   connected: "Backend verbunden",
   auth_required: "Anmeldung erforderlich",
   auth_error: "Anmeldung fehlgeschlagen",
+  email_verification_required: "E-Mail bestaetigen",
+  profile_required: "Profil vervollstaendigen",
   local: "Lokaler Modus",
 };
 
@@ -94,11 +96,21 @@ export function TeamAuthGate({
   registerName,
   registerTeamKey,
   registerTeams,
+  verificationToken,
+  profileName,
+  profileBirthDate,
+  profileImage,
   onModeChange,
   onUserIdChange,
   onPasswordChange,
   onRegisterNameChange,
   onRegisterTeamKeyChange,
+  onVerificationTokenChange,
+  onProfileNameChange,
+  onProfileBirthDateChange,
+  onProfileImageChange,
+  onResendVerification,
+  onSubmitProfile,
   onSubmit,
 }) {
   if (!isOpen) {
@@ -106,9 +118,22 @@ export function TeamAuthGate({
   }
 
   const isRegister = mode === "register";
-  const canSubmit = Boolean(String(password || "").trim()) && (!isRegister || Boolean(String(registerName || "").trim())) && !busy;
+  const isVerification = status === "email_verification_required";
+  const isProfile = status === "profile_required";
+  const canSubmit =
+    (isVerification
+      ? Boolean(String(verificationToken || "").trim())
+      : isProfile
+        ? Boolean(String(profileName || "").trim() && String(profileBirthDate || "").trim() && String(profileImage || "").trim())
+        : Boolean(String(password || "").trim()) && (!isRegister || Boolean(String(registerName || "").trim()))) && !busy;
   const resolvedStatus = STATUS_COPY[String(status || "").trim()] || STATUS_COPY.auth_required;
-  const gateTitle = isRegister ? "Teamzugang aktivieren" : "Mit Teamdaten weiterarbeiten";
+  const gateTitle = isVerification
+    ? "E-Mail-Adresse bestaetigen"
+    : isProfile
+      ? "Scout-Profil vervollstaendigen"
+      : isRegister
+        ? "Teamzugang aktivieren"
+        : "Mit Teamdaten weiterarbeiten";
   const isShortViewport = !isMobile && typeof window !== "undefined" && window.innerHeight < 860;
   const dialogPadding = isMobile ? 14 : isShortViewport ? 16 : 24;
   const shellGap = isMobile ? 12 : isShortViewport ? 12 : 16;
@@ -125,6 +150,16 @@ export function TeamAuthGate({
     padding: isShortViewport ? "10px 12px" : "12px 14px",
     fontSize: isShortViewport ? 12 : 13,
     lineHeight: isShortViewport ? 1.45 : 1.55,
+  };
+  const submitHandler = isProfile ? onSubmitProfile : onSubmit;
+  const handleProfileImageFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file || typeof FileReader === "undefined") {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onProfileImageChange(String(reader.result || ""));
+    reader.readAsDataURL(file);
   };
 
   const dialog = (
@@ -206,77 +241,126 @@ export function TeamAuthGate({
             {statusMessage || "Bitte einmal anmelden. Danach kannst du im Cockpit normal weiterarbeiten."}
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <AuthModeButton active={!isRegister} onClick={() => onModeChange("login")}>
-              Login
-            </AuthModeButton>
-            <AuthModeButton active={isRegister} onClick={() => onModeChange("register")}>
-              Registrieren
-            </AuthModeButton>
-          </div>
+          {!isVerification && !isProfile ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <AuthModeButton active={!isRegister} onClick={() => onModeChange("login")}>
+                Login
+              </AuthModeButton>
+              <AuthModeButton active={isRegister} onClick={() => onModeChange("register")}>
+                Registrieren
+              </AuthModeButton>
+            </div>
+          ) : null}
 
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: isShortViewport ? 10 : 12 }}>
-            <AuthField
-              id="team-auth-user-id"
-              label="User-ID"
-              hint={`Leer lassen, um ${activeUserId} als Standard zu nutzen.`}
-            >
-              <input
-                id="team-auth-user-id"
-                type="text"
-                value={userId}
-                onChange={(event) => onUserIdChange(event.target.value)}
-                placeholder={`User-ID (default: ${activeUserId})`}
-                autoComplete="username"
-                style={fieldStyle}
-              />
-            </AuthField>
-
-            {isRegister ? (
+          <form onSubmit={submitHandler} style={{ display: "grid", gap: isShortViewport ? 10 : 12 }}>
+            {isVerification ? (
               <>
-                <AuthField id="team-auth-name" label="Anzeigename">
+                <AuthField id="team-auth-verification-token" label="Bestaetigungs-Code">
                   <input
-                    id="team-auth-name"
+                    id="team-auth-verification-token"
                     type="text"
-                    value={registerName}
-                    onChange={(event) => onRegisterNameChange(event.target.value)}
+                    value={verificationToken}
+                    onChange={(event) => onVerificationTokenChange(event.target.value)}
+                    placeholder="Code aus der E-Mail"
+                    autoComplete="one-time-code"
+                    style={fieldStyle}
+                  />
+                </AuthField>
+                <GhostButton type="button" onClick={onResendVerification} disabled={busy}>
+                  Code erneut senden
+                </GhostButton>
+              </>
+            ) : isProfile ? (
+              <>
+                <AuthField id="team-auth-profile-name" label="Name">
+                  <input
+                    id="team-auth-profile-name"
+                    type="text"
+                    value={profileName}
+                    onChange={(event) => onProfileNameChange(event.target.value)}
                     placeholder="Vor- und Nachname"
                     autoComplete="name"
                     style={fieldStyle}
                   />
                 </AuthField>
-                <AuthField id="team-auth-team" label="Teamzuordnung" hint="Die konkrete Freigabe fuer Teamdaten wird serverseitig entschieden.">
-                  <select
-                    id="team-auth-team"
-                    value={registerTeamKey}
-                    onChange={(event) => onRegisterTeamKeyChange(event.target.value)}
+                <AuthField id="team-auth-profile-birth-date" label="Geburtsdatum">
+                  <input
+                    id="team-auth-profile-birth-date"
+                    type="date"
+                    value={profileBirthDate}
+                    onChange={(event) => onProfileBirthDateChange(event.target.value)}
                     style={fieldStyle}
-                  >
-                    {(Array.isArray(registerTeams) ? registerTeams : []).map((team) => (
-                      <option key={team.key} value={team.key}>
-                        {team.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                </AuthField>
+                <AuthField id="team-auth-profile-image" label="Profilbild">
+                  <input id="team-auth-profile-image" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleProfileImageFile} style={fieldStyle} />
                 </AuthField>
               </>
-            ) : null}
+            ) : (
+              <>
+                <AuthField
+                  id="team-auth-user-id"
+                  label="E-Mail"
+                  hint={`Leer lassen, um ${activeUserId} als Standard zu nutzen.`}
+                >
+                  <input
+                    id="team-auth-user-id"
+                    type="email"
+                    value={userId}
+                    onChange={(event) => onUserIdChange(event.target.value)}
+                    placeholder={`E-Mail (default: ${activeUserId})`}
+                    autoComplete="username"
+                    style={fieldStyle}
+                  />
+                </AuthField>
 
-            <AuthField
-              id="team-auth-password"
-              label="Passwort"
-              hint={isRegister ? "Mindestens 8 Zeichen fuer die Aktivierung deines Zugangs." : "Dein bestehendes Team-Passwort."}
-            >
-              <input
-                id="team-auth-password"
-                type="password"
-                value={password}
-                onChange={(event) => onPasswordChange(event.target.value)}
-                placeholder={isRegister ? "Neues Passwort (mind. 8 Zeichen)" : "Team-Passwort"}
-                autoComplete={isRegister ? "new-password" : "current-password"}
-                style={fieldStyle}
-              />
-            </AuthField>
+                {isRegister ? (
+                  <>
+                    <AuthField id="team-auth-name" label="Anzeigename">
+                      <input
+                        id="team-auth-name"
+                        type="text"
+                        value={registerName}
+                        onChange={(event) => onRegisterNameChange(event.target.value)}
+                        placeholder="Vor- und Nachname"
+                        autoComplete="name"
+                        style={fieldStyle}
+                      />
+                    </AuthField>
+                    <AuthField id="team-auth-team" label="Teamzuordnung" hint="Die konkrete Freigabe fuer Teamdaten wird serverseitig entschieden.">
+                      <select
+                        id="team-auth-team"
+                        value={registerTeamKey}
+                        onChange={(event) => onRegisterTeamKeyChange(event.target.value)}
+                        style={fieldStyle}
+                      >
+                        {(Array.isArray(registerTeams) ? registerTeams : []).map((team) => (
+                          <option key={team.key} value={team.key}>
+                            {team.label}
+                          </option>
+                        ))}
+                      </select>
+                    </AuthField>
+                  </>
+                ) : null}
+
+                <AuthField
+                  id="team-auth-password"
+                  label="Passwort"
+                  hint={isRegister ? "Mindestens 8 Zeichen fuer die Aktivierung deines Zugangs." : "Dein bestehendes Team-Passwort."}
+                >
+                  <input
+                    id="team-auth-password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => onPasswordChange(event.target.value)}
+                    placeholder={isRegister ? "Neues Passwort (mind. 8 Zeichen)" : "Team-Passwort"}
+                    autoComplete={isRegister ? "new-password" : "current-password"}
+                    style={fieldStyle}
+                  />
+                </AuthField>
+              </>
+            )}
 
             <div
               style={{
@@ -289,8 +373,12 @@ export function TeamAuthGate({
             >
               <div style={{ color: C.gray, fontSize: isShortViewport ? 11 : 12, lineHeight: isShortViewport ? 1.4 : 1.5 }}>
                 {isRegister
-                  ? "Neue Zugaenge werden sauber mit Teambezug angelegt und danach normal ueber das Backend angemeldet."
-                  : "Nach erfolgreichem Login stoert keine zusaetzliche Auth-Sperrmaske mehr im Cockpit."}
+                  ? "Neue Zugaenge werden mit Teambezug angelegt und muessen per E-Mail bestaetigt werden."
+                  : isVerification
+                    ? "Nach der Bestaetigung prueft ScoutX automatisch, ob dein Profil vollstaendig ist."
+                    : isProfile
+                      ? "Rolle und Teamrechte bleiben serverseitig festgelegt."
+                      : "Nach erfolgreichem Login stoert keine zusaetzliche Auth-Sperrmaske mehr im Cockpit."}
               </div>
               <PrimaryButton
                 type="submit"
@@ -301,7 +389,7 @@ export function TeamAuthGate({
                   justifyContent: "center",
                 }}
               >
-                {busy ? "Bitte warten..." : isRegister ? "Account erstellen" : "Anmelden"}
+                {busy ? "Bitte warten..." : isVerification ? "E-Mail bestaetigen" : isProfile ? "Profil speichern" : isRegister ? "Account erstellen" : "Anmelden"}
               </PrimaryButton>
             </div>
           </form>

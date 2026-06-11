@@ -55,8 +55,27 @@ async function ensureSchema(client, logger) {
         role TEXT NOT NULL,
         active BOOLEAN NOT NULL,
         password_hash TEXT,
+        email TEXT,
+        email_verified BOOLEAN,
+        email_verification_token_hash TEXT,
+        email_verification_expires_at TIMESTAMPTZ,
+        email_verified_at TIMESTAMPTZ,
+        birth_date TEXT,
+        profile_image TEXT,
         updated_at TIMESTAMPTZ NOT NULL
       )
+    `);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email TEXT`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email_verified BOOLEAN`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS birth_date TEXT`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS profile_image TEXT`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_adapter_team_accounts_email_unique
+      ON adapter_team_accounts (LOWER(email))
+      WHERE email IS NOT NULL AND email <> ''
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_adapter_team_accounts_team_id
@@ -84,14 +103,23 @@ export async function syncTeamAccountsToDb(teamState, logger) {
       await client.query(
         `
         INSERT INTO adapter_team_accounts (
-          account_id, team_id, name, role, active, password_hash, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+          account_id, team_id, name, role, active, password_hash, email, email_verified,
+          email_verification_token_hash, email_verification_expires_at, email_verified_at,
+          birth_date, profile_image, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         ON CONFLICT (account_id) DO UPDATE SET
           team_id = EXCLUDED.team_id,
           name = EXCLUDED.name,
           role = EXCLUDED.role,
           active = EXCLUDED.active,
           password_hash = EXCLUDED.password_hash,
+          email = EXCLUDED.email,
+          email_verified = EXCLUDED.email_verified,
+          email_verification_token_hash = EXCLUDED.email_verification_token_hash,
+          email_verification_expires_at = EXCLUDED.email_verification_expires_at,
+          email_verified_at = EXCLUDED.email_verified_at,
+          birth_date = EXCLUDED.birth_date,
+          profile_image = EXCLUDED.profile_image,
           updated_at = EXCLUDED.updated_at
         `,
         [
@@ -101,6 +129,13 @@ export async function syncTeamAccountsToDb(teamState, logger) {
           String(account?.role || "scout"),
           account?.active !== false,
           account?.passwordHash ? String(account.passwordHash) : null,
+          account?.email ? String(account.email) : null,
+          account?.email ? account?.emailVerified !== false : true,
+          account?.emailVerificationTokenHash ? String(account.emailVerificationTokenHash) : null,
+          account?.emailVerificationExpiresAt ? String(account.emailVerificationExpiresAt) : null,
+          account?.emailVerifiedAt ? String(account.emailVerifiedAt) : null,
+          account?.birthDate ? String(account.birthDate) : "",
+          account?.profileImage ? String(account.profileImage) : "",
           now,
         ],
       );
@@ -137,7 +172,9 @@ export async function fetchTeamAccountByIdFromDb(accountId, logger) {
   try {
     const result = await client.query(
       `
-      SELECT account_id, team_id, name, role, active, password_hash
+      SELECT account_id, team_id, name, role, active, password_hash, email, email_verified,
+        email_verification_token_hash, email_verification_expires_at, email_verified_at,
+        birth_date, profile_image
       FROM adapter_team_accounts
       WHERE account_id = $1
       LIMIT 1
@@ -155,6 +192,13 @@ export async function fetchTeamAccountByIdFromDb(accountId, logger) {
       role: String(row.role || "scout"),
       active: row.active !== false,
       passwordHash: row.password_hash ? String(row.password_hash) : "",
+      email: row.email ? String(row.email) : "",
+      emailVerified: row.email ? row.email_verified !== false : true,
+      emailVerificationTokenHash: row.email_verification_token_hash ? String(row.email_verification_token_hash) : "",
+      emailVerificationExpiresAt: row.email_verification_expires_at ? new Date(row.email_verification_expires_at).toISOString() : "",
+      emailVerifiedAt: row.email_verified_at ? new Date(row.email_verified_at).toISOString() : "",
+      birthDate: row.birth_date ? String(row.birth_date) : "",
+      profileImage: row.profile_image ? String(row.profile_image) : "",
     };
   } catch (error) {
     logger?.warn?.("postgres account fetch failed", { error });

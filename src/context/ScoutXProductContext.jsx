@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { STORAGE_KEYS } from "../config/storage";
 import {
+  confirmTeamEmailVerification,
   fetchTeamBackendState,
   getTeamBackendStatus,
   loginTeamBackend,
   logoutTeamBackend,
   publishTeamBackendPlan,
   registerTeamBackend,
+  resendTeamEmailVerification,
+  updateTeamAuthProfile,
 } from "../services/teamBackendClient";
 import {
   buildCalendarModel,
@@ -80,7 +83,8 @@ export function ScoutXProductProvider({ children }) {
   }, [state, teamBackendState.status]);
 
   const applyTeamBackendPayload = useCallback((payload, options = {}) => {
-    setTeamBackendState({ status: "connected", error: "" });
+    const status = String(payload?.status || "connected").trim() || "connected";
+    setTeamBackendState({ status, error: payload?.error || "" });
     setState((prev) => mergeTeamBackendPayload(prev, payload, options));
   }, []);
 
@@ -117,6 +121,57 @@ export function ScoutXProductProvider({ children }) {
       } catch (error) {
         const message = error?.message || "Team-Registrierung fehlgeschlagen.";
         setTeamBackendState({ status: "auth_error", error: message });
+        setProductError(message);
+        throw error;
+      }
+    },
+    [applyTeamBackendPayload],
+  );
+
+  const onConfirmTeamEmailVerification = useCallback(
+    async (token, options = {}) => {
+      try {
+        const payload = await confirmTeamEmailVerification(token);
+        applyTeamBackendPayload(payload, options);
+        setProductError("");
+        return payload;
+      } catch (error) {
+        const message = error?.message || "E-Mail-Bestaetigung fehlgeschlagen.";
+        setTeamBackendState({ status: "email_verification_required", error: message });
+        setProductError(message);
+        throw error;
+      }
+    },
+    [applyTeamBackendPayload],
+  );
+
+  const onResendTeamEmailVerification = useCallback(
+    async (options = {}) => {
+      try {
+        const payload = await resendTeamEmailVerification();
+        applyTeamBackendPayload(payload, options);
+        setProductError("");
+        return payload;
+      } catch (error) {
+        const message = error?.message || "Bestaetigungs-Code konnte nicht erneuert werden.";
+        setTeamBackendState({ status: "email_verification_required", error: message });
+        setProductError(message);
+        throw error;
+      }
+    },
+    [applyTeamBackendPayload],
+  );
+
+  const onUpdateTeamAuthProfile = useCallback(
+    async (input, options = {}) => {
+      try {
+        const payload = await updateTeamAuthProfile(input);
+        applyTeamBackendPayload(payload, options);
+        setProductError("");
+        return payload;
+      } catch (error) {
+        const message = error?.message || "Profil konnte nicht gespeichert werden.";
+        setTeamBackendState({ status: "profile_required", error: message });
         setProductError(message);
         throw error;
       }
@@ -423,6 +478,9 @@ export function ScoutXProductProvider({ children }) {
       clearProductError: () => setProductError(""),
       onLoginTeamBackend,
       onRegisterTeamBackend,
+      onConfirmTeamEmailVerification,
+      onResendTeamEmailVerification,
+      onUpdateTeamAuthProfile,
       onLogoutTeamBackend,
       onSwitchUser,
       onUpsertReport,
@@ -465,6 +523,9 @@ export function ScoutXProductProvider({ children }) {
       resetProductState,
       onLoginTeamBackend,
       onRegisterTeamBackend,
+      onConfirmTeamEmailVerification,
+      onResendTeamEmailVerification,
+      onUpdateTeamAuthProfile,
       onLogoutTeamBackend,
       onSwitchUser,
       onUpsertReport,

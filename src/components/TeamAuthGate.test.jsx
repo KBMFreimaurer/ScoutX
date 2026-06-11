@@ -16,11 +16,21 @@ function createProps(overrides = {}) {
     registerName: "",
     registerTeamKey: "borussia-moenchengladbach",
     registerTeams: [{ key: "borussia-moenchengladbach", label: "Borussia Mönchengladbach" }],
+    verificationToken: "",
+    profileName: "",
+    profileBirthDate: "",
+    profileImage: "",
     onModeChange: vi.fn(),
     onUserIdChange: vi.fn(),
     onPasswordChange: vi.fn(),
     onRegisterNameChange: vi.fn(),
     onRegisterTeamKeyChange: vi.fn(),
+    onVerificationTokenChange: vi.fn(),
+    onProfileNameChange: vi.fn(),
+    onProfileBirthDateChange: vi.fn(),
+    onProfileImageChange: vi.fn(),
+    onResendVerification: vi.fn(),
+    onSubmitProfile: vi.fn((event) => event.preventDefault()),
     onSubmit: vi.fn((event) => event.preventDefault()),
     ...overrides,
   };
@@ -107,7 +117,7 @@ describe("TeamAuthGate", () => {
   it("shows login fields by default and hides registration-only fields", () => {
     render(<TeamAuthGate {...createProps()} />);
 
-    expect(screen.getByLabelText(/User-ID/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/E-Mail/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Passwort/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Anzeigename/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Teamzuordnung/i)).not.toBeInTheDocument();
@@ -138,5 +148,32 @@ describe("TeamAuthGate", () => {
     fireEvent.click(screen.getByRole("button", { name: /Registrieren/i }));
 
     expect(onModeChange).toHaveBeenCalledWith("register");
+  });
+
+  it("shows the verification gate when email confirmation is required", () => {
+    render(<TeamAuthGate {...createProps({ status: "email_verification_required", verificationToken: "abc123" })} />);
+
+    expect(screen.getByLabelText(/Bestaetigungs-Code/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /E-Mail bestaetigen/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Code erneut senden/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Passwort/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the profile gate and requires a complete profile", () => {
+    render(
+      <TeamAuthGate
+        {...createProps({
+          status: "profile_required",
+          profileName: "Ayoub Kerbab",
+          profileBirthDate: "2000-01-01",
+          profileImage: "data:image/png;base64,AAAA",
+        })}
+      />,
+    );
+
+    expect(screen.getByLabelText(/Name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Geburtsdatum/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Profilbild/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Profil speichern/i })).not.toBeDisabled();
   });
 });

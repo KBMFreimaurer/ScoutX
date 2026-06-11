@@ -19,6 +19,7 @@ import { handleTeamImportTournamentRoutes } from "./routes/teamImportTournamentR
 import { handlePublicDataRoutes } from "./routes/publicDataRoutes.js";
 import { handleTeamAuditRoutes } from "./routes/teamAuditRoutes.js";
 import { createTeamRouteBaseContext } from "./routes/routeContextFactory.js";
+import { isAccountEmailVerified, isAccountProfileComplete, normalizeEmail } from "./services/teamAuthService.js";
 import { fetchRecentTeamArchiveEvents, persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
 import { fetchTeamAccountByIdFromDb, syncTeamAccountsToDb } from "./lib/teamAccountsDb.js";
 import { fetchTeamFeedItemsFromDb, syncTeamFeedItemsToDb } from "./lib/teamFeedDb.js";
@@ -91,6 +92,9 @@ const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173,http://
 const NODE_ENV = String(process.env.NODE_ENV || "").trim().toLowerCase();
 const IS_PRODUCTION = NODE_ENV === "production";
 const EXPOSE_RESET_TOKEN_ON_REQUEST = process.env.ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST === "true";
+const EXPOSE_VERIFICATION_TOKEN_ON_REGISTER = process.env.ADAPTER_EXPOSE_VERIFICATION_TOKEN_ON_REGISTER
+  ? process.env.ADAPTER_EXPOSE_VERIFICATION_TOKEN_ON_REGISTER === "true"
+  : !IS_PRODUCTION;
 const EXPOSE_INVITATION_TOKEN_ON_CREATE = process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE
   ? process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE === "true"
   : !IS_PRODUCTION;
@@ -122,6 +126,9 @@ const COOKIE_SAME_SITE = String(process.env.ADAPTER_TEAM_COOKIE_SAMESITE || "Lax
 const AUTH_TOKEN = String(process.env.ADAPTER_TOKEN || "").trim();
 if (IS_PRODUCTION && EXPOSE_RESET_TOKEN_ON_REQUEST) {
   throw new Error("ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST=true ist in Produktion nicht erlaubt.");
+}
+if (IS_PRODUCTION && EXPOSE_VERIFICATION_TOKEN_ON_REGISTER) {
+  throw new Error("ADAPTER_EXPOSE_VERIFICATION_TOKEN_ON_REGISTER=true ist in Produktion nicht erlaubt.");
 }
 if (IS_PRODUCTION && EXPOSE_INVITATION_TOKEN_ON_CREATE) {
   throw new Error("ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE=true ist in Produktion nicht erlaubt.");
@@ -1327,10 +1334,25 @@ function toPublicAccount(account) {
   return {
     id: account.id,
     name: account.name,
+    email: account.email || "",
+    emailVerified: isAccountEmailVerified(account),
+    profileImage: account.profileImage || "",
+    birthDate: account.birthDate || "",
+    profileComplete: isAccountProfileComplete(account),
     role: account.role,
     teamId: account.teamId,
     active: account.active !== false,
   };
+}
+
+function getAccountAuthStatus(account) {
+  if (!isAccountEmailVerified(account)) {
+    return { status: "email_verification_required", error: "Bitte bestaetige zuerst deine E-Mail-Adresse." };
+  }
+  if (!isAccountProfileComplete(account)) {
+    return { status: "profile_required", error: "Bitte vervollstaendige dein Scout-Profil." };
+  }
+  return { status: "connected", error: "" };
 }
 
 function toPublicTeam(team) {
@@ -1436,7 +1458,8 @@ function findTeamAccountRecordById(userId) {
 
 async function resolveAccountForAuth(userId, logger) {
   const normalizedId = normalizeAccountId(userId);
-  if (!normalizedId) {
+  const email = normalizeEmail(userId);
+  if (!normalizedId && !email) {
     return null;
   }
   if (EFFECTIVE_AUTH_READS_FROM_DB) {
@@ -1445,7 +1468,15 @@ async function resolveAccountForAuth(userId, logger) {
       return dbAccount;
     }
   }
-  return findAccount(state.team, normalizedId);
+  const direct = normalizedId ? findAccount(state.team, normalizedId) : null;
+  if (direct) {
+    return direct;
+  }
+  return (
+    (Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : []).find(
+      (account) => normalizeEmail(account?.email) === email && account?.active !== false,
+    ) || null
+  );
 }
 
 async function resolveAccountForSession(userId, logger) {
@@ -1648,6 +1679,7 @@ function buildTeamStatePayload(context, teamStateInput = null) {
   });
   return {
     ok: true,
+    ...getAccountAuthStatus(context.account),
     user: toPublicAccount(context.account),
     team: toPublicTeam(normalized.team),
     manualGames: normalized.manualGames,
@@ -2772,6 +2804,8 @@ const server = createServer(async (req, res) => {
       teamSessions,
       revokeRuntimeTeamSession,
       nowIso,
+      randomUUID,
+      exposeVerificationToken: EXPOSE_VERIFICATION_TOKEN_ON_REGISTER,
     })
   ) {
     return;

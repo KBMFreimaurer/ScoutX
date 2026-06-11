@@ -34,6 +34,10 @@ function compactText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+function compactRawText(value) {
+  return String(value || "").trim();
+}
+
 function normalizeId(value) {
   return compactText(value)
     .toLowerCase()
@@ -55,6 +59,13 @@ function normalizeAccount(raw, fallback = {}) {
   return {
     id,
     name: compactText(raw?.name) || compactText(fallback.name) || id,
+    email: compactRawText(raw?.email || fallback.email).toLowerCase(),
+    emailVerified: raw?.email || fallback.email ? raw?.emailVerified !== false : true,
+    emailVerificationTokenHash: compactRawText(raw?.emailVerificationTokenHash || fallback.emailVerificationTokenHash),
+    emailVerificationExpiresAt: compactRawText(raw?.emailVerificationExpiresAt || fallback.emailVerificationExpiresAt),
+    emailVerifiedAt: compactRawText(raw?.emailVerifiedAt || fallback.emailVerifiedAt),
+    birthDate: compactRawText(raw?.birthDate || fallback.birthDate),
+    profileImage: compactRawText(raw?.profileImage || fallback.profileImage),
     role: normalizeRole(raw?.role || fallback.role),
     teamId: normalizeId(raw?.teamId || fallback.teamId) || DEFAULT_TEAM_ID,
     active: raw?.active === false ? false : fallback.active !== false,

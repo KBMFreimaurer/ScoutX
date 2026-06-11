@@ -13,6 +13,11 @@ export function mergeTeamBackendPayload(prevState, payload, options = {}) {
         name: account.name,
         role: account.role,
         teamId: account.teamId,
+        email: account.email || "",
+        emailVerified: account.emailVerified !== false,
+        profileImage: account.profileImage || "",
+        birthDate: account.birthDate || "",
+        profileComplete: account.profileComplete !== false,
         active: account.active !== false,
       }))
     : prevState.users;
