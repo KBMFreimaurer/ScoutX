@@ -136,7 +136,7 @@ export function ScoutXProductProvider({ children }) {
         setProductError("");
         return payload;
       } catch (error) {
-        const message = error?.message || "E-Mail-Bestaetigung fehlgeschlagen.";
+        const message = error?.message || "E-Mail-Bestätigung fehlgeschlagen.";
         setTeamBackendState({ status: "email_verification_required", error: message });
         setProductError(message);
         throw error;
@@ -153,7 +153,7 @@ export function ScoutXProductProvider({ children }) {
         setProductError("");
         return payload;
       } catch (error) {
-        const message = error?.message || "Bestaetigungs-Code konnte nicht erneuert werden.";
+        const message = error?.message || "Bestätigungscode konnte nicht erneuert werden.";
         setTeamBackendState({ status: "email_verification_required", error: message });
         setProductError(message);
         throw error;

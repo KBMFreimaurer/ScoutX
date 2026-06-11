@@ -19,8 +19,8 @@ const STATUS_COPY = {
   connected: "Backend verbunden",
   auth_required: "Anmeldung erforderlich",
   auth_error: "Anmeldung fehlgeschlagen",
-  email_verification_required: "E-Mail bestaetigen",
-  profile_required: "Profil vervollstaendigen",
+  email_verification_required: "E-Mail bestätigen",
+  profile_required: "Profil vervollständigen",
   local: "Lokaler Modus",
 };
 
@@ -128,9 +128,9 @@ export function TeamAuthGate({
         : Boolean(String(password || "").trim()) && (!isRegister || Boolean(String(registerName || "").trim()))) && !busy;
   const resolvedStatus = STATUS_COPY[String(status || "").trim()] || STATUS_COPY.auth_required;
   const gateTitle = isVerification
-    ? "E-Mail-Adresse bestaetigen"
+    ? "E-Mail-Adresse bestätigen"
     : isProfile
-      ? "Scout-Profil vervollstaendigen"
+      ? "Scout-Profil vervollständigen"
       : isRegister
         ? "Teamzugang aktivieren"
         : "Mit Teamdaten weiterarbeiten";
@@ -231,7 +231,7 @@ export function TeamAuthGate({
                 whiteSpace: "nowrap",
               }}
             >
-              {status === "auth_error" ? "Bitte pruefen" : "Session bereit"}
+              {status === "auth_error" ? "Bitte prüfen" : "Session bereit"}
             </div>
           </div>
 
@@ -255,7 +255,7 @@ export function TeamAuthGate({
           <form onSubmit={submitHandler} style={{ display: "grid", gap: isShortViewport ? 10 : 12 }}>
             {isVerification ? (
               <>
-                <AuthField id="team-auth-verification-token" label="Bestaetigungs-Code">
+                <AuthField id="team-auth-verification-token" label="Bestätigungscode">
                   <input
                     id="team-auth-verification-token"
                     type="text"
@@ -327,7 +327,7 @@ export function TeamAuthGate({
                         style={fieldStyle}
                       />
                     </AuthField>
-                    <AuthField id="team-auth-team" label="Teamzuordnung" hint="Die konkrete Freigabe fuer Teamdaten wird serverseitig entschieden.">
+                    <AuthField id="team-auth-team" label="Teamzuordnung" hint="Die konkrete Freigabe für Teamdaten wird serverseitig entschieden.">
                       <select
                         id="team-auth-team"
                         value={registerTeamKey}
@@ -347,7 +347,7 @@ export function TeamAuthGate({
                 <AuthField
                   id="team-auth-password"
                   label="Passwort"
-                  hint={isRegister ? "Mindestens 8 Zeichen fuer die Aktivierung deines Zugangs." : "Dein bestehendes Team-Passwort."}
+                  hint={isRegister ? "Mindestens 8 Zeichen für die Aktivierung deines Zugangs." : "Dein bestehendes Team-Passwort."}
                 >
                   <input
                     id="team-auth-password"
@@ -373,12 +373,12 @@ export function TeamAuthGate({
             >
               <div style={{ color: C.gray, fontSize: isShortViewport ? 11 : 12, lineHeight: isShortViewport ? 1.4 : 1.5 }}>
                 {isRegister
-                  ? "Neue Zugaenge werden mit Teambezug angelegt und muessen per E-Mail bestaetigt werden."
+                  ? "Neue Zugänge werden mit Teambezug angelegt und müssen per E-Mail bestätigt werden."
                   : isVerification
-                    ? "Nach der Bestaetigung prueft ScoutX automatisch, ob dein Profil vollstaendig ist."
+                    ? "Nach der Bestätigung prüft ScoutX automatisch, ob dein Profil vollständig ist."
                     : isProfile
                       ? "Rolle und Teamrechte bleiben serverseitig festgelegt."
-                      : "Nach erfolgreichem Login stoert keine zusaetzliche Auth-Sperrmaske mehr im Cockpit."}
+                      : "Nach erfolgreichem Login stört keine zusätzliche Auth-Sperrmaske mehr im Cockpit."}
               </div>
               <PrimaryButton
                 type="submit"
@@ -389,13 +389,13 @@ export function TeamAuthGate({
                   justifyContent: "center",
                 }}
               >
-                {busy ? "Bitte warten..." : isVerification ? "E-Mail bestaetigen" : isProfile ? "Profil speichern" : isRegister ? "Account erstellen" : "Anmelden"}
+                {busy ? "Bitte warten..." : isVerification ? "E-Mail bestätigen" : isProfile ? "Profil speichern" : isRegister ? "Account erstellen" : "Anmelden"}
               </PrimaryButton>
             </div>
           </form>
 
           <div style={{ color: C.grayDark, fontSize: 11, lineHeight: isShortViewport ? 1.45 : 1.55 }}>
-            Keine Passwoerter oder Sessions werden im Browser-Storage abgelegt. Die Auth arbeitet mit der vorhandenen sicheren
+            Keine Passwörter oder Sessions werden im Browser-Storage abgelegt. Die Auth arbeitet mit der vorhandenen sicheren
             Backend-Session.
           </div>
         </section>
@@ -445,14 +445,14 @@ export function TeamAuthGate({
             </h2>
             <p style={{ margin: isShortViewport ? "8px 0 0" : "10px 0 0", color: C.grayLight, fontSize: isMobile ? 13 : isShortViewport ? 14 : 15, lineHeight: isShortViewport ? 1.52 : 1.65, maxWidth: 420 }}>
               Melde dich mit deinem Team-Account an oder aktiviere deinen Zugang. ScoutX nutzt die vorhandene Session-Architektur
-              und blendet interne Teamdaten erst nach erfolgreicher Backend-Pruefung ein.
+              und blendet interne Teamdaten erst nach erfolgreicher Backend-Prüfung ein.
             </p>
           </div>
 
           <div style={{ display: "grid", gap: 10 }}>
             <AuthSignal
               label="Zugriff"
-              body="Teamzugang wird serverseitig geprueft. Lokale UI-Freigaben allein reichen nicht aus."
+              body="Teamzugang wird serverseitig geprüft. Lokale UI-Freigaben allein reichen nicht aus."
               tone="green"
               compact={isShortViewport}
             />

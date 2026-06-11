@@ -137,7 +137,7 @@ describe("TeamAuthGate", () => {
 
     expect(screen.getByLabelText(/Anzeigename/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Teamzuordnung/i)).toBeInTheDocument();
-    expect(screen.getByText(/Teamzugang wird serverseitig geprueft/i)).toBeInTheDocument();
+    expect(screen.getByText(/Teamzugang wird serverseitig geprüft/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Account erstellen/i })).not.toBeDisabled();
   });
 
@@ -153,8 +153,8 @@ describe("TeamAuthGate", () => {
   it("shows the verification gate when email confirmation is required", () => {
     render(<TeamAuthGate {...createProps({ status: "email_verification_required", verificationToken: "abc123" })} />);
 
-    expect(screen.getByLabelText(/Bestaetigungs-Code/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /E-Mail bestaetigen/i })).not.toBeDisabled();
+    expect(screen.getByLabelText(/Bestätigungscode/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /E-Mail bestätigen/i })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: /Code erneut senden/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Passwort/i)).not.toBeInTheDocument();
   });

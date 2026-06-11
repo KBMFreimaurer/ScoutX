@@ -253,6 +253,11 @@ Sicherheitsverhalten:
 
 - Password-Reset-Request (`POST /api/team/auth/password-reset/request`) liefert standardmäßig **keinen** Reset-Token zurück (verhindert Token-Leaks im API-Response).
 - Für lokale Entwicklungs-/Integrationstests kann das Rückgeben des Tokens explizit mit `ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST=true` aktiviert werden.
+- Neue E-Mail-Registrierungen bleiben bis zur Bestätigung gesperrt. Der Bestätigungscode wird per SMTP, Mail-Webhook oder lokaler Outbox zugestellt:
+  - SMTP: `ADAPTER_SMTP_HOST`, optional `ADAPTER_SMTP_PORT`, `ADAPTER_SMTP_SECURE`, `ADAPTER_SMTP_STARTTLS`, `ADAPTER_SMTP_USER`, `ADAPTER_SMTP_PASS`, `ADAPTER_EMAIL_FROM`, `ADAPTER_EMAIL_FROM_ADDRESS`.
+  - Webhook: `ADAPTER_EMAIL_WEBHOOK_URL` erhält JSON mit `to`, `subject`, `text`.
+  - Dev/Test-Outbox: `ADAPTER_EMAIL_OUTBOX_FILE` schreibt UTF-8 JSONL.
+  - `ADAPTER_EXPOSE_VERIFICATION_TOKEN_ON_REGISTER=true` gibt den Code nur für lokale Dev/Test-Flows im API-Response zurück; in Produktion ist das verboten. Ohne Mail-Konfiguration blockt Produktion Registrierung und Resend mit `503`.
 - CORS-Preflights von nicht erlaubten Origins werden mit `403` beantwortet.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, schreibt der Adapter Team-Login-Sessions zusätzlich in PostgreSQL (`adapter_team_sessions`) als Runtime-Source-of-Truth-Baustein (Write-Through, JSON/In-Memory bleibt kompatibler Fallback).
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Invitations, Password-Reset-Tokens und Kreis-PDF-Preview-Tokens zusätzlich in PostgreSQL gehalten (`adapter_team_runtime_tokens`) und über Restart/Instance-Wechsel wiederverwendet.

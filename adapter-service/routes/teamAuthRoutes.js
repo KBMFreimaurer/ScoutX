@@ -29,10 +29,10 @@ function createVerificationToken(randomUUID) {
 
 function publicAuthStatus(account) {
   if (!isAccountEmailVerified(account)) {
-    return { status: "email_verification_required", error: "Bitte bestaetige zuerst deine E-Mail-Adresse." };
+    return { status: "email_verification_required", error: "Bitte bestätige zuerst deine E-Mail-Adresse." };
   }
   if (!isAccountProfileComplete(account)) {
-    return { status: "profile_required", error: "Bitte vervollstaendige dein Scout-Profil." };
+    return { status: "profile_required", error: "Bitte vervollständige dein Scout-Profil." };
   }
   return { status: "connected", error: "" };
 }
@@ -72,6 +72,8 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     nowIso,
     randomUUID,
     exposeVerificationToken,
+    emailDeliveryConfigured,
+    sendVerificationEmail,
   } = routeContext;
 
   if (req.method === "POST" && url.pathname === "/api/team/auth/login") {
@@ -143,12 +145,19 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
           teamId: `register:${normalizeAccountId(payload?.teamKey) || "unknown"}`,
         },
       };
+      const requestedEmail = String(payload?.email || payload?.userId || "").trim();
+      const requiresEmailVerification = requestedEmail.includes("@") && !requestedEmail.toLowerCase().endsWith("@scoutx.local");
+      if (requiresEmailVerification && !emailDeliveryConfigured && !exposeVerificationToken) {
+        const mailConfigError = new Error("Mailversand ist nicht konfiguriert. Registrierung kann keinen Bestätigungscode zustellen.");
+        mailConfigError.statusCode = 503;
+        throw mailConfigError;
+      }
+
       const { account, verificationToken } = await runTeamWriteIdempotent(req, accountContext, "team-register", payload, async () => {
-        const requestedEmail = String(payload?.email || payload?.userId || "").trim();
         const accountId = normalizeAccountId(payload?.userId || requestedEmail);
         const legacyEmail = `${accountId || "account"}@scoutx.local`;
         const email = requestedEmail.includes("@") ? assertEmail(requestedEmail) : legacyEmail;
-        const requiresEmailVerification = !email.endsWith("@scoutx.local");
+        const accountRequiresEmailVerification = !email.endsWith("@scoutx.local");
         const displayName = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
         const password = assertPasswordMinLength(payload?.password, 8);
         const birthDate = normalizeBirthDate(payload?.birthDate);
@@ -188,9 +197,9 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
           accountId,
           displayName,
           email,
-          emailVerified: !requiresEmailVerification,
-          emailVerificationTokenHash: requiresEmailVerification ? verification.tokenHash : "",
-          emailVerificationExpiresAt: requiresEmailVerification ? verification.expiresAt : "",
+          emailVerified: !accountRequiresEmailVerification,
+          emailVerificationTokenHash: accountRequiresEmailVerification ? verification.tokenHash : "",
+          emailVerificationExpiresAt: accountRequiresEmailVerification ? verification.expiresAt : "",
           birthDate,
           profileImage,
           passwordHash: createPasswordHash(password),
@@ -209,6 +218,15 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
         String(clientIp || ""),
         String(req.headers["user-agent"] || ""),
       );
+      let emailDelivery = null;
+      if (persistedAccount.emailVerified === false) {
+        emailDelivery = await sendVerificationEmail({ to: persistedAccount.email, token: verificationToken, logger: requestLogger });
+        if (!emailDelivery?.ok && !exposeVerificationToken) {
+          const mailError = new Error("Bestätigungscode konnte nicht per E-Mail versendet werden. Bitte später erneut versuchen.");
+          mailError.statusCode = 502;
+          throw mailError;
+        }
+      }
       res.setHeader("Set-Cookie", createSessionCookie(sessionId));
       sendJson(
         res,
@@ -217,6 +235,7 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
           ...buildTeamStatePayload({ account: persistedAccount }),
           ...publicAuthStatus(persistedAccount),
           csrfToken,
+          emailDelivery: emailDelivery ? { ok: Boolean(emailDelivery.ok), channel: emailDelivery.channel || "", reason: emailDelivery.reason || "" } : undefined,
           verificationToken: exposeVerificationToken && persistedAccount.emailVerified === false ? verificationToken : undefined,
         },
         origin,
@@ -239,7 +258,7 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     // CSRF is still required to avoid cross-site logout.
     const providedCsrf = String(req.headers["x-csrf-token"] || "");
     if (!providedCsrf || providedCsrf !== String(context?.session?.csrfToken || "")) {
-      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungültig." }, origin, requestId);
       return true;
     }
 
@@ -257,7 +276,7 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     }
     const providedCsrf = String(req.headers["x-csrf-token"] || "");
     if (!providedCsrf || providedCsrf !== String(context?.session?.csrfToken || "")) {
-      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungültig." }, origin, requestId);
       return true;
     }
     try {
@@ -275,12 +294,12 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
           return { state: currentState, accountId: account.id };
         }
         if (!account.emailVerificationTokenHash || account.emailVerificationTokenHash !== tokenHash) {
-          const error = new Error("Bestaetigungs-Code ist ungueltig.");
+          const error = new Error("Bestätigungscode ist ungültig.");
           error.statusCode = 400;
           throw error;
         }
         if (Date.parse(String(account.emailVerificationExpiresAt || "")) < Date.now()) {
-          const error = new Error("Bestaetigungs-Code ist abgelaufen.");
+          const error = new Error("Bestätigungscode ist abgelaufen.");
           error.statusCode = 400;
           throw error;
         }
@@ -301,7 +320,7 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
       sendJson(res, 200, { ...buildTeamStatePayload({ account }), ...publicAuthStatus(account) }, origin, requestId);
       return true;
     } catch (error) {
-      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 400, fallbackMessage: "E-Mail-Bestaetigung fehlgeschlagen." });
+      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 400, fallbackMessage: "E-Mail-Bestätigung fehlgeschlagen." });
       return true;
     }
   }
@@ -313,10 +332,15 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     }
     const providedCsrf = String(req.headers["x-csrf-token"] || "");
     if (!providedCsrf || providedCsrf !== String(context?.session?.csrfToken || "")) {
-      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungültig." }, origin, requestId);
       return true;
     }
     try {
+      if (!emailDeliveryConfigured && !exposeVerificationToken) {
+        const mailConfigError = new Error("Mailversand ist nicht konfiguriert. Bestätigungscode kann nicht zugestellt werden.");
+        mailConfigError.statusCode = 503;
+        throw mailConfigError;
+      }
       const verification = createVerificationToken(randomUUID);
       const result = await applyTeamStateMutation(requestLogger, "team-email-verify-resend", (currentState) => {
         const accounts = Array.isArray(currentState.team?.accounts) ? currentState.team.accounts : [];
@@ -341,20 +365,27 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
         return { state: { ...currentState, team: { ...(currentState.team || {}), accounts: nextAccounts } }, accountId: account.id };
       });
       const account = findAccount(state.team, result?.accountId || context.account.id);
+      const emailDelivery = account?.emailVerified === false ? await sendVerificationEmail({ to: account.email, token: verification.token, logger: requestLogger }) : null;
+      if (account?.emailVerified === false && !emailDelivery?.ok && !exposeVerificationToken) {
+        const mailError = new Error("Bestätigungscode konnte nicht per E-Mail versendet werden. Bitte später erneut versuchen.");
+        mailError.statusCode = 502;
+        throw mailError;
+      }
       sendJson(
         res,
         200,
         {
           ...buildTeamStatePayload({ account }),
           ...publicAuthStatus(account),
-          verificationToken: exposeVerificationToken ? verification.token : undefined,
+          emailDelivery: emailDelivery ? { ok: Boolean(emailDelivery.ok), channel: emailDelivery.channel || "", reason: emailDelivery.reason || "" } : undefined,
+          verificationToken: exposeVerificationToken && account?.emailVerified === false ? verification.token : undefined,
         },
         origin,
         requestId,
       );
       return true;
     } catch (error) {
-      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 400, fallbackMessage: "Bestaetigungs-Code konnte nicht erneuert werden." });
+      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 400, fallbackMessage: "Bestätigungscode konnte nicht erneuert werden." });
       return true;
     }
   }
@@ -366,7 +397,7 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     }
     const providedCsrf = String(req.headers["x-csrf-token"] || "");
     if (!providedCsrf || providedCsrf !== String(context?.session?.csrfToken || "")) {
-      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+      sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungültig." }, origin, requestId);
       return true;
     }
     try {

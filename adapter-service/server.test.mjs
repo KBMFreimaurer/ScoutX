@@ -102,6 +102,7 @@ describe("adapter-service server integration", () => {
   let child = null;
   let baseUrl = "";
   let archiveFile = "";
+  let emailOutboxFile = "";
   let meinturnierplanStub = null;
   let meinturnierplanBaseUrl = "";
 
@@ -117,6 +118,7 @@ describe("adapter-service server integration", () => {
     const storeFile = join(tempDir, "games.store.json");
     const teamStateFile = join(tempDir, "team-state.json");
     archiveFile = join(tempDir, "team-state.archive.ndjson");
+    emailOutboxFile = join(tempDir, "email-outbox.ndjson");
     const aliasesFile = join(tempDir, "aliases.json");
     const clubsFile = join(tempDir, "clubs.catalog.json");
 
@@ -289,6 +291,7 @@ describe("adapter-service server integration", () => {
         ADAPTER_TEAM_SESSION_TTL_SEC: "2",
         ADAPTER_IMPORT_DIR: importsDir,
         ADAPTER_TEAM_ARCHIVE_FILE: archiveFile,
+        ADAPTER_EMAIL_OUTBOX_FILE: emailOutboxFile,
         ADAPTER_ALIASES_FILE: aliasesFile,
         ADAPTER_CLUB_CATALOG_FILE: clubsFile,
         ADAPTER_MEINTURNIERPLAN_BASE_URL: meinturnierplanBaseUrl,
@@ -1340,6 +1343,15 @@ describe("adapter-service server integration", () => {
     expect(registerPayload.status).toBe("email_verification_required");
     expect(registerPayload.user).toMatchObject({ email, emailVerified: false, role: "scout" });
     expect(typeof registerPayload.verificationToken).toBe("string");
+    expect(registerPayload.emailDelivery).toMatchObject({ ok: true, channel: "outbox" });
+    const outboxLines = String(await readFile(emailOutboxFile, "utf8"))
+      .split(/\r?\n/g)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const verificationMail = outboxLines.find((item) => item.to === email);
+    expect(verificationMail).toMatchObject({ to: email, subject: "ScoutX E-Mail bestätigen" });
+    expect(verificationMail.text).toContain(registerPayload.verificationToken);
+    expect(verificationMail.text).toContain("gültig");
 
     const verifyResponse = await fetch(`${baseUrl}/api/team/auth/verification/confirm`, {
       method: "POST",

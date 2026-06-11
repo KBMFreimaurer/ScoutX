@@ -19,7 +19,7 @@ export function assertPasswordMinLength(password, min = 8) {
   const hasLower = /[a-z]/.test(raw);
   const hasDigit = /\d/.test(raw);
   if (!hasUpper || !hasLower || !hasDigit) {
-    throw new ValidationError("Passwort muss mindestens einen Grossbuchstaben, einen Kleinbuchstaben und eine Zahl enthalten.");
+    throw new ValidationError("Passwort muss mindestens einen Großbuchstaben, einen Kleinbuchstaben und eine Zahl enthalten.");
   }
   return raw;
 }
@@ -36,7 +36,7 @@ export function normalizeEmail(value) {
 export function assertEmail(value) {
   const email = normalizeEmail(value);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    throw new ValidationError("Bitte eine gueltige E-Mail-Adresse angeben.");
+    throw new ValidationError("Bitte eine gültige E-Mail-Adresse angeben.");
   }
   return email;
 }
@@ -51,7 +51,7 @@ export function normalizeBirthDate(value) {
   }
   const timestamp = Date.parse(`${text}T00:00:00.000Z`);
   if (!Number.isFinite(timestamp) || timestamp > Date.now()) {
-    throw new ValidationError("Geburtsdatum ist ungueltig.");
+    throw new ValidationError("Geburtsdatum ist ungültig.");
   }
   return text;
 }
@@ -65,7 +65,7 @@ export function normalizeProfileImage(value) {
     throw new ValidationError("Profilbild muss ein PNG, JPEG oder WebP Data-URL sein.");
   }
   if (Buffer.byteLength(text, "utf8") > MAX_PROFILE_IMAGE_BYTES) {
-    throw new ValidationError("Profilbild ist zu gross.");
+    throw new ValidationError("Profilbild ist zu groß.");
   }
   return text;
 }

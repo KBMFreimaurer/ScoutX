@@ -20,6 +20,7 @@ import { handlePublicDataRoutes } from "./routes/publicDataRoutes.js";
 import { handleTeamAuditRoutes } from "./routes/teamAuditRoutes.js";
 import { createTeamRouteBaseContext } from "./routes/routeContextFactory.js";
 import { isAccountEmailVerified, isAccountProfileComplete, normalizeEmail } from "./services/teamAuthService.js";
+import { createEmailDelivery } from "./lib/emailDelivery.js";
 import { fetchRecentTeamArchiveEvents, persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
 import { fetchTeamAccountByIdFromDb, syncTeamAccountsToDb } from "./lib/teamAccountsDb.js";
 import { fetchTeamFeedItemsFromDb, syncTeamFeedItemsToDb } from "./lib/teamFeedDb.js";
@@ -124,6 +125,7 @@ const COOKIE_SECURE = process.env.ADAPTER_TEAM_COOKIE_SECURE
   : process.env.NODE_ENV !== "development";
 const COOKIE_SAME_SITE = String(process.env.ADAPTER_TEAM_COOKIE_SAMESITE || "Lax").trim();
 const AUTH_TOKEN = String(process.env.ADAPTER_TOKEN || "").trim();
+const emailDelivery = createEmailDelivery(process.env);
 if (IS_PRODUCTION && EXPOSE_RESET_TOKEN_ON_REQUEST) {
   throw new Error("ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST=true ist in Produktion nicht erlaubt.");
 }
@@ -1347,10 +1349,10 @@ function toPublicAccount(account) {
 
 function getAccountAuthStatus(account) {
   if (!isAccountEmailVerified(account)) {
-    return { status: "email_verification_required", error: "Bitte bestaetige zuerst deine E-Mail-Adresse." };
+    return { status: "email_verification_required", error: "Bitte bestätige zuerst deine E-Mail-Adresse." };
   }
   if (!isAccountProfileComplete(account)) {
-    return { status: "profile_required", error: "Bitte vervollstaendige dein Scout-Profil." };
+    return { status: "profile_required", error: "Bitte vervollständige dein Scout-Profil." };
   }
   return { status: "connected", error: "" };
 }
@@ -1412,7 +1414,7 @@ function parseTeamJoinAllowlist(rawValue) {
       continue;
     }
     if (!Array.isArray(usersRaw)) {
-      throw new Error(`ADAPTER_TEAM_JOIN_ALLOWLIST Eintrag fuer '${teamKeyRaw}' muss ein Array sein.`);
+      throw new Error(`ADAPTER_TEAM_JOIN_ALLOWLIST Eintrag für '${teamKeyRaw}' muss ein Array sein.`);
     }
     const users = new Set();
     for (const userIdRaw of usersRaw) {
@@ -1601,7 +1603,7 @@ function requireTeamSession(req, res, origin, requestId) {
 function requireTeamCsrf(req, context, res, origin, requestId) {
   const provided = String(req.headers["x-csrf-token"] || "");
   if (!provided || !timingSafeTokenEquals(provided, context.session.csrfToken)) {
-    sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungueltig." }, origin, requestId);
+    sendJson(res, 403, { ok: false, error: "CSRF-Token fehlt oder ist ungültig." }, origin, requestId);
     return false;
   }
   return true;
@@ -2806,6 +2808,8 @@ const server = createServer(async (req, res) => {
       nowIso,
       randomUUID,
       exposeVerificationToken: EXPOSE_VERIFICATION_TOKEN_ON_REGISTER,
+      emailDeliveryConfigured: emailDelivery.configured,
+      sendVerificationEmail: emailDelivery.sendVerificationEmail,
     })
   ) {
     return;
