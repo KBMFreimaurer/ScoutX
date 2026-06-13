@@ -43,6 +43,21 @@
         "teamId": "team-scoutx",
         "active": true,
         "passwordHash": "pbkdf2-sha256$210000$QlwqQeMhKw68S7ZoH_uhGA$3ijQ765d2X7w8NFnO8aLdWgmiM5qgCg4e-UWIgGU1q4"
+      },
+      {
+        "id": "parmigianofrizzante-gmail-com",
+        "name": "Parmigiano Frizzante",
+        "email": "parmigianofrizzante@gmail.com",
+        "emailVerified": true,
+        "emailVerificationTokenHash": "",
+        "emailVerificationExpiresAt": "",
+        "emailVerifiedAt": "2026-06-13T21:42:00.161Z",
+        "birthDate": "",
+        "profileImage": "",
+        "role": "admin",
+        "teamId": "team-scoutx",
+        "active": true,
+        "passwordHash": "pbkdf2-sha256$210000$YbZ03MWh85yjWyK50l9zEA$K_6MptBCrwq6rpasaBDRhhyCVwU9Sc6W0CADnm4VfW4"
       }
     ]
   },

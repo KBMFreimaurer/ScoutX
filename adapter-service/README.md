@@ -298,9 +298,12 @@ Rollen und Passwortverwaltung kannst du bewusst im Terminal halten:
 
 ```bash
 npm run adapter:accounts -- list
-npm run adapter:accounts -- create <userId> "<Name>" "<Passwort>"
+npm run adapter:accounts -- create <userId> "<Name>" "<Passwort>" --role <admin|coordinator|scout|readonly> --email <email> --email-verified
+TEAM_ACCOUNT_PASSWORD="<Passwort>" npm run adapter:accounts -- create <userId> "<Name>" --role <admin|coordinator|scout|readonly> --email <email> --email-verified
 npm run adapter:accounts -- set-role <userId> <admin|coordinator|scout|readonly>
 npm run adapter:accounts -- set-password <userId> "<Passwort>"
+npm run adapter:accounts -- set-email <userId> <email> --email-verified
+npm run adapter:accounts -- verify-email <userId>
 npm run adapter:accounts -- activate <userId>
 npm run adapter:accounts -- deactivate <userId>
 ```
