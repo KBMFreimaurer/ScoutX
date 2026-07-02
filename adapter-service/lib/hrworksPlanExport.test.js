@@ -53,6 +53,8 @@ describe("hrworksPlanExport", () => {
     expect(totalRow[6]).toBe("9.5");
     expect(rows.at(-1)[0]).toBe("Unterschrift Mitarbeiter");
     expect(rows.at(-1)[4]).toBe("Unterschrift Abteilungsleiter");
+    // Unterschriftszeile bleibt leer — unterschrieben wird von Hand.
+    expect(rows.at(-2)).toEqual(["", "", "", "", "", "", "", ""]);
   });
 
   it("schreibt eine lesbare XLSX-Datei", () => {

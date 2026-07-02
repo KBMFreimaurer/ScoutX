@@ -94,7 +94,7 @@ export function buildHrworksTimesheetRows(payloads, { employeeName = "" } = {}) 
   rows.push(["", "", "", "", "Gesamtstunden", "", totalHours.toFixed(1), ""]);
   rows.push(["", "", "", "", "", "", "", ""]);
   rows.push(["", "", "", "", "", "", "", ""]);
-  rows.push(["", name, "", "", "", "", "", ""]);
+  rows.push(["", "", "", "", "", "", "", ""]);
   rows.push(["Unterschrift Mitarbeiter", "", "", "", "Unterschrift Abteilungsleiter", "", "", ""]);
 
   return { rows, monthName, name, totalHours: Number(totalHours.toFixed(2)) };
