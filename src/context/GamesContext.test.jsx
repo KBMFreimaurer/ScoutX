@@ -64,7 +64,7 @@ describe("GamesContext filterGamesByLeagueQueries", () => {
     expect(result[0].id).toBe("g1");
   });
 
-  it("keeps national and tournament games when a league filter is active", () => {
+  it("drops national and tournament games when a league filter is active", () => {
     const { filterGamesByLeagueQueries } = __gamesContextTestables;
     const result = filterGamesByLeagueQueries(
       [
@@ -76,6 +76,6 @@ describe("GamesContext filterGamesByLeagueQueries", () => {
       ["Niederrheinliga"],
     );
 
-    expect(result.map((game) => game.id).sort()).toEqual(["league", "national", "tournament"]);
+    expect(result.map((game) => game.id)).toEqual(["league"]);
   });
 });

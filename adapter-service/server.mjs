@@ -2272,39 +2272,46 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
       throw new Error(`Live-Datenabruf fehlgeschlagen: ${liveSourceErrors.join(" | ") || "keine Quelle erfolgreich"}`);
     }
 
+    // Wochen-Scrapes anderer Altersklassen/Kreise leben nur im Store; der
+    // Import/Remote-Baseline-Refresh würde sie verwerfen. Vorherigen Stand
+    // sichern und beim Merge wieder einmischen.
+    const previousGames = Array.isArray(state.games) ? state.games : [];
     // Reload import/remote baseline after command execution
-    const refreshed = await refreshData("auto-week-base", logger);
-
-    const replaceBaseline =
-      collected.length > 0
-        ? refreshed.games.filter((game) => shouldKeepExistingGameForWeek(game, params, weekRange))
-        : refreshed.games;
-
-    const replaced = refreshed.games.length - replaceBaseline.length;
-    const merged = dedupeGames([...replaceBaseline, ...collected]);
-    const added = merged.length - refreshed.games.length;
-
-    const weekMeta = {
-      week: weekRange,
-      cacheKey,
-      refreshedAt: new Date().toISOString(),
-      added,
-      replaced,
-      collected: collected.length,
-      warnings,
-    };
-
-    const nextMeta = {
-      ...(state.meta || {}),
-      updatedAt: new Date().toISOString(),
-      counts: {
-        ...(state.meta?.counts || {}),
-        total: merged.length,
-      },
-      weekRefresh: weekMeta,
-    };
+    await refreshData("auto-week-base", logger);
 
     const serializedStoreResult = await runStoreMutationSerialized("auto-week", async () => {
+      // Basis erst hier aus state.games bilden: parallele auto-week-Läufe
+      // (andere Altersklasse) haben bis hierhin evtl. schon geschrieben.
+      const baselineGames = dedupeGames([...state.games, ...previousGames]);
+      const replaceBaseline =
+        collected.length > 0
+          ? baselineGames.filter((game) => shouldKeepExistingGameForWeek(game, params, weekRange))
+          : baselineGames;
+
+      const replaced = baselineGames.length - replaceBaseline.length;
+      const merged = dedupeGames([...replaceBaseline, ...collected]);
+      const added = merged.length - baselineGames.length;
+
+      const weekMeta = {
+        week: weekRange,
+        cacheKey,
+        refreshedAt: new Date().toISOString(),
+        added,
+        replaced,
+        collected: collected.length,
+        warnings,
+      };
+
+      const nextMeta = {
+        ...(state.meta || {}),
+        updatedAt: new Date().toISOString(),
+        counts: {
+          ...(state.meta?.counts || {}),
+          total: merged.length,
+        },
+        weekRefresh: weekMeta,
+      };
+
       const persisted = await writeStoreSafely("auto-week", { games: merged, meta: nextMeta }, logger);
       if (!persisted) {
         return { persisted: false };
@@ -2315,7 +2322,7 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
       state.lastError = warnings.length ? warnings.join(" | ") : null;
       state.lastSuccessfulRefreshAt = nowIso();
       state.weekRefreshCache[cacheKey] = now;
-      return { persisted: true };
+      return { persisted: true, added, replaced };
     });
     if (!serializedStoreResult?.persisted) {
       return {
@@ -2331,8 +2338,8 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
     }
     logger.info("week refresh completed", {
       cacheKey,
-      added,
-      replaced,
+      added: serializedStoreResult.added,
+      replaced: serializedStoreResult.replaced,
       collected: collected.length,
       warningCount: warnings.length,
       stateCode: params.stateCode,
@@ -2346,8 +2353,8 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
       reason: "refreshed",
       weekRange,
       cacheKey,
-      added,
-      replaced,
+      added: serializedStoreResult.added,
+      replaced: serializedStoreResult.replaced,
       collected: collected.length,
       warnings,
     };

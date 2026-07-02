@@ -138,7 +138,11 @@ export function reasonForGame(game, reasonMap) {
 
 export function inferBadges(game, reasonText) {
   const tags = [];
-  const normalizedReason = normalizeLookup(reasonText);
+  // Liga-Metadaten der Spiele mit einbeziehen, damit z. B. "Leistungsklasse"
+  // aus fussball.de-Daten als Badge in der PDF landet.
+  const normalizedReason = normalizeLookup(
+    `${reasonText} ${game?.league || game?.competitionName || ""}`,
+  );
   const competitionType = resolveGameCompetitionType(game);
 
   if (competitionType.key !== "league") {
