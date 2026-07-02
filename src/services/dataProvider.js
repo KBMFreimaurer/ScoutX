@@ -40,6 +40,16 @@ const GENERIC_TEAM_TOKENS = new Set([
 ]);
 const LEAGUE_KEYWORDS = ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"];
 const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19", "U20", "U21"];
+// ponytail: U20/U21 bei A-Jugend belassen, dort werden aeltere U-Nationalteams mitgescoutet.
+const NATIONAL_AGE_GROUPS_BY_JUGEND_ID = {
+  "c-jugend": ["U15"],
+  "b-jugend": ["U16", "U17"],
+  "a-jugend": ["U18", "U19", "U20", "U21"],
+};
+
+function nationalAgeGroupsForJugend(jugendId) {
+  return NATIONAL_AGE_GROUPS_BY_JUGEND_ID[String(jugendId || "").trim().toLowerCase()] || [];
+}
 const TOURNAMENT_AGE_KEYWORDS_BY_JUGEND_ID = {
   bambini: ["Bambini", "G-Jugend", "U6", "U7"],
   "f-jugend": ["F-Jugend", "U8", "U9"],
@@ -1481,18 +1491,22 @@ function nationalGameToGame(item, index, params) {
 }
 
 async function fetchGamesNational(params) {
+  const allowedAgeGroups = nationalAgeGroupsForJugend(params.jugendId);
+  if (allowedAgeGroups.length === 0) {
+    throw new Error("Keine passenden Länderspiele für die gewählte Altersklasse.");
+  }
   const payload = await importTeamNationalGames({
     fromDate: params.fromDate,
     toDate: params.toDate,
     teams: Array.isArray(params.teams) ? params.teams : [],
     jugendId: params.jugendId,
     kreisId: params.kreisId,
-    ageGroups: NATIONAL_AGE_GROUPS,
+    ageGroups: allowedAgeGroups,
   });
   const nationalGamesRaw = Array.isArray(payload?.games) ? payload.games : [];
   const nationalGames = nationalGamesRaw.filter((item) => {
     const ageGroup = extractNationalAgeGroup(item);
-    return NATIONAL_AGE_GROUPS.includes(ageGroup);
+    return allowedAgeGroups.includes(ageGroup);
   });
   if (!nationalGames.length) {
     throw new Error("Keine passenden Länderspiele gefunden.");

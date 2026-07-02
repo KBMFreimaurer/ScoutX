@@ -384,9 +384,68 @@ describe("data provider", () => {
     });
     expect(importTeamNationalGames).toHaveBeenCalledWith(
       expect.objectContaining({
-        ageGroups: ["U15", "U16", "U17", "U18", "U19", "U20", "U21"],
+        ageGroups: ["U18", "U19", "U20", "U21"],
       }),
     );
+  });
+
+  it("filtert DFB-Spiele fremder Altersklassen heraus", async () => {
+    vi.mocked(importTeamNationalGames).mockResolvedValue({
+      ok: true,
+      games: [
+        { id: "nat-u15", home: "Deutschland U15", away: "Polen U15", date: "2026-10-10", time: "15:00", ageGroup: "U15" },
+        { id: "nat-u19", home: "Deutschland U19", away: "Polen U19", date: "2026-10-11", time: "15:00", ageGroup: "U19" },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ games: [] }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "c-jugend",
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeNationalGames: true,
+    });
+
+    expect(importTeamNationalGames).toHaveBeenCalledWith(expect.objectContaining({ ageGroups: ["U15"] }));
+    expect(result.games.some((game) => game.ageGroup === "U15")).toBe(true);
+    expect(result.games.some((game) => game.ageGroup === "U19")).toBe(false);
+  });
+
+  it("laedt keine DFB-Spiele fuer Altersklassen ohne Nationalteams", async () => {
+    vi.mocked(importTeamNationalGames).mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ games: [{ id: "g1", home: "A", away: "B", date: "2026-10-10", time: "12:00" }] }),
+      }),
+    );
+
+    const result = await fetchGamesWithProviders({
+      mode: "adapter",
+      kreisId: "duisburg",
+      jugendId: "d-jugend",
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      teams: [],
+      uploadedGames: [],
+      adapterEndpoint: "http://localhost:3333/games",
+      includeNationalGames: true,
+    });
+
+    expect(importTeamNationalGames).not.toHaveBeenCalled();
+    expect(result.games.length).toBeGreaterThan(0);
   });
 
   it("deduplicates cross-source games and marks schedule conflicts", async () => {
