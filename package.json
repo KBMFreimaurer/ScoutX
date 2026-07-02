@@ -18,6 +18,7 @@
     "adapter:team-state:check": "node adapter-service/scripts/backfill-team-state.mjs --check",
     "adapter:refresh": "curl -X POST http://127.0.0.1:8787/api/admin/refresh",
     "adapter:clubs:scrape": "node adapter-service/scripts/scrape-clubs.mjs",
+    "claude:graphify": "node scripts/claude-graphify-context.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

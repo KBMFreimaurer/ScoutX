@@ -216,8 +216,9 @@ export function SetupProvider({ children, defaultAdapterEndpoint }) {
   const [resolvingLocation, setResolvingLocation] = useState(false);
   const [favoriteTeams, setFavoriteTeams] = useState(() => normalizeTeamParameters(setupDefaults.favorites));
   const [favoriteDraft, setFavoriteDraft] = useState("");
-  const [includeNationalGames, setIncludeNationalGames] = useState(false);
-  const [includeTournaments, setIncludeTournaments] = useState(false);
+  // ponytail: Zusatzquellen laden automatisch mit; Checkboxen im Wizard bleiben als Opt-out.
+  const [includeNationalGames, setIncludeNationalGames] = useState(true);
+  const [includeTournaments, setIncludeTournaments] = useState(true);
   const [err, setErr] = useState("");
   const [abrechnungMeta, setAbrechnungMetaRaw] = useState(() => ({ scoutName: "", kmPauschale: 0.3 }));
 

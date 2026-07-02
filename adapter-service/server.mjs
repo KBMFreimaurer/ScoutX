@@ -2871,6 +2871,7 @@ const server = createServer(async (req, res) => {
       readRawBody,
       requireTeamSession,
       requireTeamWriteAllowed,
+      getTeamSessionContext,
       normalizeAccountId,
       formatWizardDateForMeinturnierplan,
       toFilterKeywords,

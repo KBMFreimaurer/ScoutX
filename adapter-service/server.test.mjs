@@ -3983,6 +3983,62 @@ describe("adapter-service server integration", () => {
     });
   });
 
+  it("imports tournaments and national games without a team session and does not persist them", async () => {
+    const tournamentResponse = await fetch(`${baseUrl}/api/team/tournaments/import/meinturnierplan`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fromDate: "2026-06-01",
+        toDate: "2026-06-07",
+        jugendId: "f-jugend",
+        kreisId: "duisburg",
+        teams: ["MSV Duisburg U12"],
+        regionName: "Duisburg",
+        regionKeywords: ["duisburg", "wedau", "mulheim"],
+      }),
+    });
+    expect(tournamentResponse.status).toBe(200);
+    const tournamentPayload = await parseJsonSafe(tournamentResponse);
+    expect(tournamentPayload.ok).toBe(true);
+    expect(tournamentPayload.provider).toBe("meinturnierplan.de");
+    expect(tournamentPayload.count).toBe(1);
+
+    const nationalResponse = await fetch(`${baseUrl}/api/team/import/dfb-national-games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        games: [
+          {
+            id: "national-anon-u17-1",
+            home: "Deutschland U17",
+            away: "Frankreich U17",
+            date: "2026-07-10",
+            time: "18:00",
+            ageGroup: "U17",
+          },
+        ],
+      }),
+    });
+    expect(nationalResponse.status).toBe(200);
+    const nationalPayload = await parseJsonSafe(nationalResponse);
+    expect(nationalPayload.ok).toBe(true);
+    expect(nationalPayload.importedCount).toBe(1);
+    expect(nationalPayload.games[0]).toMatchObject({ id: "national-anon-u17-1", source: "national" });
+
+    const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "user-coordinator", password: TEAM_TEST_PASSWORD }),
+    });
+    expect(loginResponse.status).toBe(200);
+    const cookie = String(loginResponse.headers.get("set-cookie") || "").split(";")[0];
+    const stateResponse = await fetch(`${baseUrl}/api/team/state`, { headers: { cookie } });
+    expect(stateResponse.status).toBe(200);
+    const statePayload = await parseJsonSafe(stateResponse);
+    const manualGames = Array.isArray(statePayload?.manualGames) ? statePayload.manualGames : [];
+    expect(manualGames.some((game) => game?.id === "national-anon-u17-1")).toBe(false);
+  });
+
   it("runs official/manual/tournament/national through one shared plan-seen-report flow", async () => {
     const loginResponse = await fetch(`${baseUrl}/api/team/auth/login`, {
       method: "POST",

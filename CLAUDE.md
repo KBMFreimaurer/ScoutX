@@ -64,6 +64,33 @@ docker compose --profile prod up --build
   `adapter-service/scripts/fetch-week.fussballde.mjs`
   `adapter-service/lib/fussballde.js`
 
+## Claude Fable 5 token budget
+
+Before broad repository reads, inspect the Graphify graph and use it as the
+primary navigation layer:
+
+```bash
+npm run claude:graphify
+npm run claude:graphify -- --query SetupContext
+npm run claude:graphify -- --file src/services/dataProvider.js
+```
+
+Rules:
+
+- Prefer `npm run claude:graphify -- --query <symbol-or-feature>` for feature
+  work and `npm run claude:graphify -- --file <path>` for targeted fixes.
+- Open raw source files only after Graphify identifies relevant nodes,
+  dependencies, or callers.
+- Do not paste or read the full `graphify-out/graph.json` into the model
+  context; use `scripts/claude-graphify-context.mjs` for compact summaries.
+- If Graphify output lives elsewhere, run with
+  `GRAPHIFY_GRAPH=/path/to/graph.json npm run claude:graphify`.
+
+## Claude Code commands
+
+- `/ponytail [lite|full|ultra]`: local shortest-working-solution mode from
+  `.claude/commands/ponytail.md`.
+
 ## Working conventions
 
 - Keep user-facing text in German.

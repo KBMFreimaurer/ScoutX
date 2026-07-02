@@ -1,8 +1,7 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { BMGBadge } from "./components/BMGBadge";
 import { StepNav } from "./components/StepNav";
-import { TeamAuthGate } from "./components/TeamAuthGate";
 import { C, GCSS } from "./styles/theme";
 import { ADAPTER_ENDPOINT } from "./config/adapter";
 import { ENABLE_ADMIN_SURFACE, PRIVACY_POLICY_URL, SUPPORT_URL } from "./config/release";
@@ -25,15 +24,6 @@ const SupportPage = lazy(() => import("./pages/SupportPage").then((module) => ({
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = ADAPTER_ENDPOINT;
-const REGISTRATION_TEAMS = [{ key: "borussia-moenchengladbach", label: "Borussia Mönchengladbach" }];
-
-function hasTestAuthBypass() {
-  if (import.meta.env?.MODE !== "test" || typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage?.getItem("scoutx.test.authenticated") === "true";
-}
 
 const RAIL_ICONS = {
   hub: (
@@ -858,141 +848,6 @@ function AppLayout() {
   );
 }
 
-function AppAuthGate({ children }) {
-  const { isMobile } = useScoutX();
-  const {
-    activeUser,
-    teamBackendState,
-    onLoginTeamBackend,
-    onRegisterTeamBackend,
-    onConfirmTeamEmailVerification,
-    onResendTeamEmailVerification,
-    onUpdateTeamAuthProfile,
-    onSwitchUser,
-  } = useScoutXProduct();
-  const [teamLoginPassword, setTeamLoginPassword] = useState("");
-  const [teamLoginUserId, setTeamLoginUserId] = useState("");
-  const [teamRegisterName, setTeamRegisterName] = useState("");
-  const [teamRegisterKey, setTeamRegisterKey] = useState(REGISTRATION_TEAMS[0].key);
-  const [teamVerificationToken, setTeamVerificationToken] = useState("");
-  const [teamProfileName, setTeamProfileName] = useState(activeUser.name || "");
-  const [teamProfileBirthDate, setTeamProfileBirthDate] = useState("");
-  const [teamProfileImage, setTeamProfileImage] = useState("");
-  const [teamAuthMode, setTeamAuthMode] = useState("login");
-  const [teamLoginBusy, setTeamLoginBusy] = useState(false);
-  const authRequired = teamBackendState.status !== "connected" && !hasTestAuthBypass();
-
-  const submitTeamBackendLogin = async (event) => {
-    event.preventDefault();
-    if (!teamLoginPassword.trim() || teamLoginBusy) {
-      return;
-    }
-    setTeamLoginBusy(true);
-    try {
-      const userId = teamLoginUserId.trim() || activeUser.id;
-      let payload = null;
-      if (teamAuthMode === "register") {
-        payload = await onRegisterTeamBackend(userId, teamRegisterName.trim(), teamLoginPassword, teamRegisterKey);
-      } else {
-        payload = await onLoginTeamBackend(userId, teamLoginPassword);
-      }
-      if (payload?.verificationToken) {
-        setTeamVerificationToken(payload.verificationToken);
-      }
-      if (userId && userId !== activeUser.id) {
-        onSwitchUser(userId);
-      }
-      setTeamRegisterName("");
-      setTeamLoginPassword("");
-    } finally {
-      setTeamLoginBusy(false);
-    }
-  };
-
-  const submitTeamEmailVerification = async (event) => {
-    event.preventDefault();
-    if (!teamVerificationToken.trim() || teamLoginBusy) {
-      return;
-    }
-    setTeamLoginBusy(true);
-    try {
-      await onConfirmTeamEmailVerification(teamVerificationToken.trim());
-      setTeamVerificationToken("");
-    } finally {
-      setTeamLoginBusy(false);
-    }
-  };
-
-  const resendTeamEmailVerification = async () => {
-    if (teamLoginBusy) {
-      return;
-    }
-    setTeamLoginBusy(true);
-    try {
-      const payload = await onResendTeamEmailVerification();
-      if (payload?.verificationToken) {
-        setTeamVerificationToken(payload.verificationToken);
-      }
-    } finally {
-      setTeamLoginBusy(false);
-    }
-  };
-
-  const submitTeamProfile = async (event) => {
-    event.preventDefault();
-    if (!teamProfileName.trim() || !teamProfileBirthDate.trim() || !teamProfileImage.trim() || teamLoginBusy) {
-      return;
-    }
-    setTeamLoginBusy(true);
-    try {
-      await onUpdateTeamAuthProfile({
-        name: teamProfileName.trim(),
-        birthDate: teamProfileBirthDate,
-        profileImage: teamProfileImage,
-      });
-    } finally {
-      setTeamLoginBusy(false);
-    }
-  };
-
-  if (!authRequired) {
-    return children;
-  }
-
-  return (
-    <TeamAuthGate
-      isOpen
-      isMobile={isMobile}
-      mode={teamAuthMode}
-      busy={teamLoginBusy}
-      status={teamBackendState.status || "auth_required"}
-      statusMessage={teamBackendState.error || "Bitte anmelden, bevor du ScoutX nutzt."}
-      activeUserId={activeUser.id}
-      userId={teamLoginUserId}
-      password={teamLoginPassword}
-      registerName={teamRegisterName}
-      registerTeamKey={teamRegisterKey}
-      registerTeams={REGISTRATION_TEAMS}
-      verificationToken={teamVerificationToken}
-      profileName={teamProfileName}
-      profileBirthDate={teamProfileBirthDate}
-      profileImage={teamProfileImage}
-      onModeChange={setTeamAuthMode}
-      onUserIdChange={setTeamLoginUserId}
-      onPasswordChange={setTeamLoginPassword}
-      onRegisterNameChange={setTeamRegisterName}
-      onRegisterTeamKeyChange={setTeamRegisterKey}
-      onVerificationTokenChange={setTeamVerificationToken}
-      onProfileNameChange={setTeamProfileName}
-      onProfileBirthDateChange={setTeamProfileBirthDate}
-      onProfileImageChange={setTeamProfileImage}
-      onResendVerification={resendTeamEmailVerification}
-      onSubmit={teamBackendState.status === "email_verification_required" ? submitTeamEmailVerification : submitTeamBackendLogin}
-      onSubmitProfile={submitTeamProfile}
-    />
-  );
-}
-
 export default function App() {
   return (
     <>
@@ -1002,9 +857,7 @@ export default function App() {
           <PlanProvider>
             <ScoutXProductProvider>
               <ScoutXProvider>
-                <AppAuthGate>
-                  <AppLayout />
-                </AppAuthGate>
+                <AppLayout />
               </ScoutXProvider>
             </ScoutXProductProvider>
           </PlanProvider>

@@ -16,6 +16,7 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
     sendJson,
     requireTeamSession,
     requireTeamWriteAllowed,
+    getTeamSessionContext,
     applyTeamStateMutation,
     runTeamWriteIdempotent,
     normalizeAccountId,
@@ -196,9 +197,9 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
   };
 
   if (req.method === "POST" && url.pathname === "/api/team/tournaments/import/meinturnierplan") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) return true;
-    if (!(await requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp))) return true;
+    // ponytail: reiner Lesezugriff, ohne Login nutzbar; eingeloggte Nutzer behalten die Schreibrecht-Pruefung.
+    const context = getTeamSessionContext(req);
+    if (context && !(await requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp))) return true;
 
     try {
       const payload = await readBody(req);
@@ -322,13 +323,13 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/team/import/dfb-national-games") {
-    const context = requireTeamSession(req, res, origin, requestId);
-    if (!context) return true;
-    if (!(await requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp))) return true;
+    // ponytail: ohne Login lesbar (nur Parsen + Zurueckgeben); persistiert wird nur mit Session + Schreibrecht.
+    const context = getTeamSessionContext(req);
+    if (context && !(await requireTeamWriteAllowed(req, context, res, origin, requestId, clientIp))) return true;
 
     try {
       const payload = await readBody(req);
-      const { games } = await runTeamWriteIdempotent(req, context, "team-import-national-games", payload, async () => {
+      const importNationalGames = async () => {
         const providedGames = Array.isArray(payload?.games) ? payload.games : [];
         const sourceGames = providedGames.length > 0 ? providedGames : await loadNationalGamesFromSource(payload);
         if (providedGames.length === 0 && sourceGames.length === 0) {
@@ -361,28 +362,33 @@ export async function handleTeamImportTournamentRoutes(req, res, routeContext) {
             competitionName: String(game?.competitionName || "").trim(),
             status: String(game?.status || "scheduled").trim() === "cancelled" ? "cancelled" : "scheduled",
             note: String(game?.note || "").trim(),
-            createdBy: context.account.id,
+            createdBy: context?.account.id || "",
             createdAt: importedAt,
             updatedAt: importedAt,
             provenance: createGameProvenance({
               source: "national",
               method: "api-import",
               provider: "dfb-national-games",
-              importedBy: context.account.id,
+              importedBy: context?.account.id || "",
               requestId,
               ingestedAt: importedAt,
             }),
           }))
           .filter((game) => game.home && game.away);
 
-        await applyTeamStateMutation(requestLogger, "team-import-national-games", (currentState) => {
-          const existing = Array.isArray(currentState?.manualGames) ? currentState.manualGames : [];
-          const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
-          for (const game of games) byId.set(game.id, game);
-          return { ...currentState, manualGames: [...byId.values()] };
-        });
+        if (context) {
+          await applyTeamStateMutation(requestLogger, "team-import-national-games", (currentState) => {
+            const existing = Array.isArray(currentState?.manualGames) ? currentState.manualGames : [];
+            const byId = new Map(existing.map((game) => [String(game?.id || ""), game]));
+            for (const game of games) byId.set(game.id, game);
+            return { ...currentState, manualGames: [...byId.values()] };
+          });
+        }
         return { games };
-      });
+      };
+      const { games } = context
+        ? await runTeamWriteIdempotent(req, context, "team-import-national-games", payload, importNationalGames)
+        : await importNationalGames();
       sendJson(res, 200, { ok: true, importedCount: games.length, games }, origin, requestId);
       return true;
     } catch (error) {

@@ -75,7 +75,6 @@ describe("ScoutX Integration", () => {
     if (typeof window.sessionStorage?.clear === "function") {
       window.sessionStorage.clear();
     }
-    window.localStorage.setItem("scoutx.test.authenticated", "true");
     vi.restoreAllMocks();
   });
 
@@ -90,6 +89,7 @@ describe("ScoutX Integration", () => {
     );
 
     await screen.findByRole("heading", { name: /Scouting-Cockpit/i }, { timeout: 5000 });
+    expect(screen.queryByRole("dialog", { name: /ScoutX Anmeldung/i })).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Aktive Rolle/i)).toBeInTheDocument();
   });
 
