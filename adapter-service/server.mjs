@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dedupeGames, filterGames, isLikelyTeamMatch, normalizeGames } from "./lib/games.js";
-import { extractClubSearchResults } from "./lib/fussballde.js";
+import { extractClubSearchResults, resolveFussballDeCompetitionTypes } from "./lib/fussballde.js";
 import { createJobRegistry } from "./lib/jobRunner.js";
 import { readStore, refreshStore, writeStore } from "./lib/loader.js";
 import { createLogger } from "./lib/logger.js";
@@ -2502,7 +2502,7 @@ async function fetchBasePayload({ signal }) {
   return { baseUrl, basePayload };
 }
 
-async function fetchMandantProbe({ mandant, season = "", competitionType = "1", logger = rootLogger }) {
+async function fetchMandantProbe({ mandant, season = "", competitionType = "", logger = rootLogger }) {
   const normalizedMandant = String(mandant || "").trim();
   if (!/^\d{1,3}$/.test(normalizedMandant)) {
     throw new Error("Ungültiger Mandant. Erwartet wird eine numerische Kennzahl.");
@@ -2514,27 +2514,37 @@ async function fetchMandantProbe({ mandant, season = "", competitionType = "1", 
   try {
     const { baseUrl, basePayload } = await fetchBasePayload({ signal: controller.signal });
     const effectiveSeason = String(season || basePayload?.currentSaison || "").trim();
-    const effectiveCompetitionType = String(competitionType || basePayload?.defaultCompetitionType || "1").trim() || "1";
+    const competitionTypes = resolveFussballDeCompetitionTypes({
+      base: basePayload,
+      mandant: normalizedMandant,
+      season: effectiveSeason,
+      requestedType: competitionType,
+    });
 
     if (!effectiveSeason) {
       throw new Error("Keine Saison verfügbar (wam_base.currentSaison leer).");
     }
 
-    const kindsUrl = `${baseUrl}/wam_kinds_${normalizedMandant}_${effectiveSeason}_${effectiveCompetitionType}.json`;
-    const kindsResponse = await fetch(kindsUrl, { signal: controller.signal });
-    if (!kindsResponse.ok) {
-      throw new Error(`wam_kinds HTTP ${kindsResponse.status}`);
-    }
-    const kindsPayload = await kindsResponse.json();
-
-    const teamTypes = normalizeUnderscoreKeyMap(kindsPayload?.Mannschaftsart || {});
-    const spielklasseByType = normalizeUnderscoreKeyMap(kindsPayload?.Spielklasse || {});
+    const teamTypes = {};
     const leagueIds = new Set();
+    const kindsUrls = [];
 
-    for (const byLeague of Object.values(spielklasseByType)) {
-      const normalized = normalizeUnderscoreKeyMap(byLeague || {});
-      for (const leagueId of Object.keys(normalized)) {
-        leagueIds.add(leagueId);
+    for (const effectiveCompetitionType of competitionTypes) {
+      const kindsUrl = `${baseUrl}/wam_kinds_${normalizedMandant}_${effectiveSeason}_${effectiveCompetitionType}.json`;
+      const kindsResponse = await fetch(kindsUrl, { signal: controller.signal });
+      if (!kindsResponse.ok) {
+        throw new Error(`wam_kinds HTTP ${kindsResponse.status}`);
+      }
+      const kindsPayload = await kindsResponse.json();
+      Object.assign(teamTypes, normalizeUnderscoreKeyMap(kindsPayload?.Mannschaftsart || {}));
+      kindsUrls.push(kindsUrl);
+
+      const spielklasseByType = normalizeUnderscoreKeyMap(kindsPayload?.Spielklasse || {});
+      for (const byLeague of Object.values(spielklasseByType)) {
+        const normalized = normalizeUnderscoreKeyMap(byLeague || {});
+        for (const leagueId of Object.keys(normalized)) {
+          leagueIds.add(leagueId);
+        }
       }
     }
 
@@ -2542,17 +2552,19 @@ async function fetchMandantProbe({ mandant, season = "", competitionType = "1", 
       ok: true,
       mandant: normalizedMandant,
       season: effectiveSeason,
-      competitionType: effectiveCompetitionType,
+      competitionType: competitionTypes[0] || "",
+      competitionTypes,
       teamTypeCount: Object.keys(teamTypes).length,
       leagueCount: leagueIds.size,
       teamTypes,
-      kindsUrl,
+      kindsUrl: kindsUrls[0] || "",
+      kindsUrls,
     };
 
     logger.info("mandant probe succeeded", {
       mandant: normalizedMandant,
       season: effectiveSeason,
-      competitionType: effectiveCompetitionType,
+      competitionTypes,
       leagueCount: probe.leagueCount,
       teamTypeCount: probe.teamTypeCount,
     });

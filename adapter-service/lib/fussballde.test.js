@@ -6,6 +6,7 @@ import {
   extractMatchesFromDatePage,
   extractClubSearchResults,
   pickAreaIdsForLeague,
+  resolveFussballDeCompetitionTypes,
   resolveFussballDeRegionParams,
   toSpieldatumUrl,
 } from "./fussballde";
@@ -34,6 +35,40 @@ describe("fussballde helpers", () => {
 
   it("builds an inclusive date range", () => {
     expect(buildDateRange("2026-04-04", "2026-04-06")).toEqual(["2026-04-04", "2026-04-05", "2026-04-06"]);
+  });
+
+  it("falls back to available competition types when the default is absent for a mandant season", () => {
+    const base = {
+      defaultCompetitionType: "1",
+      CompetitionTypes: {
+        22: {
+          2627: {
+            _300: "Turniere",
+            _70: "Freundschaftsspiele",
+          },
+        },
+      },
+    };
+
+    expect(resolveFussballDeCompetitionTypes({ base, mandant: "22", season: "2627" })).toEqual(["70", "300"]);
+  });
+
+  it("keeps an explicitly requested competition type", () => {
+    const base = {
+      defaultCompetitionType: "1",
+      CompetitionTypes: {
+        22: {
+          2627: {
+            _300: "Turniere",
+            _70: "Freundschaftsspiele",
+          },
+        },
+      },
+    };
+
+    expect(resolveFussballDeCompetitionTypes({ base, mandant: "22", season: "2627", requestedType: "300" })).toEqual([
+      "300",
+    ]);
   });
 
   it("extracts match rows from a playday page", () => {

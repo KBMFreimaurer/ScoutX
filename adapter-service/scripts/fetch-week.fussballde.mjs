@@ -18,6 +18,7 @@ import {
   normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
+  resolveFussballDeCompetitionTypes,
   resolveFussballDeRegionParams,
   toAbsoluteFussballUrl,
   uniqueBy,
@@ -906,26 +907,51 @@ async function main() {
 
   const base = await fetchJson(`${BASE_URL}/wam_base.json`);
   const season = process.env.FUSSBALLDE_SAISON || base.currentSaison;
-  const competitionType = process.env.FUSSBALLDE_COMPETITION_TYPE || base.defaultCompetitionType || "1";
+  const explicitCompetitionType = process.env.FUSSBALLDE_COMPETITION_TYPE || "";
+  const competitionTypes = resolveFussballDeCompetitionTypes({
+    base,
+    mandant: MANDANT,
+    season,
+    requestedType: explicitCompetitionType,
+  });
 
   const dateRange = buildDateRangeFromEnv();
   const dateRangeSet = new Set(dateRange);
 
   log(
-    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} strictMapping=${STRICT_REGION_MAPPING ? "yes" : "no"} strictResultFilter=${STRICT_RESULT_FILTER ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
+    `Range=${dateRange[0]}..${dateRange[dateRange.length - 1]} state=${regionParams.stateCode || "(none)"} region=${regionParams.regionName || kreisId || "(none)"} kreis=${kreisId} jugend=${jugendId} label=${jugendTeamLabel || "(none)"} mapping=${regionParams.source} mandant=${MANDANT} verband=${regionParams.verband || "(none)"} competitionTypes=${competitionTypes.join("|") || "(none)"} regionalFallback=${regionParams.allowRegionalFallback ? "yes" : "no"} strictMapping=${STRICT_REGION_MAPPING ? "yes" : "no"} strictResultFilter=${STRICT_RESULT_FILTER ? "yes" : "no"} keywords=${regionParams.areaKeywords.join("|")} pageC=${dynamicConcurrency.page} matchC=${dynamicConcurrency.match}`,
   );
 
-  const discovery = await discoverCompetitions({
-    season,
-    competitionType,
-    requestedJugendId: jugendId,
-    fallbackTeamType: fallbackJugendTeamType,
-    kreis: kreisId,
-    mappingParams: regionParams,
-  });
-  const { teamType: jugendTeamType, competitions } = discovery;
+  const discoveries = [];
+  const discoveryErrors = [];
 
-  if (competitions.length === 0) {
+  for (const competitionType of competitionTypes) {
+    try {
+      const discovery = await discoverCompetitions({
+        season,
+        competitionType,
+        requestedJugendId: jugendId,
+        fallbackTeamType: fallbackJugendTeamType,
+        kreis: kreisId,
+        mappingParams: regionParams,
+      });
+      if (discovery.competitions.length > 0) {
+        discoveries.push({ ...discovery, competitionType });
+      }
+    } catch (error) {
+      const message = `competitionType=${competitionType}: ${error.message || error}`;
+      discoveryErrors.push(message);
+      if (explicitCompetitionType) {
+        throw error;
+      }
+      warn(message);
+    }
+  }
+
+  if (discoveries.length === 0) {
+    if (discoveryErrors.length > 0) {
+      throw new Error(`Keine Wettbewerbe entdeckt. ${discoveryErrors.join(" | ")}`);
+    }
     warn("No competitions found for selected filters.");
     process.stdout.write(
       `${JSON.stringify({
@@ -939,6 +965,11 @@ async function main() {
     );
     return;
   }
+
+  const competitions = uniqueBy(
+    discoveries.flatMap((discovery) => discovery.competitions),
+    (competition) => competition.url,
+  );
 
   log(`Competitions discovered: ${competitions.length}`);
 
@@ -958,7 +989,7 @@ async function main() {
       meta: {
         provider: "fussball.de",
         season,
-        competitionType,
+        competitionTypes: discoveries.map((discovery) => discovery.competitionType),
         fetchedAt: nowIso(),
         competitions: competitions.length,
         candidates: candidates.length,

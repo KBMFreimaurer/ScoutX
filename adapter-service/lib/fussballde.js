@@ -18,6 +18,8 @@ const JUGEND_TO_TEAM_LABEL = {
   "a-jugend": "A-Junioren",
 };
 
+const COMPETITION_TYPE_PRIORITY = ["1", "70", "300", "308", "305", "-300", "-305", "2", "-2", "11", "12"];
+
 const KREIS_AREA_KEYWORDS = {
   duesseldorf: ["dusseldorf"],
   duisburg: ["duisburg", "mulheim", "dinslak"],
@@ -82,6 +84,27 @@ function resolveFussballDeRegionParams({ kreisId = "", stateCode = "", regionNam
     fallbackSearchName: searchName || String(regionName || kreisId || "").trim(),
     source: Object.keys(safeMapping).length > 0 ? "mapping" : "fallback",
   };
+}
+
+function resolveFussballDeCompetitionTypes({ base = null, mandant = "", season = "", requestedType = "" } = {}) {
+  const explicitType = String(requestedType || "").trim();
+  if (explicitType) {
+    return [explicitType];
+  }
+
+  const safeMandant = String(mandant || "").trim();
+  const safeSeason = String(season || "").trim();
+  const available = Object.keys(base?.CompetitionTypes?.[safeMandant]?.[safeSeason] || {})
+    .map((key) => stripLeadingUnderscore(key))
+    .filter(Boolean);
+
+  if (available.length === 0) {
+    return [String(base?.defaultCompetitionType || "1").trim() || "1"];
+  }
+
+  const availableSet = new Set(available);
+  const preferred = [String(base?.defaultCompetitionType || "").trim(), ...COMPETITION_TYPE_PRIORITY, ...available];
+  return [...new Set(preferred)].filter((type) => availableSet.has(type));
 }
 
 function warnParser(message) {
@@ -629,6 +652,7 @@ export {
   normalizeLookup,
   parseIsoDate,
   pickAreaIdsForLeague,
+  resolveFussballDeCompetitionTypes,
   resolveFussballDeRegionParams,
   stripLeadingUnderscore,
   stripTags,
