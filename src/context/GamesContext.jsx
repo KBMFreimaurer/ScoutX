@@ -914,7 +914,7 @@ export function GamesProvider({ children }) {
           setDataSourceUsed("adapter");
           setProviderWarnings(["Keine Live-Spiele für die gewählte Altersklasse gefunden."]);
           setTeamValidation(null);
-          navigate("/games");
+          setErr("Keine Live-Spiele für die gewählte Altersklasse gefunden. Bitte Altersklasse, Kreis oder Zeitraum anpassen.");
           return;
         }
         if (blockingFailedRuns.length === 1) {

@@ -564,6 +564,24 @@ describe("ScoutX Integration", () => {
     expect(matches.length).toBeGreaterThan(0);
   });
 
+  it("bleibt bei fehlender fussball.de-Mannschaftsart im letzten Setup-Schritt", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: async () =>
+        JSON.stringify({
+          error:
+            "Live-Datenabruf fehlgeschlagen: Keine Mannschaftsart für jugend=d-jugend (D-Junioren) im Verband mandant=22 (FVN).",
+        }),
+    });
+
+    await renderSetupAndSubmit(fetchMock);
+
+    expect(await screen.findByRole("button", { name: /Spielplan generieren/i })).toBeInTheDocument();
+    expect((await screen.findAllByText(/Keine Live-Spiele für die gewählte Altersklasse gefunden/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Bundesland Nordrhein-Westfalen auswählen/i })).not.toBeInTheDocument();
+  });
+
   it.each([
     {
       label: "401",
