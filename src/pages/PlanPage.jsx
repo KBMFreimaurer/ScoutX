@@ -18,26 +18,14 @@ import {
   readHrworksImportLog,
   validateHrworksImportPayload,
 } from "../services/hrworksImport";
-import { parseHrworksTimesheetFile, validateHrworksTimesheetFile } from "../services/hrworksExcelParser";
 import { exportHrworksAuditLog } from "../services/hrworksAuditExport";
-import {
-  checkHrworksAutomationBridge,
-  ensureHrworksAutomationBridge,
-  openHrworksAutomationLogin,
-  startHrworksAutomation,
-} from "../services/hrworksAutomationClient";
-import { resolveScoutXCompanionInstallTarget } from "../services/scoutXCompanionInstall";
+import { createHrworksImportJob, getHrworksImportJob } from "../services/hrworksImportJobsClient";
 import {
   advanceAutomationStep,
   canCaptureDebugScreenshot,
-  canProceedAutomation,
   createAutomationRuntimeSession,
   failAutomationSession,
 } from "../services/hrworksAutomationRuntime";
-import {
-  readHrworksSelectorMapping,
-  validateHrworksSelectorMapping,
-} from "../services/hrworksSelectorMapping";
 import {
   getMissingHrworksOperationalDecisions,
   readHrworksPolicy,
@@ -131,68 +119,6 @@ function confirmAction(message) {
   }
 }
 
-function pickDateFromOptions(options) {
-  const values = Array.isArray(options) ? options.map((item) => String(item || "").trim()).filter(Boolean) : [];
-  if (values.length <= 1 || typeof window === "undefined" || typeof window.prompt !== "function") {
-    return values[0] || "";
-  }
-  const selection = window.prompt(
-    [
-      "Mehrere Arbeitstage erkannt. Bitte Datum für den Import wählen (YYYY-MM-DD):",
-      values.join(", "),
-    ].join("\n"),
-    values[0],
-  );
-  const normalized = String(selection || "").trim();
-  return values.includes(normalized) ? normalized : values[0];
-}
-
-function toUtcDayStamp(dateText) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateText || "").trim());
-  if (!match) {
-    return Number.NaN;
-  }
-  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-}
-
-function pickClosestDateFromPlanDates(availableDates, gameDates) {
-  const available = Array.isArray(availableDates) ? availableDates.map((item) => String(item || "").trim()).filter(Boolean) : [];
-  const plans = Array.isArray(gameDates) ? gameDates.map((item) => String(item || "").trim()).filter(Boolean) : [];
-  if (available.length === 0 || plans.length === 0) {
-    return "";
-  }
-
-  const exactMatches = plans.filter((date) => available.includes(date));
-  if (exactMatches.length === 1) {
-    return exactMatches[0];
-  }
-  if (exactMatches.length > 1) {
-    return "";
-  }
-
-  let bestDate = "";
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const candidate of available) {
-    const candidateStamp = toUtcDayStamp(candidate);
-    if (!Number.isFinite(candidateStamp)) {
-      continue;
-    }
-    for (const planDate of plans) {
-      const planStamp = toUtcDayStamp(planDate);
-      if (!Number.isFinite(planStamp)) {
-        continue;
-      }
-      const distance = Math.abs(candidateStamp - planStamp);
-      if (distance < bestDistance || (distance === bestDistance && candidate.localeCompare(bestDate) > 0)) {
-        bestDistance = distance;
-        bestDate = candidate;
-      }
-    }
-  }
-
-  return bestDate;
-}
 
 function formatHrworksDuration(durationMs) {
   const parsed = Number(durationMs);
@@ -403,7 +329,6 @@ export function PlanPage() {
   const usePinnedActionDock = isMobile || isNativeCapacitorRuntime();
   const useStackedTopActions = usePinnedActionDock;
   const actionDockRef = useRef(null);
-  const hrworksFileInputRef = useRef(null);
   const [dockReservePx, setDockReservePx] = useState(null);
   const activeGames = useMemo(() => {
     if (hasManualSelection) {
@@ -425,22 +350,15 @@ export function PlanPage() {
   const [hrworksValidation, setHrworksValidation] = useState({ errors: [], warnings: [] });
   const [hrworksRuntimeSession, setHrworksRuntimeSession] = useState(null);
   const [hrworksImportLog, setHrworksImportLog] = useState(() => readHrworksImportLog());
-  const [hrworksSelectorMapping] = useState(() => readHrworksSelectorMapping());
   const [hrworksPolicy, setHrworksPolicy] = useState(() => readHrworksPolicy());
   const [hrworksDebugScreenshotConsent, setHrworksDebugScreenshotConsent] = useState(false);
-  const [hrworksLoginConfirmed, setHrworksLoginConfirmed] = useState(false);
   const [hrworksWizardNotice, setHrworksWizardNotice] = useState("");
-  const [hrworksUploadedFileName, setHrworksUploadedFileName] = useState("");
-  const [hrworksAutomationStarting, setHrworksAutomationStarting] = useState(false);
-  const [hrworksCompanionStatus, setHrworksCompanionStatus] = useState("unknown");
+  const [hrworksJobState, setHrworksJobState] = useState(null);
+  const [hrworksJobStarting, setHrworksJobStarting] = useState(false);
   const [historyDeleteRequest, setHistoryDeleteRequest] = useState(null);
   const missingHrworksDecisions = useMemo(
     () => getMissingHrworksOperationalDecisions(hrworksPolicy),
     [hrworksPolicy],
-  );
-  const hrworksCompanionInstallTarget = useMemo(
-    () => resolveScoutXCompanionInstallTarget(),
-    [],
   );
   const [presenceMinutesByGame, setPresenceMinutesByGame] = useState(() => {
     if (typeof window === "undefined") {
@@ -642,9 +560,6 @@ export function PlanPage() {
     if (payloads.length > 1) {
       warnings.push(`Mehrtagiger Plan: ${payloads.length} HRworks-Abrechnungen werden nacheinander vorbereitet.`);
     }
-    if (String(payload.importSource || "plan") !== "timesheet") {
-      warnings.push("XLSX-Datei noch nicht hochgeladen: Für HRworks sind XLSX-Datum und XLSX-Uhrzeiten bindend. Bitte zuerst Schritt 1 im Wizard abschließen.");
-    }
     if (validation.duplicate) {
       warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
     }
@@ -654,169 +569,117 @@ export function PlanPage() {
     setHrworksPayloadQueue(payloads.length > 0 ? payloads : [payload]);
     setHrworksPayloadIndex(0);
     setHrworksValidation({ errors: validation.errors, warnings });
-    setHrworksLoginConfirmed(false);
-    setHrworksUploadedFileName("");
-    setHrworksCompanionStatus("unknown");
+    setHrworksJobState(null);
+    setHrworksJobStarting(false);
     setHrworksWizardNotice(autoSetupApplied ? "Empfohlenes HRworks-Setup wurde automatisch angewendet." : "");
     setHrworksReviewOpen(true);
   };
 
-  const handleCheckHrworksCompanion = async () => {
-    setHrworksWizardNotice("ScoutX prüft den lokalen Companion auf diesem Gerät.");
-    const result = await checkHrworksAutomationBridge();
-    if (result.ok) {
-      setHrworksCompanionStatus("reachable");
-      setHrworksWizardNotice("ScoutX Companion ist lokal erreichbar. Du kannst HRworks jetzt öffnen.");
-      setErr("");
+  const HRWORKS_JOB_TERMINAL_STATUSES = ["completed", "failed", "needs_action", "interrupted", "cancelled"];
+
+  const applyHrworksJobToHistory = (job) => {
+    const status = String(job?.status || "");
+    if (!HRWORKS_JOB_TERMINAL_STATUSES.includes(status)) {
       return;
     }
-    setHrworksCompanionStatus("missing");
-    setHrworksWizardNotice("ScoutX Companion ist lokal noch nicht erreichbar. Bitte Companion installieren und danach erneut prüfen.");
+    const payloadsForLog = Array.isArray(hrworksPayloadQueue) && hrworksPayloadQueue.length > 0
+      ? hrworksPayloadQueue
+      : [hrworksPayload].filter(Boolean);
+    for (const entry of payloadsForLog) {
+      appendHrworksImportLog({
+        planId: entry.planId,
+        date: entry.date,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        purpose: entry.purpose,
+        hrworksStatus: status === "completed" ? "imported" : status === "needs_action" ? "needs_review" : "failed",
+        sourceType: String(entry.importSource || "plan"),
+        executedBy: entry.employeeName,
+        technicalResult: String(job?.resultSummary || `Serverauftrag ${job?.id || ""}: ${status}.`),
+        errorMessage: String(job?.error || ""),
+      });
+    }
+    setHrworksImportLog(readHrworksImportLog());
   };
 
-  const handleOpenHrworksLoginTab = () => {
-    setHrworksWizardNotice("HRworks wird vorbereitet. ScoutX prüft jetzt den lokalen Companion auf deinem Gerät und weckt ihn bei Bedarf.");
-    setErr("");
-    void (async () => {
-      try {
-        const result = await ensureHrworksAutomationBridge();
-        const loginWindow = await openHrworksAutomationLogin();
-        setHrworksCompanionStatus("reachable");
-        setHrworksWizardNotice(
-          loginWindow?.sameBrowser
-            ? "HRworks wurde im selben Desktop-Browser wie ScoutX in einem neuen Tab geöffnet. Bitte dort einloggen und danach hier den Import starten."
-            : (
-                result?.status === "woken"
-                  ? `ScoutX Companion wurde lokal auf deinem Gerät geweckt und nutzt jetzt ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
-                  : result?.status === "already_running"
-                  ? `ScoutX Companion konnte den laufenden Desktop-Browser nicht direkt übernehmen und nutzt deshalb ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
-                  : `Der lokale ScoutX Companion wurde gestartet, aber derselbe Desktop-Browser war nicht direkt steuerbar. ScoutX Companion nutzt deshalb ein kontrolliertes HRworks-Fenster. Bitte dort einloggen und danach hier den Import starten.${loginWindow?.warning ? ` ${loginWindow.warning}` : ""}`
-              ),
-        );
-        setErr("");
-      } catch (error) {
-        setHrworksCompanionStatus("missing");
-        setHrworksWizardNotice("ScoutX Companion konnte HRworks auf diesem Gerät nicht für den Login vorbereiten.");
-        setErr(String(error?.message || error || "ScoutX Companion konnte lokal auf diesem Gerät nicht gestartet werden."));
+  const handleRefreshHrworksJobStatus = async () => {
+    const jobId = String(hrworksJobState?.jobId || "");
+    if (!jobId) {
+      return;
+    }
+    try {
+      const response = await getHrworksImportJob(jobId);
+      const job = response?.job || null;
+      if (!job) {
+        return;
       }
-    })();
+      const previousStatus = String(hrworksJobState?.status || "");
+      setHrworksJobState({
+        jobId: job.id,
+        status: job.status,
+        error: job.error || "",
+        resultSummary: job.resultSummary || "",
+      });
+      if (previousStatus !== job.status && HRWORKS_JOB_TERMINAL_STATUSES.includes(String(job.status || ""))) {
+        applyHrworksJobToHistory(job);
+        setErr(job.status === "completed"
+          ? `HRworks-Import abgeschlossen: ${job.resultSummary || "Auftrag erfolgreich."}`
+          : `HRworks-Importauftrag ${job.status === "needs_action" ? "benötigt eine manuelle Aktion" : "ist fehlgeschlagen"}: ${job.error || "Details in der Historie."}`);
+      }
+    } catch (error) {
+      setHrworksWizardNotice(String(error?.message || "Jobstatus konnte nicht abgefragt werden."));
+    }
   };
 
-  const handleConfirmHrworksImport = async () => {
-    if (!hrworksPayload) {
-      return;
-    }
-    if (String(hrworksPayload.importSource || "") !== "timesheet") {
-      setErr("Bitte zuerst die XLSX-Datei des aktuellen Monats hochladen.");
-      return;
-    }
-    if ((hrworksValidation?.errors?.length || 0) > 0) {
+  const handleStartHrworksServerJob = async (credentials) => {
+    if (!hrworksPayload || (hrworksValidation?.errors?.length || 0) > 0 || hrworksJobStarting) {
       return;
     }
     if (missingHrworksDecisions.length > 0) {
-      appendHrworksImportLog({
-        planId: hrworksPayload?.planId,
-        date: hrworksPayload?.date,
-        startTime: hrworksPayload?.startTime,
-        endTime: hrworksPayload?.endTime,
-        purpose: hrworksPayload?.purpose,
-        hrworksStatus: "needs_review",
-        sourceType: String(hrworksPayload?.importSource || "plan"),
-        executedBy: hrworksPayload?.employeeName,
-        technicalResult: "Import blockiert: fehlende Betriebsentscheidungen.",
-        errorMessage: missingHrworksDecisions.join(" "),
-      });
-      setHrworksImportLog(readHrworksImportLog());
       setErr(`HRworks-Setup unvollständig: ${missingHrworksDecisions.join(" ")}`);
       return;
     }
-    const mappingValidation = validateHrworksSelectorMapping(hrworksSelectorMapping);
-    const preflight = canProceedAutomation({
-      isReachable: true,
-      isLoggedIn: hrworksLoginConfirmed === true,
-      mappingReady: mappingValidation.ok,
-      requireSaveConfirmation: hrworksPolicy.requireSaveConfirmation === true,
-    });
-    if (!preflight.ok) {
-      appendHrworksImportLog({
-        planId: hrworksPayload.planId,
-        date: hrworksPayload.date,
-        startTime: hrworksPayload.startTime,
-        endTime: hrworksPayload.endTime,
-        purpose: hrworksPayload.purpose,
-        hrworksStatus: "failed",
-        sourceType: String(hrworksPayload.importSource || "plan"),
-        executedBy: hrworksPayload.employeeName,
-        technicalResult: "Automation-Preflight fehlgeschlagen.",
-        errorMessage: preflight.failures.map((failure) => failure.message).join(" | "),
-      });
-      setHrworksImportLog(readHrworksImportLog());
-      setErr(preflight.failures.map((failure) => failure.message).join(" "));
-      return;
-    }
-
-    setHrworksAutomationStarting(true);
-    setErr("ScoutX Companion wird kontaktiert. Prüfe das Companion-Terminal, dort muss gleich ein POST /api/companion/capabilities/hrworks-import/run erscheinen.");
-    const sessionCreated = createAutomationRuntimeSession(hrworksPayload);
-    const sessionRunning = advanceAutomationStep(sessionCreated, "save_without_destination");
-    setHrworksRuntimeSession(sessionRunning);
-    setHrworksCompanionStatus("reachable");
+    const payloads = Array.isArray(hrworksPayloadQueue) && hrworksPayloadQueue.length > 0
+      ? hrworksPayloadQueue
+      : [hrworksPayload];
+    setHrworksJobStarting(true);
     setHrworksWizardNotice("");
-
-    let bridgeResult = null;
+    setErr("");
     try {
-      bridgeResult = await startHrworksAutomation(hrworksPayload);
-    } catch (error) {
-      const message = String(error?.message || error || "HRworks-Automation konnte nicht gestartet werden.");
-      const failed = failAutomationSession(sessionRunning, "NAVIGATION_FAILED", message);
-      setHrworksRuntimeSession(failed);
-      appendHrworksImportLog({
+      const response = await createHrworksImportJob({
         planId: hrworksPayload.planId,
-        date: hrworksPayload.date,
-        startTime: hrworksPayload.startTime,
-        endTime: hrworksPayload.endTime,
-        purpose: hrworksPayload.purpose,
-        hrworksStatus: "failed",
-        sourceType: String(hrworksPayload.importSource || "plan"),
-        executedBy: hrworksPayload.employeeName,
-        technicalResult: "Lokaler ScoutX Companion konnte nicht gestartet werden.",
-        errorMessage: message,
+        employeeName: hrworksPayload.employeeName,
+        payloads,
+        credentials,
       });
-      setHrworksImportLog(readHrworksImportLog());
-      setErr(message);
-      setHrworksAutomationStarting(false);
-      return;
+      setHrworksJobState({
+        jobId: response?.jobId || response?.job?.id || "",
+        status: response?.status || response?.job?.status || "queued",
+        error: "",
+        resultSummary: "",
+      });
+      setHrworksWizardNotice("Importauftrag wurde angelegt. Der Server verarbeitet die Warteschlange automatisch.");
+    } catch (error) {
+      setErr(String(error?.message || "HRworks-Importauftrag konnte nicht angelegt werden."));
+    } finally {
+      setHrworksJobStarting(false);
     }
-
-    const doneSession = advanceAutomationStep(sessionRunning, bridgeResult?.status === "completed" ? "done" : "complete_reports");
-    setHrworksRuntimeSession(doneSession);
-    setHrworksAutomationStarting(false);
-    const bridgeDurationText = formatHrworksDuration(bridgeResult?.durationMs || bridgeResult?.metrics?.durationMs);
-    const performanceSteps = Array.isArray(bridgeResult?.metrics?.steps) ? bridgeResult.metrics.steps : [];
-    appendHrworksImportLog({
-      planId: hrworksPayload.planId,
-      date: hrworksPayload.date,
-      startTime: hrworksPayload.startTime,
-      endTime: hrworksPayload.endTime,
-      purpose: hrworksPayload.purpose,
-      hrworksStatus: bridgeResult?.status === "completed" ? "imported" : "ready",
-      sourceType: String(hrworksPayload.importSource || "plan"),
-      executedBy: hrworksPayload.employeeName,
-      technicalResult: bridgeResult?.status === "completed"
-        ? `Lokaler ScoutX Companion hat den vollständigen Workflow abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
-        : `Lokaler ScoutX Companion wurde gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`,
-      hrworksReference: String(bridgeResult?.url || ""),
-      durationMs: bridgeResult?.durationMs || bridgeResult?.metrics?.durationMs,
-      performanceSteps,
-    });
-    setHrworksImportLog(readHrworksImportLog());
-
-    setHrworksReviewOpen(false);
-    setHrworksLoginConfirmed(false);
-    setErr(bridgeResult?.status === "completed"
-      ? `HRworks-Import für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} abgeschlossen${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`
-      : `HRworks-Runtime für Tag ${hrworksPayloadIndex + 1}/${Math.max(hrworksPayloadQueue.length, 1)} gestartet${bridgeDurationText ? ` (${bridgeDurationText})` : ""}.`);
   };
+
+  // Solange ein Auftrag aktiv ist, Status regelmäßig nachladen.
+  const hrworksJobActive = Boolean(hrworksJobState?.jobId)
+    && !HRWORKS_JOB_TERMINAL_STATUSES.includes(String(hrworksJobState?.status || ""));
+  const hrworksJobRefreshRef = useRef(handleRefreshHrworksJobStatus);
+  hrworksJobRefreshRef.current = handleRefreshHrworksJobStatus;
+  useEffect(() => {
+    if (!hrworksReviewOpen || !hrworksJobActive) {
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      void hrworksJobRefreshRef.current();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [hrworksReviewOpen, hrworksJobActive]);
 
   const handleFailRuntimeSession = (message) => {
     if (!hrworksRuntimeSession) {
@@ -903,179 +766,6 @@ export function PlanPage() {
       return;
     }
     handleFailRuntimeSession("Nutzer meldet Abschlussproblem nach Runtime.");
-  };
-
-  const handlePickHrworksFile = () => {
-    setErr("");
-    hrworksFileInputRef.current?.click();
-  };
-
-  const processHrworksFile = async (file, resetInput = null) => {
-    if (!file) {
-      return;
-    }
-    setHrworksUploadedFileName(String(file.name || "").trim());
-    setHrworksWizardNotice("");
-    const fileValidation = validateHrworksTimesheetFile(file);
-    if (!fileValidation.ok) {
-      setErr(fileValidation.message);
-      if (typeof resetInput === "function") {
-        resetInput();
-      }
-      return;
-    }
-
-    let parsed = null;
-    try {
-      parsed = await parseHrworksTimesheetFile(file);
-    } catch (error) {
-      setErr(`Arbeitszeitdatei konnte nicht gelesen werden: ${String(error?.message || error || "Unbekannter Fehler")}`);
-      return;
-    } finally {
-      if (typeof resetInput === "function") {
-        resetInput();
-      }
-    }
-
-    if (!Array.isArray(parsed.entries) || parsed.entries.length === 0) {
-      setErr(parsed.warnings?.[0] || "Keine verwertbaren Arbeitszeitdaten gefunden.");
-      return;
-    }
-
-    const availableDates = Array.from(new Set(parsed.entries.map((entry) => String(entry?.date || "").trim()).filter(Boolean)));
-    const gameDates = Array.from(
-      new Set(
-        activeGames
-          .map((game) => toPlanDateOnly(game?.dateObj || game?.date))
-          .filter(Boolean),
-      ),
-    );
-    const autoSelectedDate = pickClosestDateFromPlanDates(availableDates, gameDates);
-    let selectedDate = autoSelectedDate || "";
-    const hasMultipleDates = availableDates.length > 1;
-    if (!selectedDate) {
-      selectedDate = pickDateFromOptions(availableDates);
-    }
-    const sameDateEntries = parsed.entries.filter((entry) => entry.date === selectedDate);
-    const totalHours = Number(sameDateEntries.reduce((acc, entry) => acc + Number(entry.workHours || 0), 0).toFixed(2));
-    const startTime = sameDateEntries.map((entry) => String(entry.startTime || "")).sort()[0] || "";
-    const endTime = sameDateEntries.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "";
-    const employeeName = sameDateEntries[0]?.employeeName || effectiveScoutName;
-    const routeLegs = buildHrworksRouteLegs(routeOverview, activeGames, effectiveHrworksStartLocationLabel);
-    const dailyPayloads = buildHrworksDailyImportPayloads({
-      planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`,
-      employeeName,
-      games: activeGames,
-      startLocation: effectiveHrworksStartLocationLabel,
-      costCenter: String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
-      routeLegs,
-    });
-    const planPayload = dailyPayloads.find((item) => item.date === selectedDate);
-    const gameLabels = activeGames
-      .map((game) => {
-        const home = String(game?.home || "").trim();
-        return home || String(game?.venue || game?.id || "").trim();
-      })
-      .filter(Boolean);
-    const purpose = planPayload?.purpose || (gameLabels.length > 0
-      ? `Sichtung / (${gameLabels.join(" - ")})`
-      : "Sichtung / Route des Arbeitstages");
-    const payload = {
-      ...(planPayload || {}),
-      planId: `${String(activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}`).trim() || "plan"}-${selectedDate}`,
-      employeeName: planPayload?.employeeName || employeeName,
-      date: selectedDate,
-      startTime,
-      endTime,
-      breakStart: sameDateEntries[0]?.breakStart || "",
-      breakEnd: sameDateEntries[0]?.breakEnd || "",
-      workHours: totalHours,
-      purpose,
-      note: purpose,
-      departureLocation: planPayload?.departureLocation || effectiveHrworksStartLocationLabel,
-      destinationLocation: planPayload?.destinationLocation || "",
-      intermediateStops: [],
-      routeLegs: planPayload?.routeLegs || routeLegs,
-      costCenter: planPayload?.costCenter || String(activeHistoryMeta?.costCenter || scoutDefaults.costCenter || hrworksPolicy.defaultCostCenter || "Junioren allgemein (321000)"),
-      travelExpenseRequired: true,
-      receiptsRequired: false,
-      sourceGames: planPayload?.sourceGames || activeGames,
-      status: "draft",
-      importSource: "timesheet",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const importLog = readHrworksImportLog();
-    const validation = validateHrworksImportPayload(payload, importLog, {
-      requiredFields: hrworksPolicy.requiredFields,
-    });
-    const warnings = [...(parsed.warnings || [])];
-    if (selectedDate && gameDates.length > 0 && !gameDates.includes(selectedDate) && autoSelectedDate === selectedDate) {
-      warnings.push(`Kein exaktes XLSX-Datum zum Plan gefunden; nächstliegender Sichtungstag ${selectedDate} aus der XLSX wurde verwendet.`);
-    }
-    if (gameDates.length > 0 && !gameDates.includes(selectedDate)) {
-      warnings.push(`XLSX-Datum ist bindend: ${selectedDate}; Plan/PDF enthält ${gameDates.join(", ")}.`);
-    }
-    if (!String(payload.purpose || "").trim()) {
-      payload.purpose = purpose;
-      warnings.push("Zweck wurde automatisch ergänzt.");
-    }
-    if (!String(payload.note || "").trim()) {
-      payload.note = String(payload.purpose || purpose);
-      warnings.push("Bemerkung wurde automatisch ergänzt.");
-    }
-    if (parsed.entries.some((entry) => entry.date !== selectedDate)) {
-      warnings.push(`Datei enthält mehrere Tage; verwendet wurde nur der passende Sichtungstag ${selectedDate}.`);
-    }
-    if (hasMultipleDates) {
-      const runBatch = typeof window !== "undefined" && typeof window.confirm === "function"
-        ? window.confirm("Mehrere Tage erkannt. Batch-Vorbereitung für alle Tage in die Historie schreiben?")
-        : false;
-      if (runBatch) {
-        for (const date of availableDates) {
-          const entriesForDate = parsed.entries.filter((entry) => entry.date === date);
-          const dateHours = Number(entriesForDate.reduce((acc, entry) => acc + Number(entry.workHours || 0), 0).toFixed(2));
-          appendHrworksImportLog({
-            planId: activeHistoryEntry?.id || `${displayJugendLabel}-${displayKreisLabel}-${date}`,
-            date,
-            startTime: entriesForDate.map((entry) => String(entry.startTime || "")).sort()[0] || "",
-            endTime: entriesForDate.map((entry) => String(entry.endTime || "")).sort().slice(-1)[0] || "",
-            purpose,
-            hrworksStatus: "needs_review",
-            sourceType: "timesheet",
-            executedBy: entriesForDate[0]?.employeeName || effectiveScoutName,
-            technicalResult: `Batch vorbereitet (${dateHours}h).`,
-          });
-        }
-        setHrworksImportLog(readHrworksImportLog());
-      }
-    }
-    if (validation.duplicate) {
-      warnings.push("Dieser Plan/Tag wurde vermutlich bereits importiert. Re-Import nur bewusst ausführen.");
-    }
-    warnings.push(...(validation.warnings || []));
-
-    setHrworksPayload(payload);
-    setHrworksPayloadQueue([payload]);
-    setHrworksPayloadIndex(0);
-    setHrworksValidation({ errors: validation.errors, warnings });
-    setHrworksReviewOpen(true);
-    setErr("");
-  };
-
-  const handleHrworksFileChange = async (event) => {
-    const file = event?.target?.files?.[0];
-    await processHrworksFile(file, () => {
-      if (event?.target) {
-        event.target.value = "";
-      }
-    });
-  };
-
-  const handleHrworksFileDrop = async (file) => {
-    setErr("");
-    await processHrworksFile(file);
   };
 
   useEffect(() => {
@@ -1272,15 +962,6 @@ export function PlanPage() {
             width: useStackedTopActions ? "100%" : "auto",
           }}
         >
-          <input
-            ref={hrworksFileInputRef}
-            type="file"
-            accept=".csv,text/csv,.txt,.xlsx,.xls"
-            style={{ display: "none" }}
-            onChange={(event) => {
-              void handleHrworksFileChange(event);
-            }}
-          />
           <PDFExport
             games={activeGames}
             plan={plan}
@@ -1406,25 +1087,18 @@ export function PlanPage() {
       <HrworksImportReviewModal
         open={hrworksReviewOpen}
         payload={hrworksPayload}
+        payloadCount={Math.max(hrworksPayloadQueue.length, 1)}
         warnings={hrworksValidation.warnings}
         errors={hrworksValidation.errors}
-        loginConfirmed={hrworksLoginConfirmed}
-        uploadedFileName={hrworksUploadedFileName}
         wizardNotice={hrworksWizardNotice}
-        automationStarting={hrworksAutomationStarting}
-        companionStatus={hrworksCompanionStatus}
-        companionInstallTarget={hrworksCompanionInstallTarget}
-        onCheckCompanion={handleCheckHrworksCompanion}
-        onLoginConfirmedChange={setHrworksLoginConfirmed}
-        onPickFile={handlePickHrworksFile}
-        onDropFile={handleHrworksFileDrop}
-        onOpenLogin={handleOpenHrworksLoginTab}
+        jobState={hrworksJobState}
+        jobStarting={hrworksJobStarting}
+        onStartJob={handleStartHrworksServerJob}
+        onRefreshJobStatus={handleRefreshHrworksJobStatus}
         onCancel={() => {
           setHrworksReviewOpen(false);
-          setHrworksLoginConfirmed(false);
           setHrworksWizardNotice("");
         }}
-        onConfirm={handleConfirmHrworksImport}
       />
       {hrworksRuntimeSession?.status === "running" ? (
         <div

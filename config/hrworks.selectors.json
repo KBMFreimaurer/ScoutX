@@ -27,5 +27,9 @@
   "completeReportsButton": "button:has-text('Abschließen')",
   "finalCompleteReportsButton": "button:has-text('Final abschließen')",
   "confirmFinalReportSubmitButton": "button:has-text('Ja, abschließen')",
-  "routeTextarea": "xpath=(//*[normalize-space(.)='Zwischenorte']/following::input[not(@type='hidden')])[1]"
+  "routeTextarea": "xpath=(//*[normalize-space(.)='Zwischenorte']/following::input[not(@type='hidden')])[1]",
+  "loginUsernameInput": "input[name='username'], input[name='loginName'], input[name='login'], input[type='email'], form input[type='text']",
+  "loginPasswordInput": "input[type='password']",
+  "loginSubmitButton": "button[type='submit'], input[type='submit'], button:has-text('Anmelden'), button:has-text('Login')",
+  "loginMfaHint": "input[name='otp'], input[name='totp'], input[autocomplete='one-time-code'], text=/Zwei-Faktor|Sicherheitscode|Verifizierungscode/i"
 }

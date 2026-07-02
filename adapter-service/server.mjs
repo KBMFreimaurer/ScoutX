@@ -17,6 +17,10 @@ import { handleAdminRoutes } from "./routes/adminRoutes.js";
 import { handleTeamPlanningRoutes } from "./routes/teamPlanningRoutes.js";
 import { handleTeamImportTournamentRoutes } from "./routes/teamImportTournamentRoutes.js";
 import { handlePublicDataRoutes } from "./routes/publicDataRoutes.js";
+import { handleHrworksImportRoutes } from "./routes/hrworksImportRoutes.js";
+import { createHrworksImportQueue } from "./lib/hrworksImportQueue.js";
+import { createHrworksJobRunner } from "./lib/hrworksServerAutomation.js";
+import { writeHrworksTimesheetXlsx } from "./lib/hrworksPlanExport.js";
 import { handleTeamAuditRoutes } from "./routes/teamAuditRoutes.js";
 import { createTeamRouteBaseContext } from "./routes/routeContextFactory.js";
 import { isAccountEmailVerified, isAccountProfileComplete, normalizeEmail } from "./services/teamAuthService.js";
@@ -230,6 +234,17 @@ const LOGO_CONTENT_TYPES = Object.freeze({
 const rateLimitStore = new Map();
 const rootLogger = createLogger({ service: "scoutx-adapter" });
 const ingestionJobs = createJobRegistry();
+
+// HRworks: serverseitige Import-Queue (seriell), Jobstatus als JSON, Credentials nur im RAM.
+const HRWORKS_JOBS_FILE =
+  process.env.ADAPTER_HRWORKS_JOBS_FILE || fileURLToPath(new URL("./data/hrworks-import-jobs.json", import.meta.url));
+const HRWORKS_JOBS_DIR =
+  process.env.ADAPTER_HRWORKS_JOBS_DIR || fileURLToPath(new URL("./data/hrworks-exports", import.meta.url));
+const hrworksImportQueue = createHrworksImportQueue({
+  jobsFile: HRWORKS_JOBS_FILE,
+  runJob: createHrworksJobRunner({ env: process.env, logger: rootLogger }),
+  logger: rootLogger,
+});
 
 const KNOWN_VERBANDS = Object.values(GERMANY_VERBANDS || {})
   .filter((entry) => entry && typeof entry === "object")
@@ -2858,6 +2873,17 @@ const server = createServer(async (req, res) => {
       persistRuntimePasswordResetToken,
       fetchRuntimePasswordResetToken,
       deleteRuntimePasswordResetToken,
+    })
+  ) {
+    return;
+  }
+
+  if (
+    await handleHrworksImportRoutes(req, res, {
+      ...teamRouteBaseContext,
+      hrworksImportQueue,
+      hrworksJobsDir: HRWORKS_JOBS_DIR,
+      writeHrworksTimesheetXlsx,
     })
   ) {
     return;

@@ -15,3 +15,5 @@ ios/build/
 ios/build-device/
 ios/build-iphone/
 .hrworks-automation-profile/
+adapter-service/data/hrworks-import-jobs.json
+adapter-service/data/hrworks-exports/

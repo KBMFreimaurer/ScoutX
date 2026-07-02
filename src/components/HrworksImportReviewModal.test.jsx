@@ -2,217 +2,143 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { HrworksImportReviewModal } from "./HrworksImportReviewModal";
 
+const PAYLOAD = {
+  date: "2026-04-20",
+  startTime: "08:00",
+  endTime: "10:00",
+  workHours: 2,
+  purpose: "Sichtung / (A)",
+  note: "Sichtung / (A)",
+  departureLocation: "Start",
+  costCenter: "Junioren allgemein (321000)",
+  routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
+  sourceGames: [{ home: "A", away: "B" }],
+  importSource: "plan",
+};
+
 describe("HrworksImportReviewModal", () => {
-  it("shows only step 1 before an xlsx file has been uploaded", () => {
-    const onCancel = vi.fn();
-    const onConfirm = vi.fn();
-    const onPickFile = vi.fn();
-    const onOpenLogin = vi.fn();
-    const onLoginConfirmedChange = vi.fn();
-
+  it("verlangt keinen Datei-Upload und zeigt die generierten Plan-Daten", () => {
     render(
       <HrworksImportReviewModal
         open
-        payload={{
-          date: "2026-04-20",
-          startTime: "08:00",
-          endTime: "10:00",
-          purpose: "Sichtung / (A)",
-          note: "Sichtung / (A)",
-          departureLocation: "Start",
-          routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
-          sourceGames: [{ home: "A", away: "B" }],
-          importSource: "plan",
-        }}
-        warnings={["Bitte zuerst XLSX hochladen"]}
+        payload={PAYLOAD}
+        payloadCount={2}
+        warnings={["Hinweis"]}
+        errors={[]}
+        onCancel={vi.fn()}
+        onStartJob={vi.fn()}
+        onRefreshJobStatus={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "HRworks-Import beauftragen" })).toBeInTheDocument();
+    expect(screen.getByText(/ScoutX erzeugt die HRworks-Datei automatisch aus diesem Plan/i)).toBeInTheDocument();
+    expect(screen.queryByText(/XLSX/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/2 Sichtungstage werden in einem Auftrag übertragen/i)).toBeInTheDocument();
+    expect(screen.getByText("Sichtung / (A)")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Benutzername/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Passwort/i)).toBeInTheDocument();
+  });
+
+  it("startet den Auftrag erst mit Zugangsdaten und übergibt sie an onStartJob", () => {
+    const onStartJob = vi.fn();
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={PAYLOAD}
+        warnings={[]}
+        errors={[]}
+        onCancel={vi.fn()}
+        onStartJob={onStartJob}
+        onRefreshJobStatus={vi.fn()}
+      />,
+    );
+
+    const startButton = screen.getByRole("button", { name: "Importauftrag starten" });
+    expect(startButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Benutzername/i), { target: { value: "scout@example.com" } });
+    fireEvent.change(screen.getByLabelText(/Passwort/i), { target: { value: "geheim" } });
+    expect(startButton).not.toBeDisabled();
+
+    fireEvent.click(startButton);
+    expect(onStartJob).toHaveBeenCalledWith({ baseUrl: "", username: "scout@example.com", password: "geheim" });
+  });
+
+  it("blockiert den Start bei Validierungsfehlern", () => {
+    render(
+      <HrworksImportReviewModal
+        open
+        payload={PAYLOAD}
+        warnings={[]}
         errors={["Abfahrtsort fehlt"]}
-        uploadedFileName=""
-        loginConfirmed={false}
-        onLoginConfirmedChange={onLoginConfirmedChange}
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-        onPickFile={onPickFile}
-        onOpenLogin={onOpenLogin}
+        onCancel={vi.fn()}
+        onStartJob={vi.fn()}
+        onRefreshJobStatus={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("dialog", { name: "HRworks-Import prüfen" })).toBeInTheDocument();
-    expect(screen.getByText(/STEP 1/i)).toBeInTheDocument();
-    expect(screen.queryByText(/STEP 2/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "HRworks öffnen" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Schließen" }));
-
-    expect(onPickFile).toHaveBeenCalledTimes(1);
-    expect(onOpenLogin).toHaveBeenCalledTimes(0);
-    expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(onConfirm).toHaveBeenCalledTimes(0);
-    expect(onLoginConfirmedChange).toHaveBeenCalledTimes(0);
+    fireEvent.change(screen.getByLabelText(/Benutzername/i), { target: { value: "scout" } });
+    fireEvent.change(screen.getByLabelText(/Passwort/i), { target: { value: "geheim" } });
+    expect(screen.getByText("• Abfahrtsort fehlt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Importauftrag starten" })).toBeDisabled();
   });
 
-  it("accepts a dropped xlsx file in step 1", () => {
-    const onDropFile = vi.fn();
-    const file = { name: "AEB Mai Onay.xlsx" };
-
+  it("zeigt den Jobstatus mit deutscher Beschriftung und Aktualisieren-Button", () => {
+    const onRefreshJobStatus = vi.fn();
     render(
       <HrworksImportReviewModal
         open
-        payload={{
-          date: "2026-04-20",
-          startTime: "08:00",
-          endTime: "10:00",
-          purpose: "Sichtung / (A)",
-          note: "Sichtung / (A)",
-          departureLocation: "Start",
-          routeLegs: [{ from: "Zuhause", to: "Spiel" }, { from: "Spiel", to: "Zuhause" }],
-          sourceGames: [{ home: "A", away: "B" }],
-          importSource: "plan",
-        }}
+        payload={PAYLOAD}
         warnings={[]}
         errors={[]}
-        uploadedFileName=""
-        loginConfirmed={false}
-        onLoginConfirmedChange={vi.fn()}
+        jobState={{ jobId: "job-1", status: "running", error: "", resultSummary: "" }}
         onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-        onPickFile={vi.fn()}
-        onDropFile={onDropFile}
-        onOpenLogin={vi.fn()}
+        onStartJob={vi.fn()}
+        onRefreshJobStatus={onRefreshJobStatus}
       />,
     );
 
-    fireEvent.drop(screen.getByRole("button", { name: /XLSX-Datei per Drag-and-Drop hochladen/i }), {
-      dataTransfer: { files: [file] },
-    });
-
-    expect(onDropFile).toHaveBeenCalledTimes(1);
-    expect(onDropFile).toHaveBeenCalledWith(file);
+    expect(screen.getByText("Wird ausgeführt")).toBeInTheDocument();
+    const refreshButton = screen.getByRole("button", { name: "Status aktualisieren" });
+    fireEvent.click(refreshButton);
+    expect(onRefreshJobStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("shows step 2 after an xlsx file is available and keeps step 3 hidden until login is confirmed", () => {
+  it("zeigt abgeschlossene Aufträge mit Ergebnis und deaktiviert die Aktualisierung", () => {
     render(
       <HrworksImportReviewModal
         open
-        payload={{
-          date: "2026-04-20",
-          startTime: "08:00",
-          endTime: "10:00",
-          purpose: "Sichtung / (A)",
-          note: "Sichtung / (A)",
-          departureLocation: "Start",
-          routeLegs: [],
-          sourceGames: [],
-          importSource: "timesheet",
-        }}
+        payload={PAYLOAD}
         warnings={[]}
         errors={[]}
-        uploadedFileName="AEB Mai Onay.xlsx"
-        loginConfirmed={false}
-        onLoginConfirmedChange={vi.fn()}
+        jobState={{ jobId: "job-1", status: "completed", error: "", resultSummary: "HRworks-Import abgeschlossen: 2 Tag(e) übertragen." }}
         onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-        onPickFile={vi.fn()}
-        onOpenLogin={vi.fn()}
+        onStartJob={vi.fn()}
+        onRefreshJobStatus={vi.fn()}
       />,
     );
 
-    expect(screen.getByText(/STEP 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/STEP 2/i)).toBeInTheDocument();
-    expect(screen.queryByText(/STEP 3/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/AEB Mai Onay.xlsx/i)).toBeInTheDocument();
-    expect(screen.getByText(/ScoutX Companion/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "HRworks öffnen" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "HRworks importieren" })).not.toBeInTheDocument();
+    expect(screen.getByText("Abgeschlossen")).toBeInTheDocument();
+    expect(screen.getByText(/2 Tag\(e\) übertragen/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auftrag beendet" })).toBeDisabled();
   });
 
-  it("shows companion installation actions when the local companion is missing", () => {
-    const onCheckCompanion = vi.fn();
-
+  it("zeigt needs_action mit deutschem Hinweis", () => {
     render(
       <HrworksImportReviewModal
         open
-        payload={{
-          date: "2026-04-20",
-          startTime: "08:00",
-          endTime: "10:00",
-          purpose: "Sichtung / (A)",
-          note: "Sichtung / (A)",
-          departureLocation: "Start",
-          routeLegs: [],
-          sourceGames: [],
-          importSource: "timesheet",
-        }}
+        payload={PAYLOAD}
         warnings={[]}
         errors={[]}
-        uploadedFileName="AEB Mai Onay.xlsx"
-        loginConfirmed={false}
-        companionStatus="missing"
-        companionInstallTarget={{
-          platform: "macos",
-          primaryDownload: {
-            platform: "macos",
-            label: "Companion für macOS herunterladen",
-            href: "/downloads/scoutx-companion-macos.zip",
-            installHint: "ZIP entpacken und install.command öffnen.",
-          },
-          downloads: [],
-        }}
-        onCheckCompanion={onCheckCompanion}
-        onLoginConfirmedChange={vi.fn()}
+        jobState={{ jobId: "job-1", status: "needs_action", error: "HRworks verlangt eine Zwei-Faktor-Bestätigung.", resultSummary: "" }}
         onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-        onPickFile={vi.fn()}
-        onOpenLogin={vi.fn()}
+        onStartJob={vi.fn()}
+        onRefreshJobStatus={vi.fn()}
       />,
     );
 
-    expect(screen.getByText(/ScoutX Companion installieren/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Companion für macOS herunterladen/i })).toHaveAttribute(
-      "href",
-      "/downloads/scoutx-companion-macos.zip",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /Verbindung erneut prüfen/i }));
-
-    expect(onCheckCompanion).toHaveBeenCalledTimes(1);
-  });
-
-  it("enables the final import button once xlsx and login are both confirmed", () => {
-    render(
-      <HrworksImportReviewModal
-        open
-        payload={{
-          date: "2026-04-20",
-          startTime: "08:00",
-          endTime: "10:00",
-          purpose: "Sichtung / (A)",
-          note: "Sichtung / (A)",
-          departureLocation: "Start",
-          routeLegs: [],
-          sourceGames: [],
-          importSource: "timesheet",
-        }}
-        warnings={[]}
-        errors={[]}
-        uploadedFileName="AEB Mai Onay.xlsx"
-        wizardNotice="Empfohlenes HRworks-Setup wurde automatisch angewendet."
-        loginConfirmed
-        onLoginConfirmedChange={vi.fn()}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-        onPickFile={vi.fn()}
-        onOpenLogin={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText(/Empfohlenes HRworks-Setup wurde automatisch angewendet/i)).toBeInTheDocument();
-    expect(screen.getByText(/AEB Mai Onay.xlsx/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "XLSX erneut hochladen" })).toBeInTheDocument();
-    expect(screen.getByText(/STEP 3/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "HRworks importieren" })).not.toBeDisabled();
+    expect(screen.getByText("Aktion erforderlich")).toBeInTheDocument();
+    expect(screen.getByText("HRworks verlangt eine Zwei-Faktor-Bestätigung.")).toBeInTheDocument();
   });
 });

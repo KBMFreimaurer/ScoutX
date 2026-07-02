@@ -39,7 +39,6 @@ const GENERIC_TEAM_TOKENS = new Set([
   "u",
 ]);
 const LEAGUE_KEYWORDS = ["liga", "klasse", "staffel", "regionalliga", "verbands", "bezirks", "kreis"];
-const NATIONAL_AGE_GROUPS = ["U15", "U16", "U17", "U18", "U19", "U20", "U21"];
 // ponytail: U20/U21 bei A-Jugend belassen, dort werden aeltere U-Nationalteams mitgescoutet.
 const NATIONAL_AGE_GROUPS_BY_JUGEND_ID = {
   "c-jugend": ["U15"],

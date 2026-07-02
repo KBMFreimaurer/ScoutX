@@ -581,6 +581,59 @@ async function fillKilometerLeg(page, leg, payload, tracker, progress = {}, opti
   }
 }
 
+// Serverseitiger Login mit pro Auftrag übergebenen Credentials.
+// Credentials werden nur an die Seite übergeben, nie geloggt oder zurückgegeben.
+export async function loginToHrworks(page, credentials, options = {}) {
+  const activeSelectors = { ...selectors, ...(options?.selectors || {}) };
+  const username = String(credentials?.username || "").trim();
+  const password = String(credentials?.password || "");
+  if (!username || !password) {
+    const error = new Error("HRworks-Zugangsdaten fehlen (Benutzername/Passwort).");
+    error.kind = "needs_action";
+    throw error;
+  }
+
+  const usernameField = await resolveField(page.locator(activeSelectors.loginUsernameInput));
+  const passwordField = await resolveField(page.locator(activeSelectors.loginPasswordInput));
+  if (!usernameField || !passwordField) {
+    const error = new Error("HRworks-Loginformular wurde nicht erkannt (Selector-Problem oder geänderte Loginseite).");
+    error.kind = "needs_action";
+    throw error;
+  }
+  await usernameField.fill(username);
+  await passwordField.fill(password);
+  const submitButton = await resolveField(page.locator(activeSelectors.loginSubmitButton));
+  if (!submitButton) {
+    const error = new Error("HRworks-Login-Button wurde nicht gefunden.");
+    error.kind = "needs_action";
+    throw error;
+  }
+  await submitButton.click();
+  await page.waitForLoadState("domcontentloaded").catch(() => {});
+  await page.waitForTimeout(Number(options?.settleMs ?? 1500)).catch(() => {});
+
+  const mfaVisible = await page
+    .locator(activeSelectors.loginMfaHint)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (mfaVisible) {
+    return { loggedIn: false, mfaRequired: true };
+  }
+
+  const passwordStillVisible = await page
+    .locator(activeSelectors.loginPasswordInput)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (passwordStillVisible) {
+    const error = new Error("HRworks-Login fehlgeschlagen. Bitte Zugangsdaten prüfen.");
+    error.kind = "auth";
+    throw error;
+  }
+  return { loggedIn: true, mfaRequired: false };
+}
+
 export async function fillHrworksTravelExpenseForm(page, payload, options = {}) {
   const tracker = options?.tracker || createRunMetrics();
   const shouldSave = Boolean(options?.confirmBeforeSave);
