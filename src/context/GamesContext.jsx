@@ -479,6 +479,10 @@ function hasLeagueQueries(teams) {
   return (Array.isArray(teams) ? teams : []).some((team) => isLeagueLikeQuery(team));
 }
 
+function isExpectedNoLiveDataError(message) {
+  return /Keine Mannschaftsart/i.test(String(message || ""));
+}
+
 async function applyExactStartRoute(games, startLocation) {
   const hasLocation = Number.isFinite(startLocation?.lat) && Number.isFinite(startLocation?.lon);
   if (!hasLocation || !Array.isArray(games) || games.length === 0) {
@@ -901,11 +905,22 @@ export function GamesProvider({ children }) {
 
       const successfulRuns = providerRuns.filter((run) => Array.isArray(run?.games) && run.games.length > 0);
       const failedRuns = providerRuns.filter((run) => run?.error);
+      const blockingFailedRuns = failedRuns.filter((run) => !isExpectedNoLiveDataError(run.error));
+      const noLiveDataRuns = failedRuns.filter((run) => isExpectedNoLiveDataError(run.error));
       if (successfulRuns.length === 0) {
-        if (failedRuns.length === 1) {
-          throw new Error(failedRuns[0].error);
+        if (noLiveDataRuns.length > 0 && blockingFailedRuns.length === 0) {
+          setGames([]);
+          setSelectedGameIds({});
+          setDataSourceUsed("adapter");
+          setProviderWarnings(["Keine Live-Spiele für die gewählte Altersklasse gefunden."]);
+          setTeamValidation(null);
+          navigate("/games");
+          return;
         }
-        const details = failedRuns
+        if (blockingFailedRuns.length === 1) {
+          throw new Error(blockingFailedRuns[0].error);
+        }
+        const details = blockingFailedRuns
           .map(
             (run) =>
               `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId} · ${run.selectedJugendId || "-"}: ${run.error}`,
@@ -936,6 +951,9 @@ export function GamesProvider({ children }) {
       if (includeTournaments && !hasTournamentGames) {
         warningMessages.unshift("Keine passenden Turniere von meinturnierplan.de geladen. Normale Spiele werden weiterhin angezeigt.");
       }
+      if (noLiveDataRuns.length > 0) {
+        warningMessages.push("Für einzelne Kreise/Altersklassen wurden keine fussball.de-Live-Spiele gefunden.");
+      }
       const favoriteSnapshot = favoritesRef.current;
       const noteSnapshot = gameNotesRef.current;
       const boostedGames = withFavoriteBoost(applyVenueFallbackHeuristics(fetchedGames), favoriteSnapshot);
@@ -963,8 +981,8 @@ export function GamesProvider({ children }) {
       setDataSourceUsed(source);
       setProviderWarnings([...new Set(warningMessages)]);
       setTeamValidation(teamFilterMeta);
-      if (failedRuns.length > 0 || warningMessages.length > 0) {
-        const failedLabels = failedRuns
+      if (blockingFailedRuns.length > 0 || warningMessages.length > 0) {
+        const failedLabels = blockingFailedRuns
           .map((run) => `${getRegionById(run.selectedKreisId)?.displayName || run.selectedKreisId} (${run.selectedJugendId || "-"})`)
           .join(", ");
         const messages = [];
