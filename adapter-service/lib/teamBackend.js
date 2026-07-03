@@ -153,6 +153,7 @@ function normalizeNotification(raw) {
     id,
     eventId: normalizeId(raw?.eventId) || id,
     type,
+    actorId: normalizeId(raw?.actorId),
     title: compactText(raw?.title),
     body: compactText(raw?.body),
     recipientId: normalizeId(raw?.recipientId),
@@ -377,6 +378,7 @@ function addFeedItem(teamState, input, randomId) {
       id: item.id,
       eventId: item.id,
       type: mapFeedTypeToNotificationType(item.type),
+      actorId: item.actorId,
       title: item.title,
       body: item.body,
       unread: true,
@@ -441,6 +443,28 @@ function extractMentionedAccountIds(text, teamAccounts = []) {
   return [...hits].filter(Boolean);
 }
 
+const ACTIVE_OBSERVATION_STATUSES = new Set(["planned", "seen", "reported", "followup"]);
+
+// Einheitliches Dopplungs-Prädikat: welches Spiel ist von welchen Scouts belegt.
+// Genutzt von publishTeamPlan (Feed/Push) und buildTeamConflicts (server.mjs).
+export function groupScoutsByGame(observations) {
+  const scoutsByGame = new Map();
+  for (const item of Array.isArray(observations) ? observations : []) {
+    if (!ACTIVE_OBSERVATION_STATUSES.has(String(item?.status || ""))) {
+      continue;
+    }
+    const gameId = String(item?.gameId || item?.game?.id || "").trim();
+    const scoutId = String(item?.scoutId || "").trim();
+    if (!gameId || !scoutId) {
+      continue;
+    }
+    const scouts = scoutsByGame.get(gameId) || new Set();
+    scouts.add(scoutId);
+    scoutsByGame.set(gameId, scouts);
+  }
+  return scoutsByGame;
+}
+
 export function publishTeamPlan(teamState, account, payload, randomId) {
   if (!canWriteTeamState(account)) {
     const error = new Error("Diese Rolle darf keine Team-Planung veroeffentlichen.");
@@ -462,15 +486,12 @@ export function publishTeamPlan(teamState, account, payload, randomId) {
   const changed = [];
 
   // Dopplung erkennen: Spiele, die bereits ein anderes Teammitglied plant/besucht.
+  const scoutsByGame = groupScoutsByGame(next.observations);
   const duplicateLabels = games
-    .filter((game) =>
-      next.observations.some(
-        (item) =>
-          item.gameId === game.id &&
-          item.scoutId !== account.id &&
-          (item.status === "planned" || item.status === "seen"),
-      ),
-    )
+    .filter((game) => {
+      const scouts = scoutsByGame.get(game.id);
+      return scouts && [...scouts].some((scoutId) => scoutId !== account.id);
+    })
     .map((game) => `${game.home} vs ${game.away}`);
 
   for (const game of games) {

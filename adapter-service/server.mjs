@@ -65,6 +65,7 @@ import {
   canManageTeamMembers,
   createInitialTeamState,
   findAccount,
+  groupScoutsByGame,
   linkObservationReport,
   markObservationSeen,
   reassignObservation,
@@ -553,19 +554,9 @@ function buildTeamConflicts(observations) {
 
   const conflicts = [];
 
-  // Dopplung: mehrere Scouts planen dasselbe Spiel.
-  const scoutsByGame = new Map();
-  for (const entries of byScoutDate.values()) {
-    for (const entry of entries) {
-      if (!entry.gameId) {
-        continue;
-      }
-      const scouts = scoutsByGame.get(entry.gameId) || new Set();
-      scouts.add(entry.scoutId);
-      scoutsByGame.set(entry.gameId, scouts);
-    }
-  }
-  for (const [gameId, scouts] of scoutsByGame) {
+  // Dopplung: mehrere Scouts planen dasselbe Spiel (gemeinsames Prädikat,
+  // unabhängig von parsebarer Anstoßzeit).
+  for (const [gameId, scouts] of groupScoutsByGame(observations)) {
     if (scouts.size < 2) {
       continue;
     }
@@ -1818,9 +1809,10 @@ function enqueueCriticalPushEvents(teamState) {
       continue;
     }
     // Nur frische Ereignisse pushen: alte Notifications im Team-State sollen
-    // nach Deploy/Neustart keine Popup-Flut auslösen.
+    // nach Deploy/Neustart keine Popup-Flut auslösen. Unparsebares createdAt
+    // gilt als alt, nicht als frisch.
     const createdAtMs = Date.parse(String(item?.createdAt || ""));
-    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 24 * 60 * 60 * 1000) {
+    if (!Number.isFinite(createdAtMs) || Date.now() - createdAtMs > 24 * 60 * 60 * 1000) {
       continue;
     }
     if (pushedCriticalEventIds.has(eventId) || teamPushOutbox.has(eventId)) {
@@ -1830,6 +1822,7 @@ function enqueueCriticalPushEvents(teamState) {
       eventId,
       teamId,
       type,
+      actorId: String(item?.actorId || ""),
       title: String(item?.title || ""),
       body: String(item?.body || ""),
       createdAt: String(item?.createdAt || nowIso()),
@@ -2249,7 +2242,8 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
           aliasMap: state.aliasMap,
           source: cmd.source,
         });
-        collected.push(...filterGamesToWeek(normalized, weekRange));
+        // weekScraped: überlebt Baseline-Refreshes in refreshStore (loader.js).
+        collected.push(...filterGamesToWeek(normalized, weekRange).map((game) => ({ ...game, weekScraped: true })));
         successfulSources += 1;
       } catch (error) {
         const message = `Export command failed: ${error.message || error}`;
@@ -2286,7 +2280,7 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
           aliasMap: state.aliasMap,
           source: remote.source,
         });
-        collected.push(...filterGamesToWeek(normalized, weekRange));
+        collected.push(...filterGamesToWeek(normalized, weekRange).map((game) => ({ ...game, weekScraped: true })));
         successfulSources += 1;
       } catch (error) {
         const message = `Week source failed: ${error.message || error}`;
@@ -2306,19 +2300,20 @@ async function maybeAutoRefreshWeek(payload, logger = rootLogger, options = {}) 
       throw new Error(`Live-Datenabruf fehlgeschlagen: ${liveSourceErrors.join(" | ") || "keine Quelle erfolgreich"}`);
     }
 
-    // Wochen-Scrapes anderer Altersklassen/Kreise leben nur im Store; der
-    // Import/Remote-Baseline-Refresh würde sie verwerfen. Vorherigen Stand
-    // sichern und beim Merge wieder einmischen.
-    const previousGames = Array.isArray(state.games) ? state.games : [];
-    // Reload import/remote baseline after command execution
+    // Reload import/remote baseline after command execution.
+    // refreshStore (loader.js) erhält weekScraped-Spiele anderer Scopes.
     await refreshData("auto-week-base", logger);
+
+    // Scope nur ersetzen, wenn der Scrape Daten lieferte oder alle Quellen
+    // sauber liefen (dann bedeutet "0 Spiele" wirklich: Woche ist leer).
+    const scrapeCompletedCleanly = plannedSources > 0 && successfulSources === plannedSources;
 
     const serializedStoreResult = await runStoreMutationSerialized("auto-week", async () => {
       // Basis erst hier aus state.games bilden: parallele auto-week-Läufe
       // (andere Altersklasse) haben bis hierhin evtl. schon geschrieben.
-      const baselineGames = dedupeGames([...state.games, ...previousGames]);
+      const baselineGames = Array.isArray(state.games) ? state.games : [];
       const replaceBaseline =
-        collected.length > 0
+        collected.length > 0 || scrapeCompletedCleanly
           ? baselineGames.filter((game) => shouldKeepExistingGameForWeek(game, params, weekRange))
           : baselineGames;
 

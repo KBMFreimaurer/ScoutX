@@ -54,6 +54,7 @@ export function useScheduleChangeNotifications({
   kreisLabel,
   jugendLabel,
   teamConnected = false,
+  selfAccountId = "",
 }) {
   const [latestNotice, setLatestNotice] = useState(null);
   const [history, setHistory] = useState([]);
@@ -61,6 +62,7 @@ export function useScheduleChangeNotifications({
   const [sseConnected, setSseConnected] = useState(false);
   const watchStateRef = useRef(readScheduleWatchState());
   const pushSubscriptionAttemptedRef = useRef(false);
+  const seenEventIdsRef = useRef(new Set());
 
   const browserSupported = browserPermission !== "unsupported";
   const scopeKey = useMemo(
@@ -200,6 +202,50 @@ export function useScheduleChangeNotifications({
     setHistory((prev) => [...notices, ...prev].slice(0, MAX_HISTORY));
   }, []);
 
+  // Gemeinsame Verarbeitung für SSE-Stream und Pending-Poll. Das Seen-Set
+  // verhindert Wiederhol-Popups, wenn das Ack fehlschlägt (z. B. darf die
+  // Readonly-Rolle nicht acken); eigene Aktionen erzeugen kein Popup.
+  const processTeamEvents = useCallback(
+    async (rawEvents) => {
+      const events = (Array.isArray(rawEvents) ? rawEvents : []).filter(Boolean).filter((item) => {
+        const id = String(item?.eventId || item?.id || "").trim();
+        if (id && seenEventIdsRef.current.has(id)) {
+          return false;
+        }
+        if (id) {
+          seenEventIdsRef.current.add(id);
+        }
+        return true;
+      });
+      if (events.length === 0) {
+        return;
+      }
+      const selfId = String(selfAccountId || "").trim();
+      const foreignEvents = selfId
+        ? events.filter((item) => String(item?.actorId || "").trim() !== selfId)
+        : events;
+      showTeamEventsInApp(foreignEvents);
+      for (const item of foreignEvents) {
+        await showBrowserNotice({
+          title: item?.title || "ScoutX Hinweis",
+          body: item?.body || "Neues Team-Event",
+          tag: item?.eventId || item?.id || "team-event",
+          eventId: item?.eventId || item?.id || "",
+          url: "/hub",
+        });
+      }
+      const eventIds = events.map((item) => String(item?.eventId || item?.id || "").trim()).filter(Boolean);
+      if (eventIds.length > 0) {
+        try {
+          await ackTeamPushEvents(eventIds);
+        } catch {
+          // Ack ist best-effort; das Seen-Set verhindert erneute Popups.
+        }
+      }
+    },
+    [selfAccountId, showBrowserNotice, showTeamEventsInApp],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -328,24 +374,7 @@ export function useScheduleChangeNotifications({
       source.onmessage = async (event) => {
         try {
           const payload = JSON.parse(String(event?.data || "{}"));
-          const events = Array.isArray(payload?.events) ? payload.events : [];
-          if (events.length === 0) {
-            return;
-          }
-          showTeamEventsInApp(events);
-          for (const item of events) {
-            await showBrowserNotice({
-              title: item?.title || "ScoutX Hinweis",
-              body: item?.body || "Neues Team-Event",
-              tag: item?.eventId || item?.id || "team-event",
-              eventId: item?.eventId || item?.id || "",
-              url: "/hub",
-            });
-          }
-          const eventIds = events.map((item) => String(item?.eventId || item?.id || "").trim()).filter(Boolean);
-          if (eventIds.length > 0) {
-            await ackTeamPushEvents(eventIds);
-          }
+          await processTeamEvents(payload?.events);
         } catch {
           // Keep stream running on malformed messages.
         }
@@ -377,7 +406,7 @@ export function useScheduleChangeNotifications({
         // no-op
       }
     };
-  }, [showBrowserNotice, showTeamEventsInApp, teamConnected]);
+  }, [processTeamEvents, teamConnected]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !teamConnected) {
@@ -393,24 +422,7 @@ export function useScheduleChangeNotifications({
         if (cancelled) {
           return;
         }
-        const events = Array.isArray(payload?.events) ? payload.events : [];
-        if (events.length === 0) {
-          return;
-        }
-        showTeamEventsInApp(events);
-        for (const item of events) {
-          await showBrowserNotice({
-            title: item?.title || "ScoutX Hinweis",
-            body: item?.body || "Neues Team-Event",
-            tag: item?.eventId || item?.id || "team-event",
-            eventId: item?.eventId || item?.id || "",
-            url: "/hub",
-          });
-        }
-        const eventIds = events.map((item) => String(item?.eventId || item?.id || "").trim()).filter(Boolean);
-        if (eventIds.length > 0) {
-          await ackTeamPushEvents(eventIds);
-        }
+        await processTeamEvents(payload?.events);
       } catch {
         // Pending pull is best-effort.
       }
@@ -424,7 +436,7 @@ export function useScheduleChangeNotifications({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [showBrowserNotice, showTeamEventsInApp, sseConnected, teamConnected]);
+  }, [processTeamEvents, sseConnected, teamConnected]);
 
   return {
     latestNotice,

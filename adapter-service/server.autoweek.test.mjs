@@ -144,6 +144,14 @@ describe("adapter-service auto-week refresh across Altersklassen", () => {
     const second = await postGames("b-jugend");
     expect(second.games.map((game) => game.jugendId)).toEqual(["b-jugend"]);
 
+    // Auch ein Baseline-Refresh (Admin/Startup-Pfad) darf Wochen-Scrapes
+    // nicht verwerfen — refreshStore erhält weekScraped-Spiele.
+    const adminRefresh = await fetch(`${baseUrl}/api/admin/refresh`, {
+      method: "POST",
+      headers: { Authorization: "Bearer test-token" },
+    });
+    expect(adminRefresh.status).toBe(200);
+
     // Erneute Anfrage für die erste Altersklasse (Woche gecacht): Spiele
     // dürfen durch den b-jugend-Refresh nicht verloren gegangen sein.
     const again = await postGames("a-jugend");

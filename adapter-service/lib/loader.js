@@ -455,6 +455,14 @@ async function refreshStore(config) {
   if (games.length === 0 && previousStore.games.length > 0) {
     warnings.push("Keine neuen Daten gefunden, vorhandener Store bleibt aktiv.");
     games = previousStore.games;
+  } else {
+    // Wochen-Scrapes (fussball.de) leben nur im Store. Sie überleben jeden
+    // Baseline-Refresh (Startup, Intervall, Admin), bis ein neuer Scrape
+    // denselben Kreis/Jugend/Wochen-Scope ersetzt.
+    const weekScraped = previousStore.games.filter((game) => game?.weekScraped === true);
+    if (weekScraped.length > 0) {
+      games = dedupeGames([...games, ...weekScraped]);
+    }
   }
 
   const meta = {

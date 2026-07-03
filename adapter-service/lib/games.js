@@ -235,6 +235,9 @@ function normalizeGame(raw, index, options = {}) {
     staffelName,
     competitionUrl: String(raw.competitionUrl ?? raw.competition_url ?? raw.staffelUrl ?? raw.staffel_url ?? "").trim(),
     turnier: toBoolean(raw.turnier),
+    // Markiert Wochen-Scrapes (fussball.de): überlebt Baseline-Refreshes in
+    // refreshStore. Nur setzen wenn true, damit Import-Payloads schlank bleiben.
+    ...(toBoolean(raw.weekScraped) ? { weekScraped: true } : {}),
     source: options.source || String(raw.source || "unknown"),
   };
 }

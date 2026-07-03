@@ -944,7 +944,11 @@ export function GamesProvider({ children }) {
         const warnings = Array.isArray(run?.meta?.warnings) ? run.meta.warnings : [];
         return warnings.map((warning) => String(warning || "").trim()).filter(Boolean);
       });
-      const hasTournamentGames = fetchedGames.some((game) => Boolean(game?.turnier) || normalizeLookup(game?.source) === "tournament");
+      // Vor dem Liga-Filter prüfen: die Warnung meint "nichts geladen",
+      // nicht "vom Liga-Filter aussortiert".
+      const hasTournamentGames = fetchedGamesRaw.some(
+        (game) => Boolean(game?.turnier) || normalizeLookup(game?.source) === "tournament",
+      );
       if (includeTournaments && !hasTournamentGames) {
         warningMessages.unshift("Keine passenden Turniere von meinturnierplan.de geladen. Normale Spiele werden weiterhin angezeigt.");
       }

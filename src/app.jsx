@@ -185,7 +185,7 @@ function AppLayout() {
   const hasPlanHistory = Array.isArray(planHistory) && planHistory.length > 0;
   const canAccessPlan = Boolean(plan) || hasPlanHistory;
   const adminEnabled = ENABLE_ADMIN_SURFACE;
-  const { teamBackendState } = useScoutXProduct();
+  const { teamBackendState, activeUser: teamActiveUser } = useScoutXProduct();
   const {
     latestNotice: latestScheduleNotice,
     dismissLatestNotice,
@@ -203,6 +203,7 @@ function AppLayout() {
     kreisLabel: kreisLabel || kreis?.label,
     jugendLabel: jugend?.label,
     teamConnected: teamBackendState?.status === "connected",
+    selfAccountId: teamActiveUser?.id || "",
   });
 
   const currentStep = useMemo(() => {
