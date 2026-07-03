@@ -552,6 +552,34 @@ function buildTeamConflicts(observations) {
   }
 
   const conflicts = [];
+
+  // Dopplung: mehrere Scouts planen dasselbe Spiel.
+  const scoutsByGame = new Map();
+  for (const entries of byScoutDate.values()) {
+    for (const entry of entries) {
+      if (!entry.gameId) {
+        continue;
+      }
+      const scouts = scoutsByGame.get(entry.gameId) || new Set();
+      scouts.add(entry.scoutId);
+      scoutsByGame.set(entry.gameId, scouts);
+    }
+  }
+  for (const [gameId, scouts] of scoutsByGame) {
+    if (scouts.size < 2) {
+      continue;
+    }
+    conflicts.push({
+      id: `conflict-duplicate-${gameId}`,
+      type: "duplicate_visit",
+      scoutId: "",
+      scoutIds: [...scouts],
+      gameIds: [gameId],
+      severity: "medium",
+      message: `${scouts.size} Scouts planen dasselbe Spiel.`,
+    });
+  }
+
   for (const entries of byScoutDate.values()) {
     const sorted = [...entries].sort((a, b) => a.kickoffMs - b.kickoffMs);
     for (let index = 0; index < sorted.length - 1; index += 1) {
@@ -1708,7 +1736,7 @@ function buildTeamStatePayload(context, teamStateInput = null) {
 }
 
 function isCriticalNotificationType(type) {
-  return ["absage", "konflikt", "followup"].includes(String(type || "").trim().toLowerCase());
+  return ["absage", "konflikt", "followup", "plan"].includes(String(type || "").trim().toLowerCase());
 }
 
 function registerTeamPushStream(teamId, stream) {
@@ -1787,6 +1815,12 @@ function enqueueCriticalPushEvents(teamState) {
     const eventId = normalizeAccountId(item?.eventId || item?.id);
     const type = String(item?.type || "").trim().toLowerCase();
     if (!eventId || !isCriticalNotificationType(type)) {
+      continue;
+    }
+    // Nur frische Ereignisse pushen: alte Notifications im Team-State sollen
+    // nach Deploy/Neustart keine Popup-Flut auslösen.
+    const createdAtMs = Date.parse(String(item?.createdAt || ""));
+    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 24 * 60 * 60 * 1000) {
       continue;
     }
     if (pushedCriticalEventIds.has(eventId) || teamPushOutbox.has(eventId)) {

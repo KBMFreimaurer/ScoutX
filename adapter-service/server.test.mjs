@@ -2458,6 +2458,18 @@ describe("adapter-service server integration", () => {
     expect(inboxPayload.notifications[0].eventId).toBe(inboxPayload.notifications[0].id);
     expect(inboxPayload.notifications[0].type).toBe("plan");
 
+    // Plan-Veröffentlichung muss als Push-Event in der Outbox landen (Popup im Team).
+    const pendingResponse = await fetch(`${baseUrl}/api/team/notifications/push/pending`, {
+      headers: { cookie },
+    });
+    expect(pendingResponse.status).toBe(200);
+    const pendingPayload = await parseJsonSafe(pendingResponse);
+    expect(
+      pendingPayload.events.some(
+        (item) => item.type === "plan" && item.eventId === inboxPayload.notifications[0].eventId,
+      ),
+    ).toBe(true);
+
     const readResponse = await fetch(`${baseUrl}/api/team/notifications/read`, {
       method: "POST",
       headers: {

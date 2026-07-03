@@ -407,7 +407,12 @@ function mapFeedTypeToNotificationType(feedType) {
   if (value.includes("conflict")) {
     return "konflikt";
   }
-  return "plan";
+  if (value.includes("mention")) {
+    return "mention";
+  }
+  // Kein "plan"-Fallback: nur echte Plan-Ereignisse sollen als Typ "plan"
+  // (Push-relevant) laufen, nicht z. B. manuelle Spiel-Anlagen.
+  return "info";
 }
 
 function extractMentionedAccountIds(text, teamAccounts = []) {
@@ -456,6 +461,18 @@ export function publishTeamPlan(teamState, account, payload, randomId) {
   const byKey = new Map(next.observations.map((item) => [`${item.gameId}:${item.scoutId}`, item]));
   const changed = [];
 
+  // Dopplung erkennen: Spiele, die bereits ein anderes Teammitglied plant/besucht.
+  const duplicateLabels = games
+    .filter((game) =>
+      next.observations.some(
+        (item) =>
+          item.gameId === game.id &&
+          item.scoutId !== account.id &&
+          (item.status === "planned" || item.status === "seen"),
+      ),
+    )
+    .map((game) => `${game.home} vs ${game.away}`);
+
   for (const game of games) {
     const key = `${game.id}:${account.id}`;
     const existing = byKey.get(key);
@@ -488,6 +505,22 @@ export function publishTeamPlan(teamState, account, payload, randomId) {
     },
     randomId,
   );
+
+  if (duplicateLabels.length > 0) {
+    next.feedItems = addFeedItem(
+      next,
+      {
+        // "conflict" im Typ mappt auf Notification-Typ "konflikt" (Push-relevant).
+        type: "duplicate_conflict",
+        actorId: account.id,
+        planHistoryId,
+        gameIds: games.map((game) => game.id),
+        title: "Doppelte Spiel-Belegung",
+        body: `${account.name} plant Spiele, die bereits ein anderes Teammitglied besucht: ${duplicateLabels.slice(0, 3).join(" · ")}${duplicateLabels.length > 3 ? " …" : ""}`,
+      },
+      randomId,
+    );
+  }
 
   return {
     state: next,

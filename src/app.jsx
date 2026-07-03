@@ -185,6 +185,7 @@ function AppLayout() {
   const hasPlanHistory = Array.isArray(planHistory) && planHistory.length > 0;
   const canAccessPlan = Boolean(plan) || hasPlanHistory;
   const adminEnabled = ENABLE_ADMIN_SURFACE;
+  const { teamBackendState } = useScoutXProduct();
   const {
     latestNotice: latestScheduleNotice,
     dismissLatestNotice,
@@ -201,6 +202,7 @@ function AppLayout() {
     toDate,
     kreisLabel: kreisLabel || kreis?.label,
     jugendLabel: jugend?.label,
+    teamConnected: teamBackendState?.status === "connected",
   });
 
   const currentStep = useMemo(() => {
@@ -659,7 +661,9 @@ function AppLayout() {
               }}
             >
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: C.warn, fontWeight: 700, marginBottom: 2 }}>Spielplanänderung erkannt</div>
+                <div style={{ color: C.warn, fontWeight: 700, marginBottom: 2 }}>
+                  {latestScheduleNotice.title || "Spielplanänderung erkannt"}
+                </div>
                 <div style={{ color: C.offWhite }}>{latestScheduleNotice.message}</div>
                 <div style={{ color: C.grayLight, marginTop: 2 }}>{latestScheduleNotice.detail}</div>
                 {browserSupported && browserPermission === "default" ? (

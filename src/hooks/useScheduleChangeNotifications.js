@@ -53,6 +53,7 @@ export function useScheduleChangeNotifications({
   toDate,
   kreisLabel,
   jugendLabel,
+  teamConnected = false,
 }) {
   const [latestNotice, setLatestNotice] = useState(null);
   const [history, setHistory] = useState([]);
@@ -181,6 +182,24 @@ export function useScheduleChangeNotifications({
     setLatestNotice(null);
   }, []);
 
+  // In-App-Popup für Team-Events (z. B. "Team-Plan veröffentlicht"):
+  // funktioniert auch ohne Browser-Notification-Berechtigung.
+  const showTeamEventsInApp = useCallback((events) => {
+    const items = (Array.isArray(events) ? events : []).filter(Boolean);
+    if (items.length === 0) {
+      return;
+    }
+    const notices = items.map((item) => ({
+      id: String(item?.eventId || item?.id || `team-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+      createdAt: String(item?.createdAt || new Date().toISOString()),
+      title: String(item?.title || "Team-Aktivität").trim() || "Team-Aktivität",
+      message: String(item?.body || "Neues Team-Event").trim() || "Neues Team-Event",
+      detail: "",
+    }));
+    setLatestNotice(notices[0]);
+    setHistory((prev) => [...notices, ...prev].slice(0, MAX_HISTORY));
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -282,7 +301,8 @@ export function useScheduleChangeNotifications({
       setSseConnected(false);
       return undefined;
     }
-    if (browserPermission !== "granted") {
+    // Nur mit aktiver Team-Session verbinden, sonst 401-Reconnect-Schleife.
+    if (!teamConnected) {
       setSseConnected(false);
       return undefined;
     }
@@ -312,6 +332,7 @@ export function useScheduleChangeNotifications({
           if (events.length === 0) {
             return;
           }
+          showTeamEventsInApp(events);
           for (const item of events) {
             await showBrowserNotice({
               title: item?.title || "ScoutX Hinweis",
@@ -356,10 +377,10 @@ export function useScheduleChangeNotifications({
         // no-op
       }
     };
-  }, [browserPermission, showBrowserNotice]);
+  }, [showBrowserNotice, showTeamEventsInApp, teamConnected]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window) || window.Notification.permission !== "granted") {
+    if (typeof window === "undefined" || !teamConnected) {
       return undefined;
     }
     if (sseConnected) {
@@ -376,6 +397,7 @@ export function useScheduleChangeNotifications({
         if (events.length === 0) {
           return;
         }
+        showTeamEventsInApp(events);
         for (const item of events) {
           await showBrowserNotice({
             title: item?.title || "ScoutX Hinweis",
@@ -402,7 +424,7 @@ export function useScheduleChangeNotifications({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [showBrowserNotice, browserPermission, sseConnected]);
+  }, [showBrowserNotice, showTeamEventsInApp, sseConnected, teamConnected]);
 
   return {
     latestNotice,
