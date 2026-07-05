@@ -299,6 +299,7 @@ describe("adapter-service server integration", () => {
         CORS_ORIGIN: "http://localhost:5173,http://127.0.0.1:5173",
         ADAPTER_EXPOSE_RESET_TOKEN_ON_REQUEST: "true",
         ADAPTER_AUTH_READS_FROM_DB: "true",
+        ADAPTER_ALLOW_OPEN_REGISTRATION: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

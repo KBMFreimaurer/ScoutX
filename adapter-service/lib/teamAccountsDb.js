@@ -72,6 +72,7 @@ async function ensureSchema(client, logger) {
     await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS birth_date TEXT`);
     await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS profile_image TEXT`);
+    await client.query(`ALTER TABLE adapter_team_accounts ADD COLUMN IF NOT EXISTS logto_subject TEXT`);
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_adapter_team_accounts_email_unique
       ON adapter_team_accounts (LOWER(email))
@@ -105,8 +106,8 @@ export async function syncTeamAccountsToDb(teamState, logger) {
         INSERT INTO adapter_team_accounts (
           account_id, team_id, name, role, active, password_hash, email, email_verified,
           email_verification_token_hash, email_verification_expires_at, email_verified_at,
-          birth_date, profile_image, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          birth_date, profile_image, logto_subject, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (account_id) DO UPDATE SET
           team_id = EXCLUDED.team_id,
           name = EXCLUDED.name,
@@ -120,6 +121,7 @@ export async function syncTeamAccountsToDb(teamState, logger) {
           email_verified_at = EXCLUDED.email_verified_at,
           birth_date = EXCLUDED.birth_date,
           profile_image = EXCLUDED.profile_image,
+          logto_subject = EXCLUDED.logto_subject,
           updated_at = EXCLUDED.updated_at
         `,
         [
@@ -136,6 +138,7 @@ export async function syncTeamAccountsToDb(teamState, logger) {
           account?.emailVerifiedAt ? String(account.emailVerifiedAt) : null,
           account?.birthDate ? String(account.birthDate) : "",
           account?.profileImage ? String(account.profileImage) : "",
+          account?.logtoSubject ? String(account.logtoSubject) : null,
           now,
         ],
       );
@@ -199,6 +202,7 @@ export async function fetchTeamAccountByIdFromDb(accountId, logger) {
       emailVerifiedAt: row.email_verified_at ? new Date(row.email_verified_at).toISOString() : "",
       birthDate: row.birth_date ? String(row.birth_date) : "",
       profileImage: row.profile_image ? String(row.profile_image) : "",
+      logtoSubject: row.logto_subject ? String(row.logto_subject) : "",
     };
   } catch (error) {
     logger?.warn?.("postgres account fetch failed", { error });

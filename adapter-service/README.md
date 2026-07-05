@@ -19,6 +19,7 @@ Für Team-Accounts und Team-Workflow gilt zusätzlich:
 
 - `ADAPTER_TEAM_STATE_FILE` speichert den aktuellen Team-State (Snapshot).
 - `ADAPTER_TEAM_ARCHIVE_FILE` speichert im Hintergrund jede Änderung append-only als NDJSON-Event (Archiv).
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL` (oder `DATABASE_URL`) gesetzt ist, schreibt der Adapter dieselben Team-Events zusätzlich in PostgreSQL (`team_state_events` in `db/schema.sql`).
 
 ## Vollautomatischer Wochen-Refresh
@@ -123,9 +124,10 @@ API-Spezifikation (OpenAPI-ähnlich): [openapi.team.v1.yaml](/Users/playboiibogg
 - `GET /api/admin/team-archive?limit=50`
 - `POST /api/team/auth/login`
 - `POST /api/team/auth/logout`
-- `POST /api/team/auth/register` (Self-Register, Standardrolle `scout`)
-- `POST /api/team/invitations/create` (Admin/Koordination)
-- `POST /api/team/invitations/accept`
+- `POST /api/team/auth/logto` (Login mit Logto-ID-Token, nur bestehende Team-Mitglieder)
+- `POST /api/team/auth/register` (standardmäßig deaktiviert; nur mit `ADAPTER_ALLOW_OPEN_REGISTRATION=true`, in Produktion verboten)
+- `POST /api/team/invitations/create` (Admin/Koordination; mit Logto ist `email` Pflicht und bindet die Einladung an diese Adresse)
+- `POST /api/team/invitations/accept` (mit Logto nur per `idToken`, dessen E-Mail zur Einladung passen muss; single-use)
 - `POST /api/team/auth/password-reset/request`
 - `POST /api/team/auth/password-reset/confirm`
 - `POST /api/team/notifications/push/subscribe`
@@ -259,14 +261,23 @@ Sicherheitsverhalten:
   - Dev/Test-Outbox: `ADAPTER_EMAIL_OUTBOX_FILE` schreibt UTF-8 JSONL.
   - `ADAPTER_EXPOSE_VERIFICATION_TOKEN_ON_REGISTER=true` gibt den Code nur für lokale Dev/Test-Flows im API-Response zurück; in Produktion ist das verboten. Ohne Mail-Konfiguration blockt Produktion Registrierung und Resend mit `503`.
 - CORS-Preflights von nicht erlaubten Origins werden mit `403` beantwortet.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, schreibt der Adapter Team-Login-Sessions zusätzlich in PostgreSQL (`adapter_team_sessions`) als Runtime-Source-of-Truth-Baustein (Write-Through, JSON/In-Memory bleibt kompatibler Fallback).
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Invitations, Password-Reset-Tokens und Kreis-PDF-Preview-Tokens zusätzlich in PostgreSQL gehalten (`adapter_team_runtime_tokens`) und über Restart/Instance-Wechsel wiederverwendet.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Rate-Limits (Login/Write/Reset-Scopes) zusätzlich in PostgreSQL gehalten (`adapter_runtime_rate_limits`) und sind damit instance-übergreifend wirksam.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, synchronisiert der Adapter Team-Accounts zusätzlich in PostgreSQL (`adapter_team_accounts`) als Write-Through-Snapshot (inkl. Role/Active/Credential-Hash), während JSON weiterhin als Fallback bleibt.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Push-Subscriptions/Outbox/Acks zusätzlich in PostgreSQL gehalten (`adapter_team_push_subscriptions`, `adapter_team_push_outbox`, `adapter_team_push_acked`) und beim Startup in den Runtime-Cache rehydriert.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Notifications zusätzlich in PostgreSQL gehalten (`adapter_team_notifications`) und auf Wunsch per `ADAPTER_NOTIFICATIONS_READS_FROM_DB=true` als primärer Read-Pfad genutzt.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Observations zusätzlich in PostgreSQL gehalten (`adapter_team_observations`) und auf Wunsch per `ADAPTER_OBSERVATIONS_READS_FROM_DB=true` als primärer Read-Pfad genutzt.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Report-Metadaten zusätzlich in PostgreSQL gehalten (`adapter_team_reports`) und auf Wunsch per `ADAPTER_REPORTS_READS_FROM_DB=true` in den Team-State-Read-Flow gemerged.
+- Logto-OIDC: `ADAPTER_LOGTO_ENDPOINT` (z. B. `https://<LOGTO_DOMAIN>`) und `ADAPTER_LOGTO_APP_ID` aktivieren den Logto-Login. Team-Beitritt ist dann ausschließlich über E-Mail-gebundene Einladungen möglich. Deployment: `docker compose --profile logto up` mit `LOGTO_DOMAIN`, `LOGTO_ADMIN_DOMAIN`, `LOGTO_DB_PASSWORD`, `SCOUTX_LOGTO_CLIENT_ID` in `.env`; Frontend braucht `VITE_LOGTO_ENDPOINT` und `VITE_LOGTO_APP_ID`.
 - Wenn `ADAPTER_DATABASE_URL`/`DATABASE_URL` gesetzt ist, werden Team-Feed-Items zusätzlich in PostgreSQL gehalten (`adapter_team_feed_items`) und auf Wunsch per `ADAPTER_FEED_READS_FROM_DB=true` im Team-State-Read-Flow bevorzugt gelesen.
 - DB-SoT-Integrationsgate (echte PostgreSQL-Umgebung): `ADAPTER_DATABASE_URL=<postgres-url> npm run test:adapter:db-sot`
 - Runtime-Restart-/Multi-Instance-Gate (echte PostgreSQL-Umgebung): `ADAPTER_DATABASE_URL=<postgres-url> npm run test:adapter:runtime-restart-db`

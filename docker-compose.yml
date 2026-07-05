@@ -26,6 +26,8 @@ services:
         VITE_GOOGLE_MAPS_STRICT: ${VITE_GOOGLE_MAPS_STRICT:-true}
         VITE_ADAPTER_TOKEN: ${ADAPTER_TOKEN:-scoutx-internal-2026}
         VITE_ADAPTER_TIMEOUT_MS: ${VITE_ADAPTER_TIMEOUT_MS:-75000}
+        VITE_LOGTO_ENDPOINT: ${LOGTO_DOMAIN:+https://${LOGTO_DOMAIN}}
+        VITE_LOGTO_APP_ID: ${SCOUTX_LOGTO_CLIENT_ID:-}
     network_mode: "host"
     environment:
       - OLLAMA_HOST=http://localhost:11434/
@@ -58,6 +60,9 @@ services:
       - FUSSBALLDE_REQUEST_TIMEOUT_MS=20000
       - ADAPTER_EXPORT_COMMAND=node /app/adapter-service/scripts/fetch-week.fussballde.mjs
       - ADAPTER_TOKEN=${ADAPTER_TOKEN:-scoutx-internal-2026}
+      # Logto-OIDC: Login nur für eingeladene Team-Mitglieder (leer = Logto-Login deaktiviert)
+      - ADAPTER_LOGTO_ENDPOINT=${LOGTO_DOMAIN:+https://${LOGTO_DOMAIN}}
+      - ADAPTER_LOGTO_APP_ID=${SCOUTX_LOGTO_CLIENT_ID:-}
       # - ADAPTER_WEEK_SOURCE_URL_TEMPLATE=https://example.com/api/games?from={fromDate}&to={toDate}&kreis={kreisId}&jugend={jugendId}
       # - ADAPTER_WEEK_SOURCE_TOKEN=change-me
       # - ADAPTER_REMOTE_URL=https://example.com/api/games
@@ -81,6 +86,46 @@ services:
     profiles:
       - dev
       - prod
+
+  # Selbstgehosteter Logto-Login-Server (OIDC) mit eigener Postgres-DB.
+  # Platzhalter per .env setzen: LOGTO_DOMAIN, LOGTO_ADMIN_DOMAIN, LOGTO_DB_PASSWORD.
+  # Reverse Proxy zeigt auf 127.0.0.1:3001 (Core) und 127.0.0.1:3002 (Admin).
+  logto-db:
+    image: postgres:17-alpine
+    environment:
+      - POSTGRES_USER=logto
+      - POSTGRES_PASSWORD=${LOGTO_DB_PASSWORD:-}
+      - POSTGRES_DB=logto
+    volumes:
+      - logto-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logto -d logto"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    profiles:
+      - logto
+
+  logto:
+    image: ghcr.io/logto-io/logto:latest
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    environment:
+      - DB_URL=postgresql://logto:${LOGTO_DB_PASSWORD:-}@logto-db:5432/logto
+      - ENDPOINT=https://${LOGTO_DOMAIN:-}
+      - ADMIN_ENDPOINT=https://${LOGTO_ADMIN_DOMAIN:-}
+      - TRUST_PROXY_HEADER=1
+      - PORT=3001
+      - ADMIN_PORT=3002
+    ports:
+      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3002:3002"
+    depends_on:
+      logto-db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - logto
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -120,3 +165,4 @@ services:
 volumes:
   prometheus-data:
   alertmanager-data:
+  logto-db-data:

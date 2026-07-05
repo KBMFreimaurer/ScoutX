@@ -70,6 +70,7 @@ function normalizeAccount(raw, fallback = {}) {
     teamId: normalizeId(raw?.teamId || fallback.teamId) || DEFAULT_TEAM_ID,
     active: raw?.active === false ? false : fallback.active !== false,
     passwordHash: compactText(raw?.passwordHash || fallback.passwordHash),
+    logtoSubject: compactRawText(raw?.logtoSubject || fallback.logtoSubject),
   };
 }
 

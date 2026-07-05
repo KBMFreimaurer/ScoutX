@@ -90,6 +90,20 @@ export async function loginTeamBackend(userId, password) {
   return payload;
 }
 
+export async function loginTeamBackendWithLogto(idToken) {
+  return requestTeamBackend("/auth/logto", {
+    method: "POST",
+    body: { idToken },
+  });
+}
+
+export async function acceptTeamInvitationWithLogto(token, idToken) {
+  return requestTeamBackend("/invitations/accept", {
+    method: "POST",
+    body: { token, idToken },
+  });
+}
+
 export async function registerTeamBackend(userId, name, password, teamKey) {
   const payload = await requestTeamBackend("/auth/register", {
     method: "POST",

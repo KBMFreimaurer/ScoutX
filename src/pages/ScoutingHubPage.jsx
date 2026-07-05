@@ -839,7 +839,13 @@ export function ScoutingHubPage() {
                 </div>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <GhostButton type="button" onClick={() => window.location.assign("/team/login")} style={{ minHeight: 34 }}>
+                Team-Login
+              </GhostButton>
+            </div>
+          )}
           <Chip tone={teamBackendState.status === "connected" ? "green" : "warn"}>
             {teamBackendState.status === "connected" ? "Backend verbunden" : "Backend lokal"}
           </Chip>

@@ -453,6 +453,7 @@ export async function persistRuntimeInvitation(invitation, logger) {
       payload: {
         userId: String(invitation?.userId || ""),
         name: String(invitation?.name || ""),
+        email: String(invitation?.email || ""),
         role: String(invitation?.role || ""),
         teamId: String(invitation?.teamId || ""),
         invitedBy: String(invitation?.invitedBy || ""),
@@ -472,6 +473,7 @@ export async function fetchRuntimeInvitationByToken(token, logger) {
     token: row.token,
     userId: String(row.payload?.userId || row.subjectId || ""),
     name: String(row.payload?.name || ""),
+    email: String(row.payload?.email || ""),
     role: String(row.payload?.role || "scout"),
     teamId: String(row.payload?.teamId || row.teamId || ""),
     invitedBy: String(row.payload?.invitedBy || ""),

@@ -1,4 +1,11 @@
-import { assertMinLength, assertPasswordMinLength, createTimedToken, normalizeInvitationRole } from "../services/teamAuthService.js";
+import {
+  assertEmail,
+  assertMinLength,
+  assertPasswordMinLength,
+  createTimedToken,
+  normalizeEmail,
+  normalizeInvitationRole,
+} from "../services/teamAuthService.js";
 import { acceptInvitation } from "../services/teamAuthDomainService.js";
 import { sendRouteError } from "./routeErrorResponses.js";
 
@@ -35,6 +42,8 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
     persistRuntimeInvitation,
     fetchRuntimeInvitationByToken,
     deleteRuntimeInvitation,
+    logtoEnabled,
+    verifyLogtoIdentity,
   } = routeContext;
 
   if (req.method === "POST" && url.pathname === "/api/team/invitations/create") {
@@ -57,6 +66,8 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
         const name = assertMinLength(payload?.name, 2, "Name muss mindestens 2 Zeichen enthalten.");
         const requestedRole = normalizeAccountId(payload?.role);
         const role = normalizeInvitationRole(requestedRole);
+        // Mit Logto ist die Einladung an die E-Mail des eingeladenen Logto-Users gebunden.
+        const email = logtoEnabled || payload?.email ? assertEmail(payload?.email) : "";
         if (!userId || userId.length < 3) {
           const validationError = new Error("User-ID muss mindestens 3 Zeichen enthalten.");
           validationError.statusCode = 400;
@@ -77,6 +88,7 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
           token,
           userId,
           name,
+          email,
           role,
           teamId: context.account.teamId,
           invitedBy: context.account.id,
@@ -105,6 +117,7 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
             ...(exposeInvitationTokenOnCreate ? { token: invitation.token } : {}),
             userId: invitation.userId,
             name: invitation.name,
+            email: invitation.email,
             role: invitation.role,
             teamId: invitation.teamId,
             createdAt: invitation.createdAt,
@@ -136,7 +149,14 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
         "team-invitation-accept",
         payload,
         async () => {
-          const password = assertPasswordMinLength(payload?.password, 8);
+          const idToken = String(payload?.idToken || "").trim();
+          if (logtoEnabled && !idToken) {
+            const authError = new Error("Bitte zuerst über Logto anmelden, um die Einladung anzunehmen.");
+            authError.statusCode = 401;
+            throw authError;
+          }
+          const identity = idToken ? await verifyLogtoIdentity(idToken) : null;
+          const password = identity ? "" : assertPasswordMinLength(payload?.password, 8);
           const invitation = runtimeDbEnabled
             ? await fetchRuntimeInvitationByToken(token, requestLogger)
             : teamInvitations.get(token);
@@ -169,6 +189,25 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
             throw forbiddenError;
           }
 
+          if (identity) {
+            if (!invitation.email || normalizeEmail(invitation.email) !== identity.email) {
+              const mismatchError = new Error("Diese Einladung ist an eine andere E-Mail-Adresse gebunden.");
+              mismatchError.statusCode = 403;
+              throw mismatchError;
+            }
+            const accounts = Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : [];
+            const identityInUse = accounts.some(
+              (item) =>
+                String(item?.logtoSubject || "") === identity.subject ||
+                (identity.email && normalizeEmail(item?.email) === identity.email),
+            );
+            if (identityInUse) {
+              const conflictError = new Error("Für diesen Login existiert bereits ein Team-Account.");
+              conflictError.statusCode = 409;
+              throw conflictError;
+            }
+          }
+
           // Consume token before state mutation to keep invitation single-use under concurrent requests.
           teamInvitations.delete(token);
           if (runtimeDbEnabled) {
@@ -177,7 +216,9 @@ export async function handleTeamInvitationRoutes(req, res, routeContext) {
 
           const accountId = await acceptInvitation({
             invitation,
-            passwordHash: createPasswordHash(password),
+            passwordHash: identity ? "" : createPasswordHash(password),
+            logtoSubject: identity?.subject || "",
+            email: identity?.email || invitation.email || "",
             applyTeamStateMutation,
             logger: requestLogger,
           });

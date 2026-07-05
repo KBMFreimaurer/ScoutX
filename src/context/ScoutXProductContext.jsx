@@ -94,6 +94,11 @@ export function ScoutXProductProvider({ children }) {
       await logoutTeamBackend();
     } finally {
       setTeamBackendState({ status: "local", error: "" });
+      // Beendet auch die Logto-Session, sonst loggt der nächste Login ohne Passwortabfrage wieder ein.
+      const { buildLogtoSignOutUrl, isLogtoConfigured } = await import("../services/logtoClient");
+      if (isLogtoConfigured() && typeof window !== "undefined") {
+        window.location.assign(buildLogtoSignOutUrl(window.location.origin));
+      }
     }
   }, []);
 

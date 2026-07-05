@@ -74,7 +74,49 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
     exposeVerificationToken,
     emailDeliveryConfigured,
     sendVerificationEmail,
+    logtoEnabled,
+    allowOpenRegistration,
+    verifyLogtoIdentity,
+    findAccountByLogtoIdentity,
   } = routeContext;
+
+  if (req.method === "POST" && url.pathname === "/api/team/auth/logto") {
+    try {
+      const payload = await readBody(req);
+      if (!logtoEnabled) {
+        sendJson(res, 503, { ok: false, error: "Logto-Login ist nicht konfiguriert." }, origin, requestId);
+        return true;
+      }
+      if (!(await checkScopedRateLimit(teamLoginRateStore, `${clientIp}:logto`, teamLoginRateLimitMax))) {
+        sendJson(res, 429, { ok: false, error: "Zu viele Login-Versuche. Bitte später erneut versuchen." }, origin, requestId);
+        return true;
+      }
+      const identity = await verifyLogtoIdentity(String(payload?.idToken || ""));
+      const account = findAccountByLogtoIdentity(identity);
+      if (!account || account.teamId !== state.team.team.id) {
+        sendJson(
+          res,
+          403,
+          { ok: false, error: "Kein Team-Zugang für diesen Login. Beitritt ist nur über eine Einladung möglich.", code: "no_membership" },
+          origin,
+          requestId,
+        );
+        return true;
+      }
+      const { sessionId, csrfToken } = await createTeamSessionForAccount(
+        account,
+        String(clientIp || ""),
+        String(req.headers["user-agent"] || ""),
+      );
+      res.setHeader("Set-Cookie", createSessionCookie(sessionId));
+      sendJson(res, 200, { ...buildTeamStatePayload({ account }), ...publicAuthStatus(account), csrfToken }, origin, requestId);
+      return true;
+    } catch (error) {
+      requestLogger.warn("team logto login failed", { error });
+      sendRouteError({ res, sendJson, origin, requestId, error, fallbackStatus: 401, fallbackMessage: "Logto-Login fehlgeschlagen." });
+      return true;
+    }
+  }
 
   if (req.method === "POST" && url.pathname === "/api/team/auth/login") {
     try {
@@ -131,6 +173,16 @@ export async function handleTeamAuthRoutes(req, res, routeContext) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/team/auth/register") {
+    if (!allowOpenRegistration) {
+      sendJson(
+        res,
+        403,
+        { ok: false, error: "Registrierung ist deaktiviert. Team-Beitritt ist nur über eine Einladung möglich.", code: "registration_disabled" },
+        origin,
+        requestId,
+      );
+      return true;
+    }
     try {
       const payload = await readBody(req);
       const loginUserId = String(payload?.userId || "").trim().toLowerCase() || "unknown";

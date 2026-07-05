@@ -53,7 +53,9 @@ export async function registerAccount(input) {
 export async function acceptInvitation(input) {
   const {
     invitation,
-    passwordHash,
+    passwordHash = "",
+    logtoSubject = "",
+    email = "",
     applyTeamStateMutation,
     logger,
     reason = "team-invitation-accept",
@@ -70,7 +72,11 @@ export async function acceptInvitation(input) {
       role: invitation.role,
       teamId: invitation.teamId,
       active: true,
+      // Logto-Accounts haben keinen passwordHash; die Anmeldung läuft über OIDC.
       passwordHash,
+      logtoSubject,
+      email,
+      emailVerified: email ? true : undefined,
     };
     return {
       state: {

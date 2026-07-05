@@ -24,6 +24,7 @@ import { writeHrworksTimesheetXlsx } from "./lib/hrworksPlanExport.js";
 import { handleTeamAuditRoutes } from "./routes/teamAuditRoutes.js";
 import { createTeamRouteBaseContext } from "./routes/routeContextFactory.js";
 import { isAccountEmailVerified, isAccountProfileComplete, normalizeEmail } from "./services/teamAuthService.js";
+import { verifyLogtoIdToken } from "./lib/logtoOidc.js";
 import { createEmailDelivery } from "./lib/emailDelivery.js";
 import { fetchRecentTeamArchiveEvents, persistTeamArchiveEventToDb } from "./lib/teamArchiveDb.js";
 import { fetchTeamAccountByIdFromDb, syncTeamAccountsToDb } from "./lib/teamAccountsDb.js";
@@ -104,6 +105,11 @@ const EXPOSE_VERIFICATION_TOKEN_ON_REGISTER = process.env.ADAPTER_EXPOSE_VERIFIC
 const EXPOSE_INVITATION_TOKEN_ON_CREATE = process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE
   ? process.env.ADAPTER_EXPOSE_INVITATION_TOKEN_ON_CREATE === "true"
   : !IS_PRODUCTION;
+const LOGTO_ENDPOINT = String(process.env.ADAPTER_LOGTO_ENDPOINT || "").trim().replace(/\/+$/, "");
+const LOGTO_APP_ID = String(process.env.ADAPTER_LOGTO_APP_ID || "").trim();
+const LOGTO_ENABLED = Boolean(LOGTO_ENDPOINT && LOGTO_APP_ID);
+// Freie Registrierung ist standardmäßig deaktiviert: Team-Beitritt nur per Einladung.
+const ALLOW_OPEN_REGISTRATION = process.env.ADAPTER_ALLOW_OPEN_REGISTRATION === "true";
 const AUTH_READS_FROM_DB = process.env.ADAPTER_AUTH_READS_FROM_DB === "true";
 const SESSION_READS_FROM_DB = process.env.ADAPTER_SESSION_READS_FROM_DB === "true";
 const TEAM_STATE_READS_FROM_DB = process.env.ADAPTER_TEAM_STATE_READS_FROM_DB === "true";
@@ -142,6 +148,9 @@ if (IS_PRODUCTION && EXPOSE_INVITATION_TOKEN_ON_CREATE) {
 }
 if (IS_PRODUCTION && !AUTH_TOKEN) {
   throw new Error("ADAPTER_TOKEN ist in Produktion verpflichtend.");
+}
+if (IS_PRODUCTION && ALLOW_OPEN_REGISTRATION) {
+  throw new Error("ADAPTER_ALLOW_OPEN_REGISTRATION=true ist in Produktion nicht erlaubt. Team-Beitritt nur per Einladung.");
 }
 const MAX_BODY_BYTES = (() => {
   const configured = Number(process.env.ADAPTER_MAX_BODY_BYTES || 1024 * 1024);
@@ -1515,6 +1524,31 @@ async function resolveAccountForAuth(userId, logger) {
   );
 }
 
+async function verifyLogtoIdentity(idToken) {
+  const identity = await verifyLogtoIdToken(idToken, { endpoint: LOGTO_ENDPOINT, appId: LOGTO_APP_ID });
+  if (identity.email && identity.emailVerified === false) {
+    const error = new Error("Die E-Mail-Adresse des Logto-Kontos ist nicht bestätigt.");
+    error.statusCode = 403;
+    throw error;
+  }
+  return identity;
+}
+
+function findAccountByLogtoIdentity(identity) {
+  const accounts = Array.isArray(state.team?.team?.accounts) ? state.team.team.accounts : [];
+  const bySubject = accounts.find(
+    (account) => account?.active !== false && String(account?.logtoSubject || "") === String(identity?.subject || "") && identity?.subject,
+  );
+  if (bySubject) {
+    return bySubject;
+  }
+  const email = normalizeEmail(identity?.email);
+  if (!email) {
+    return null;
+  }
+  return accounts.find((account) => account?.active !== false && normalizeEmail(account?.email) === email) || null;
+}
+
 async function resolveAccountForSession(userId, logger) {
   const normalizedId = normalizeAccountId(userId);
   if (!normalizedId) {
@@ -2873,6 +2907,10 @@ const server = createServer(async (req, res) => {
       exposeVerificationToken: EXPOSE_VERIFICATION_TOKEN_ON_REGISTER,
       emailDeliveryConfigured: emailDelivery.configured,
       sendVerificationEmail: emailDelivery.sendVerificationEmail,
+      logtoEnabled: LOGTO_ENABLED,
+      allowOpenRegistration: ALLOW_OPEN_REGISTRATION,
+      verifyLogtoIdentity,
+      findAccountByLogtoIdentity,
     })
   ) {
     return;
@@ -2898,6 +2936,8 @@ const server = createServer(async (req, res) => {
       persistRuntimeInvitation,
       fetchRuntimeInvitationByToken,
       deleteRuntimeInvitation,
+      logtoEnabled: LOGTO_ENABLED,
+      verifyLogtoIdentity,
     })
   ) {
     return;

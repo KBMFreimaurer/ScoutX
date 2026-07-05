@@ -22,6 +22,7 @@ const ScoutSheetPage = lazy(() => import("./pages/ScoutSheetPage").then((module)
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 const SupportPage = lazy(() => import("./pages/SupportPage").then((module) => ({ default: module.SupportPage })));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
+const TeamAuthPage = lazy(() => import("./pages/TeamAuthPage").then((module) => ({ default: module.TeamAuthPage })));
 
 const DEFAULT_ADAPTER_ENDPOINT = ADAPTER_ENDPOINT;
 
@@ -717,6 +718,9 @@ function AppLayout() {
               />
               <Route path="/scout-sheet" element={<ScoutSheetPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/team/login" element={<TeamAuthPage mode="login" />} />
+              <Route path="/auth/callback" element={<TeamAuthPage mode="callback" />} />
+              <Route path="/invite" element={<TeamAuthPage mode="invite" />} />
               <Route path="/support" element={<SupportPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/admin" element={adminEnabled ? <AdminPage /> : <Navigate to="/hub" replace />} />
