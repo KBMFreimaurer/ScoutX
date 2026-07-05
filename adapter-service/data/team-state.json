@@ -5,59 +5,20 @@
     "name": "ScoutX Team",
     "accounts": [
       {
-        "id": "user-admin",
-        "name": "Leitung",
-        "role": "admin",
-        "teamId": "team-scoutx",
-        "active": true,
-        "passwordHash": ""
-      },
-      {
-        "id": "user-coordinator",
-        "name": "Koordination",
-        "role": "coordinator",
-        "teamId": "team-scoutx",
-        "active": true,
-        "passwordHash": ""
-      },
-      {
-        "id": "user-scout",
-        "name": "Scout",
-        "role": "scout",
-        "teamId": "team-scoutx",
-        "active": true,
-        "passwordHash": ""
-      },
-      {
-        "id": "user-readonly",
-        "name": "Gast",
-        "role": "readonly",
-        "teamId": "team-scoutx",
-        "active": true,
-        "passwordHash": ""
-      },
-      {
-        "id": "a-kerbab",
+        "id": "ayoub",
         "name": "Ayoub Kerbab",
-        "role": "scout",
-        "teamId": "team-scoutx",
-        "active": true,
-        "passwordHash": "pbkdf2-sha256$210000$QlwqQeMhKw68S7ZoH_uhGA$3ijQ765d2X7w8NFnO8aLdWgmiM5qgCg4e-UWIgGU1q4"
-      },
-      {
-        "id": "parmigianofrizzante-gmail-com",
-        "name": "Parmigiano Frizzante",
-        "email": "parmigianofrizzante@gmail.com",
+        "email": "ayoub.kerbab57@gmail.com",
         "emailVerified": true,
         "emailVerificationTokenHash": "",
         "emailVerificationExpiresAt": "",
-        "emailVerifiedAt": "2026-06-13T21:42:00.161Z",
+        "emailVerifiedAt": "2026-07-05T13:35:50.336Z",
         "birthDate": "",
         "profileImage": "",
         "role": "admin",
         "teamId": "team-scoutx",
         "active": true,
-        "passwordHash": "pbkdf2-sha256$210000$YbZ03MWh85yjWyK50l9zEA$K_6MptBCrwq6rpasaBDRhhyCVwU9Sc6W0CADnm4VfW4"
+        "passwordHash": "pbkdf2-sha256$210000$4ALYnE2AKWJLjSeJNTQdOg$MCwRRIjm1luffr9nR5DQS0iYfS6ZUml0KsM4LC10v-w",
+        "logtoSubject": ""
       }
     ]
   },
@@ -362,6 +323,7 @@
       "id": "b8c90175-cd49-409e-8dcb-078bbafcbc18",
       "eventId": "b8c90175-cd49-409e-8dcb-078bbafcbc18",
       "type": "plan",
+      "actorId": "",
       "title": "Team-Plan veroeffentlicht",
       "body": "Ayoub Kerbab hat 3 Spiele in den Team-Plan gestellt.",
       "recipientId": "",
@@ -372,6 +334,7 @@
       "id": "4eab3f35-4e15-4d87-bfb8-0d13fc931934",
       "eventId": "4eab3f35-4e15-4d87-bfb8-0d13fc931934",
       "type": "plan",
+      "actorId": "",
       "title": "Team-Plan veroeffentlicht",
       "body": "Ayoub Kerbab hat 3 Spiele in den Team-Plan gestellt.",
       "recipientId": "",
@@ -382,6 +345,7 @@
       "id": "0a1953ea-bf4c-45d5-94e6-4efa54510261",
       "eventId": "0a1953ea-bf4c-45d5-94e6-4efa54510261",
       "type": "plan",
+      "actorId": "",
       "title": "Team-Plan veroeffentlicht",
       "body": "Ayoub Kerbab hat 2 Spiele in den Team-Plan gestellt.",
       "recipientId": "",
