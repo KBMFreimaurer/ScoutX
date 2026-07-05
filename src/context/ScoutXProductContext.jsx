@@ -55,6 +55,8 @@ export function ScoutXProductProvider({ children }) {
   const [analysisStateByReportId, setAnalysisStateByReportId] = useState({});
   const [productError, setProductError] = useState("");
   const [teamBackendState, setTeamBackendState] = useState({ status: "local", error: "" });
+  // true sobald der erste Session-Check gegen das Team-Backend abgeschlossen ist (für den Auth-Gate).
+  const [teamAuthChecked, setTeamAuthChecked] = useState(false);
   const initialUserIdRef = useRef("");
   const activeUser = useMemo(() => getActiveUser(state), [state]);
 
@@ -105,6 +107,7 @@ export function ScoutXProductProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     if (!getTeamBackendStatus().enabled) {
+      setTeamAuthChecked(true);
       return () => {
         cancelled = true;
       };
@@ -114,14 +117,18 @@ export function ScoutXProductProvider({ children }) {
       .then((payload) => {
         if (!cancelled) {
           applyTeamBackendPayload(payload, { switchUser: false });
+          setTeamAuthChecked(true);
         }
       })
       .catch((error) => {
         if (cancelled) {
           return;
         }
+        setTeamAuthChecked(true);
         const isAuthMissing = error?.status === 401;
-        const message = isAuthMissing ? "" : error?.message || "Team-Backend nicht verbunden. Lokale Änderungen werden nicht teamweit synchronisiert.";
+        const message = isAuthMissing
+          ? ""
+          : error?.message || "Team-Backend nicht verbunden. Lokale Änderungen werden nicht teamweit synchronisiert.";
         setTeamBackendState({ status: "local", error: message });
         if (!isAuthMissing) {
           setProductError(message);
@@ -231,7 +238,10 @@ export function ScoutXProductProvider({ children }) {
             : mode === "single" && targetPlanHistoryId
               ? current.filter(
                   (observation) =>
-                    !(observation?.status === "planned" && String(observation?.planHistoryId || "").trim() === targetPlanHistoryId),
+                    !(
+                      observation?.status === "planned" &&
+                      String(observation?.planHistoryId || "").trim() === targetPlanHistoryId
+                    ),
                 )
               : current;
         if (nextObservations.length === current.length) {
@@ -253,13 +263,10 @@ export function ScoutXProductProvider({ children }) {
     setAnalysisStateByReportId({});
   }, []);
 
-  const onSwitchUser = useCallback(
-    (userId) => {
-      setProductError("");
-      setState((prev) => switchActiveUser(prev, userId));
-    },
-    [],
-  );
+  const onSwitchUser = useCallback((userId) => {
+    setProductError("");
+    setState((prev) => switchActiveUser(prev, userId));
+  }, []);
 
   const {
     onUpsertReport,
@@ -278,15 +285,20 @@ export function ScoutXProductProvider({ children }) {
     setAnalysisStateByReportId,
   });
 
-  const { onMarkNotificationRead, onMarkGameSeen, onCreateObservationMatchReport, onUpdateObservationNote, onReassignObservation } =
-    useTeamObservationActions({
-      state,
-      teamBackendState,
-      applyTeamBackendPayload,
-      setState,
-      setProductError,
-      setTeamBackendState,
-    });
+  const {
+    onMarkNotificationRead,
+    onMarkGameSeen,
+    onCreateObservationMatchReport,
+    onUpdateObservationNote,
+    onReassignObservation,
+  } = useTeamObservationActions({
+    state,
+    teamBackendState,
+    applyTeamBackendPayload,
+    setState,
+    setProductError,
+    setTeamBackendState,
+  });
 
   const { onPublishTeamPlan, onUpsertManualGame, onUpdateTeamGoals, onUpsertTeamAccount } = useTeamPlanningActions({
     teamBackendState,
@@ -341,7 +353,10 @@ export function ScoutXProductProvider({ children }) {
     [activeUser, state],
   );
 
-  const getPlayerComparison = useCallback((profiles, leftKey, rightKey) => comparePlayers(profiles, leftKey, rightKey), []);
+  const getPlayerComparison = useCallback(
+    (profiles, leftKey, rightKey) => comparePlayers(profiles, leftKey, rightKey),
+    [],
+  );
 
   const getCalendar = useCallback((assignments, options = {}) => buildCalendarModel(assignments, options), []);
 
@@ -388,6 +403,7 @@ export function ScoutXProductProvider({ children }) {
       activeUser,
       productError,
       teamBackendState,
+      teamAuthChecked,
       analysisStateByReportId,
       resetProductState,
       clearProductError: () => setProductError(""),
@@ -429,6 +445,7 @@ export function ScoutXProductProvider({ children }) {
       activeUser,
       productError,
       teamBackendState,
+      teamAuthChecked,
       analysisStateByReportId,
       resetProductState,
       onLogoutTeamBackend,

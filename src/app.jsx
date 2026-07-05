@@ -11,14 +11,20 @@ import { SetupProvider } from "./context/SetupContext";
 import { GamesProvider } from "./context/GamesContext";
 import { PlanProvider } from "./context/PlanContext";
 import { useScheduleChangeNotifications } from "./hooks/useScheduleChangeNotifications";
+import { isLogtoConfigured } from "./services/logtoClient";
+import { getTeamBackendStatus } from "./services/teamBackendClient";
 import { isNativeCapacitorRuntime, resolveScoutxDeepLink } from "./native/deepLinks";
 
-const ScoutingHubPage = lazy(() => import("./pages/ScoutingHubPage").then((module) => ({ default: module.ScoutingHubPage })));
+const ScoutingHubPage = lazy(() =>
+  import("./pages/ScoutingHubPage").then((module) => ({ default: module.ScoutingHubPage })),
+);
 const SetupPage = lazy(() => import("./pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((module) => ({ default: module.GamesPage })));
 const PlanPage = lazy(() => import("./pages/PlanPage").then((module) => ({ default: module.PlanPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
-const ScoutSheetPage = lazy(() => import("./pages/ScoutSheetPage").then((module) => ({ default: module.ScoutSheetPage })));
+const ScoutSheetPage = lazy(() =>
+  import("./pages/ScoutSheetPage").then((module) => ({ default: module.ScoutSheetPage })),
+);
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 const SupportPage = lazy(() => import("./pages/SupportPage").then((module) => ({ default: module.SupportPage })));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage").then((module) => ({ default: module.PrivacyPage })));
@@ -142,6 +148,27 @@ const RAIL_ICONS = {
     </svg>
   ),
 };
+
+// Öffentliche Pfade: Login-/Invite-Flow und rechtliche Seiten bleiben ohne Session erreichbar.
+const PUBLIC_AUTH_PATHS = ["/team/login", "/auth/callback", "/invite", "/privacy", "/support"];
+
+function TeamAuthGate({ children }) {
+  const { teamBackendState, teamAuthChecked } = useScoutXProduct();
+  const location = useLocation();
+  const isPublicPath = PUBLIC_AUTH_PATHS.some((path) => location.pathname.startsWith(path));
+  // Ohne Logto-Konfiguration (lokale Entwicklung) oder deaktiviertes Backend bleibt die App offen;
+  // die Team-Daten selbst schützt das Backend serverseitig.
+  if (!isLogtoConfigured() || !getTeamBackendStatus().enabled || isPublicPath) {
+    return children;
+  }
+  if (!teamAuthChecked) {
+    return <RouteFallback />;
+  }
+  if (teamBackendState.status !== "connected") {
+    return <Navigate to="/team/login" replace />;
+  }
+  return children;
+}
 
 function RouteFallback() {
   return (
@@ -499,68 +526,68 @@ function AppLayout() {
               />
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => navigate("/hub")}
-              style={{
-                border: currentStep === "hub" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
-                borderRadius: 8,
-                minHeight: 34,
-                padding: "6px 10px",
-                fontSize: 12,
-                background: currentStep === "hub" ? C.greenDim : "rgba(255,255,255,0.03)",
-                color: currentStep === "hub" ? C.greenLight : C.offWhite,
-              }}
-            >
-              Cockpit
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/scout-sheet")}
-              style={{
-                border: currentStep === "sheet" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
-                borderRadius: 8,
-                minHeight: 34,
-                padding: "6px 10px",
-                fontSize: 12,
-                background: currentStep === "sheet" ? C.greenDim : "rgba(255,255,255,0.03)",
-                color: currentStep === "sheet" ? C.greenLight : C.offWhite,
-              }}
-            >
-              Bewertungsbogen
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              style={{
-                border: currentStep === "dashboard" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
-                borderRadius: 8,
-                minHeight: 34,
-                padding: "6px 10px",
-                fontSize: 12,
-                background: currentStep === "dashboard" ? C.greenDim : "rgba(255,255,255,0.03)",
-                color: currentStep === "dashboard" ? C.greenLight : C.offWhite,
-              }}
-            >
-              Dashboard
-            </button>
-            {adminEnabled ? (
               <button
                 type="button"
-                onClick={() => navigate("/admin")}
+                onClick={() => navigate("/hub")}
                 style={{
-                  border: currentStep === "admin" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                  border: currentStep === "hub" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
                   borderRadius: 8,
                   minHeight: 34,
                   padding: "6px 10px",
                   fontSize: 12,
-                  background: currentStep === "admin" ? C.greenDim : "rgba(255,255,255,0.03)",
-                  color: currentStep === "admin" ? C.greenLight : C.offWhite,
+                  background: currentStep === "hub" ? C.greenDim : "rgba(255,255,255,0.03)",
+                  color: currentStep === "hub" ? C.greenLight : C.offWhite,
                 }}
               >
-                Admin
+                Cockpit
               </button>
-            ) : null}
+              <button
+                type="button"
+                onClick={() => navigate("/scout-sheet")}
+                style={{
+                  border: currentStep === "sheet" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  minHeight: 34,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  background: currentStep === "sheet" ? C.greenDim : "rgba(255,255,255,0.03)",
+                  color: currentStep === "sheet" ? C.greenLight : C.offWhite,
+                }}
+              >
+                Bewertungsbogen
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                style={{
+                  border: currentStep === "dashboard" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  minHeight: 34,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  background: currentStep === "dashboard" ? C.greenDim : "rgba(255,255,255,0.03)",
+                  color: currentStep === "dashboard" ? C.greenLight : C.offWhite,
+                }}
+              >
+                Dashboard
+              </button>
+              {adminEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin")}
+                  style={{
+                    border: currentStep === "admin" ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    minHeight: 34,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    background: currentStep === "admin" ? C.greenDim : "rgba(255,255,255,0.03)",
+                    color: currentStep === "admin" ? C.greenLight : C.offWhite,
+                  }}
+                >
+                  Admin
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -708,24 +735,26 @@ function AppLayout() {
           ) : null}
 
           <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/hub" element={<ScoutingHubPage />} />
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
-              <Route
-                path="/plan"
-                element={canAccessPlan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
-              />
-              <Route path="/scout-sheet" element={<ScoutSheetPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/team/login" element={<TeamAuthPage mode="login" />} />
-              <Route path="/auth/callback" element={<TeamAuthPage mode="callback" />} />
-              <Route path="/invite" element={<TeamAuthPage mode="invite" />} />
-              <Route path="/support" element={<SupportPage />} />
-              <Route path="/privacy" element={<PrivacyPage />} />
-              <Route path="/admin" element={adminEnabled ? <AdminPage /> : <Navigate to="/hub" replace />} />
-              <Route path="*" element={<Navigate to="/hub" replace />} />
-            </Routes>
+            <TeamAuthGate>
+              <Routes>
+                <Route path="/hub" element={<ScoutingHubPage />} />
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/games" element={games.length ? <GamesPage /> : <Navigate to="/setup" replace />} />
+                <Route
+                  path="/plan"
+                  element={canAccessPlan ? <PlanPage /> : <Navigate to={games.length ? "/games" : "/setup"} replace />}
+                />
+                <Route path="/scout-sheet" element={<ScoutSheetPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/team/login" element={<TeamAuthPage mode="login" />} />
+                <Route path="/auth/callback" element={<TeamAuthPage mode="callback" />} />
+                <Route path="/invite" element={<TeamAuthPage mode="invite" />} />
+                <Route path="/support" element={<SupportPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/admin" element={adminEnabled ? <AdminPage /> : <Navigate to="/hub" replace />} />
+                <Route path="*" element={<Navigate to="/hub" replace />} />
+              </Routes>
+            </TeamAuthGate>
           </Suspense>
         </main>
 
@@ -832,7 +861,12 @@ function AppLayout() {
                   <a href={SUPPORT_URL} target="_blank" rel="noreferrer" style={{ color: C.grayLight, fontSize: 12 }}>
                     Support URL
                   </a>
-                  <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" style={{ color: C.grayLight, fontSize: 12 }}>
+                  <a
+                    href={PRIVACY_POLICY_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: C.grayLight, fontSize: 12 }}
+                  >
                     Privacy URL
                   </a>
                 </>
